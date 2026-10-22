@@ -2,9 +2,9 @@
 'use strict';
 
 // ── CONFIG ──────────────────────────────────────────────
-const BIN_ID      = 'YOUR_FGE_BIN_ID';
-const ACCESS_KEY  = '$2a$10$YOUR_FGE_READ_KEY';   // read-only key
-const MASTER_KEY  = '$2a$10$YOUR_FGE_MASTER_KEY'; // read+write (manage.html only)
+const BIN_ID      = '6ada83fdac6210605a4a3a74';
+const ACCESS_KEY  = '$2a$10$G0A4V5Q7TOSTCAm/D4oskenfMyJjU.5SXbAVK5kdCNIkmelTS/.be';
+const MASTER_KEY  = '$2a$10$wTYTzJ9.QfJDLLb52xi7hO4ILuoejGhm9MIlOYUReOH/t3JpyrRPS';
 const ADMIN_PASS  = 'YOUR_ADMIN_PASS';
 const BIN_URL     = `https://api.jsonbin.io/v3/b/${BIN_ID}`;
 
