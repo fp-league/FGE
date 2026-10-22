@@ -162,25 +162,42 @@ body::before {
 .ib-yes { background: var(--accent); color: #fff; border: none; padding: 0.4rem 1rem; border-radius: var(--radius); cursor: pointer; font-family: var(--font-ui); font-size: 0.8rem; letter-spacing: 0.05em; font-weight: bold; }
 .ib-no { background: transparent; color: var(--muted); border: 1px solid var(--line); padding: 0.4rem 0.7rem; border-radius: var(--radius); cursor: pointer; font-size: 0.85rem; min-width: 36px; min-height: 36px; }
 
-/* ── LIGHTS OUT INTRO ── */
+/* ── GREEN FLAG INTRO ── */
 .lights-out {
     position: fixed; inset: 0; background: #000; z-index: 9000;
-    display: flex; align-items: center; justify-content: center; gap: 1.5rem;
-    transition: opacity 0.5s;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1.5rem;
+    transition: opacity 0.6s ease;
 }
 .lights-out.hidden { opacity: 0; pointer-events: none; }
-.light {
-    width: 32px; height: 32px; border-radius: 50%;
-    background: var(--accent2);
-    box-shadow: 0 0 20px var(--accent2), 0 0 40px var(--accent-glow);
-    animation: lightBlink 0.5s ease-in-out infinite alternate;
+.gf-wrap {
+    display: flex; align-items: flex-start; gap: 0;
+    filter: drop-shadow(0 0 24px rgba(29,185,84,0.5));
 }
-.light:nth-child(2) { animation-delay: 0.1s; }
-.light:nth-child(3) { animation-delay: 0.2s; }
-.light:nth-child(4) { animation-delay: 0.3s; }
-.light:nth-child(5) { animation-delay: 0.4s; }
-@keyframes lightBlink { from { opacity: 1; } to { opacity: 0.2; } }
-.countdown { font-family: var(--font-display); font-size: 4rem; color: var(--white); letter-spacing: 0.2em; position: absolute; }
+.gf-pole {
+    width: 6px; height: 200px;
+    background: linear-gradient(180deg, #ccc 0%, #888 100%);
+    border-radius: 3px; flex-shrink: 0;
+}
+.gf-flag {
+    transform-origin: left center;
+    animation: flagWave 0.7s ease-in-out infinite alternate;
+    margin-top: 10px;
+}
+@keyframes flagWave {
+    0%   { transform: skewY(-3deg) scaleX(1);    }
+    33%  { transform: skewY(2deg)  scaleX(0.97); }
+    66%  { transform: skewY(-2deg) scaleX(1.02); }
+    100% { transform: skewY(3deg)  scaleX(0.97); }
+}
+.gf-title {
+    font-family: var(--font-display);
+    font-size: clamp(0.9rem, 3vw, 1.3rem);
+    letter-spacing: 0.25em;
+    color: rgba(255,255,255,0.5);
+    text-align: center;
+    animation: gfPulse 1s ease-in-out infinite alternate;
+}
+@keyframes gfPulse { from { opacity: 0.4; } to { opacity: 0.9; } }
 
 /* ── CLASS SWITCHER ── */
 .class-switcher {

@@ -187,7 +187,7 @@ function navigate(page, extra) {
         if (extra.raceFocusIdx != null)  raceFocusIdx  = extra.raceFocusIdx;
     }
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-    const el = document.getElementById(`page-${page}`);
+    const el = document.getElementById(`page-${page}`) || document.getElementById(page);
     if (el) el.classList.add('active');
     document.querySelectorAll('.nav-link').forEach(a => {
         a.classList.toggle('active', a.dataset.page === page);
