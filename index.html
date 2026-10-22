@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FGE - Fortnite Global Endurance</title>
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="FGE">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="description" content="Fortnite Global Endurance — the premier GT3 and GT4 racing league.">
+    <link rel="stylesheet" href="styles.css">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0A4FBF">
+    <style>
+        @font-face { font-family: '911Porsche'; src: url('911porschav3.ttf') format('truetype'); font-weight: normal; }
+        @font-face { font-family: '911Porsche'; src: url('911porschav3bold.ttf') format('truetype'); font-weight: bold; }
+        @font-face { font-family: '911PorscheCond'; src: url('911porschav3cond.ttf') format('truetype'); font-weight: normal; }
+        @font-face { font-family: '911PorscheTitle'; src: url('911porschav3title.ttf') format('truetype'); font-weight: normal; }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <!-- Install banner -->
+        <div class="install-banner" id="installBanner" style="display:none;">
+            <div class="ib-left">
+                <span class="ib-icon">🏎️</span>
+                <div><strong>Install FGE</strong><span>Add to your home screen</span></div>
+            </div>
+            <div class="ib-btns">
+                <button onclick="installApp()" class="ib-yes">INSTALL</button>
+                <button onclick="dismissInstall()" class="ib-no">✕</button>
+            </div>
+        </div>
+        <!-- Notification banner -->
+        <div class="install-banner notif-banner" id="notifBanner" style="display:none;">
+            <div class="ib-left">
+                <span class="ib-icon">🔔</span>
+                <div><strong>Stay in the loop</strong><span>Get race results & news alerts</span></div>
+            </div>
+            <div class="ib-btns">
+                <button onclick="enableNotifs()" class="ib-yes">ENABLE</button>
+                <button onclick="dismissNotif()" class="ib-no">✕</button>
+            </div>
+        </div>
+
+        <div class="nav-container">
+            <div class="nav-logo">
+                <span class="logo-fge">FGE</span>
+                <span class="logo-text">FORTNITE GLOBAL ENDURANCE</span>
+            </div>
+            <ul class="nav-menu">
+                <li><a href="#" class="nav-link active" data-page="home">HOME</a></li>
+                <li><a href="#" class="nav-link" data-page="standings">STANDINGS</a></li>
+                <li><a href="#" class="nav-link" data-page="results">RESULTS</a></li>
+                <li><a href="#" class="nav-link" data-page="calendar">CALENDAR</a></li>
+                <li><a href="#" class="nav-link" data-page="teams">TEAMS</a></li>
+                <li><a href="#" class="nav-link" data-page="drivers">DRIVERS</a></li>
+                <li><a href="#" class="nav-link" data-page="fantasy">FANTASY</a></li>
+                <li><a href="#" class="nav-link" data-page="dotd">DOTD</a></li>
+                <li><a href="https://discord.gg/PLACEHOLDER" class="nav-link nav-discord" target="_blank" rel="noopener">
+                    <svg width="18" height="14" viewBox="0 0 24 18" fill="currentColor" style="vertical-align:middle;margin-right:4px"><path d="M20.317 1.492a19.825 19.825 0 00-4.885-1.515.074.074 0 00-.079.037 13.774 13.774 0 00-.607 1.246 18.301 18.301 0 00-5.487 0 12.612 12.612 0 00-.617-1.246.077.077 0 00-.079-.037A19.736 19.736 0 003.677 1.492a.07.07 0 00-.032.027C.533 6.093-.32 10.565.099 14.981a.082.082 0 00.031.056 19.9 19.9 0 005.993 3.03.078.078 0 00.084-.028 14.175 14.175 0 001.226-1.994.076.076 0 00-.041-.106 13.116 13.116 0 01-1.872-.892.077.077 0 01-.008-.128 10.2 10.2 0 00.372-.292.074.074 0 01.077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 01.078.01c.12.098.246.198.373.292a.077.077 0 01-.006.127 12.299 12.299 0 01-1.873.892.077.077 0 00-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 00.084.028 19.839 19.839 0 006.002-3.03.077.077 0 00.032-.054c.5-5.177-.838-9.674-3.549-13.662a.061.061 0 00-.031-.03z"/></svg>
+                    DISCORD
+                </a></li>
+                <li><a href="manage.html" class="nav-link">ADMIN</a></li>
+            </ul>
+            <div class="nav-toggle"><span></span><span></span><span></span></div>
+        </div>
+    </nav>
+
+    <!-- Lights out intro -->
+    <div class="lights-out" id="lightsOut">
+        <div class="light light-1"></div><div class="light light-2"></div><div class="light light-3"></div><div class="light light-4"></div><div class="light light-5"></div>
+        <div class="countdown" id="countdown">5</div>
+    </div>
+
+    <!-- CLASS SWITCHER -->
+    <div class="class-switcher" id="classSwitcher">
+        <div class="cs-track">
+            <div class="cs-car" id="csCar">🏎️</div>
+        </div>
+        <div class="cs-buttons">
+            <button class="cs-btn active" id="csGT3" onclick="switchClass('GT3')">
+                <span class="cs-label">GT3</span>
+                <span class="cs-sub">Pro Class</span>
+            </button>
+            <button class="cs-btn" id="csGT4" onclick="switchClass('GT4')">
+                <span class="cs-label">GT4</span>
+                <span class="cs-sub">Am Class</span>
+            </button>
+        </div>
+    </div>
+
+    <main class="container">
+        <!-- HOME -->
+        <section id="home" class="page active">
+            <div class="race-strip" id="raceStrip"></div>
+            <div class="countdown-bar" id="countdownBar" style="display:none;">
+                <span class="cb-label">NEXT RACE IN</span>
+                <div class="cb-units">
+                    <div class="cb-unit"><span id="cdDays">00</span><label>DAYS</label></div>
+                    <div class="cb-sep">:</div>
+                    <div class="cb-unit"><span id="cdHours">00</span><label>HRS</label></div>
+                    <div class="cb-sep">:</div>
+                    <div class="cb-unit"><span id="cdMins">00</span><label>MIN</label></div>
+                    <div class="cb-sep">:</div>
+                    <div class="cb-unit"><span id="cdSecs">00</span><label>SEC</label></div>
+                </div>
+            </div>
+            <section class="home-news">
+                <div class="news-hero" id="newsHero"></div>
+                <div class="news-side" id="newsSide"></div>
+            </section>
+            <section class="season-block">
+                <div class="season-divider"></div>
+                <div class="season-head">
+                    <h2 id="seasonHeading">SEASON</h2>
+                    <select id="homeSeasonSelect"></select>
+                </div>
+                <div class="standings-controls">
+                    <button class="tab-btn htab-btn active" data-htab="drivers">DRIVERS</button>
+                    <button class="tab-btn htab-btn" data-htab="teams">TEAMS</button>
+                </div>
+                <div class="podium" id="podium"></div>
+                <div class="table-container">
+                    <table class="standings-table full">
+                        <thead><tr><th class="pos">POS</th><th class="driver">DRIVER</th><th class="team">TEAM</th><th class="points">PTS</th></tr></thead>
+                        <tbody id="homeStandingsBody"><tr class="loading"><td colspan="4">Loading...</td></tr></tbody>
+                    </table>
+                </div>
+                <a href="#" class="btn btn-secondary" data-page="standings">VIEW FULL STANDINGS &rarr;</a>
+            </section>
+        </section>
+
+        <!-- STANDINGS -->
+        <section id="standings" class="page">
+            <div class="cal-top">
+                <select id="seasonSelect"></select>
+            </div>
+            <div class="standings-controls">
+                <button class="tab-btn active" data-tab="drivers">DRIVERS</button>
+                <button class="tab-btn" data-tab="teams">TEAMS</button>
+            </div>
+            <h1 class="cal-title" id="standingsTitle">DRIVERS' STANDINGS</h1>
+            <div class="results-panel" id="standingsPanel"><div class="loading">Loading standings...</div></div>
+            <div id="seasonRaces"></div>
+        </section>
+
+        <!-- RESULTS -->
+        <section id="results" class="page">
+            <div class="cal-top">
+                <select id="resultsSeasonSelect"></select>
+            </div>
+            <div class="standings-controls">
+                <button class="tab-btn rtab-btn active" data-rtab="races">RACES</button>
+                <button class="tab-btn rtab-btn" data-rtab="drivers">DRIVERS</button>
+                <button class="tab-btn rtab-btn" data-rtab="teams">TEAMS</button>
+            </div>
+            <h1 class="cal-title" id="resultsTitle">RACE RESULTS</h1>
+            <div class="results-panel" id="resultsPanel"><div class="loading">Loading results...</div></div>
+        </section>
+
+        <!-- CALENDAR -->
+        <section id="calendar" class="page">
+            <div class="cal-top">
+                <select id="calSeasonSelect"></select>
+            </div>
+            <h1 class="cal-title" id="calTitle">RACE CALENDAR</h1>
+            <div class="cal-featured" id="calFeatured"></div>
+            <div class="cal-grid" id="calGrid"><div class="loading">Loading calendar...</div></div>
+        </section>
+
+        <!-- TEAMS -->
+        <section id="teams" class="page">
+            <h1 class="cal-title" id="teamsTitle">FGE TEAMS</h1>
+            <p class="drivers-sub">The teams competing in this season's championship.</p>
+            <div class="f1-teams-grid" id="teamsGrid">
+                <div class="team-card loading"></div><div class="team-card loading"></div>
+            </div>
+            <div class="drivers-banner" data-page="drivers">
+                <h2 data-page="drivers">FGE DRIVERS</h2>
+                <p data-page="drivers">Check out this season's line-up of drivers.</p>
+                <span class="db-btn" data-page="drivers">Find out more &rarr;</span>
+            </div>
+        </section>
+
+        <!-- DRIVERS -->
+        <section id="drivers" class="page">
+            <h1 class="cal-title" id="driversTitle">FGE DRIVERS</h1>
+            <p class="drivers-sub">The drivers competing this season.</p>
+            <div class="f1-drivers-grid" id="driversGrid">
+                <div class="driver-card loading"></div><div class="driver-card loading"></div><div class="driver-card loading"></div>
+            </div>
+            <div class="hof-banner" data-page="standings">
+                <h2 data-page="standings">FGE HALL OF FAME</h2>
+                <p data-page="standings">Browse past-season champions and full standings.</p>
+                <span class="hof-btn" data-page="standings">View past seasons &rarr;</span>
+            </div>
+        </section>
+
+        <!-- FANTASY -->
+        <section id="fantasy" class="page">
+            <h1 class="cal-title">FGE FANTASY</h1>
+            <p class="drivers-sub">Pick your team. Score points from real race results.</p>
+            <div class="fantasy-tabs">
+                <button class="fantasy-tab-btn active" onclick="switchFantasyTab('team')" id="ftab-team">MY TEAM</button>
+                <button class="fantasy-tab-btn" onclick="switchFantasyTab('predictions')" id="ftab-predictions">🔮 PREDICTIONS</button>
+            </div>
+            <div id="fantasyTabTeam">
+                <div id="fantasyJoin" class="fantasy-join hidden">
+                    <div class="fj-card">
+                        <h2>JOIN FANTASY</h2>
+                        <p>Enter a username to create your team.</p>
+                        <input type="text" id="fjUsername" placeholder="Your username" maxlength="24" />
+                        <button class="btn btn-primary" onclick="fantasyJoin()" style="width:100%;margin-top:0;">JOIN</button>
+                    </div>
+                </div>
+                <div id="fantasyMyTeam" class="hidden">
+                    <div class="fantasy-header">
+                        <div>
+                            <h2 id="fantasyWelcome">MY TEAM</h2>
+                            <p class="drivers-sub" id="fantasySubtitle" style="margin:0;"></p>
+                        </div>
+                        <button class="tab-btn" onclick="fantasyLogout()">CHANGE USER</button>
+                    </div>
+                    <div class="fantasy-team-picker" id="fantasyPicker">
+                        <div class="ftp-section">
+                            <h3>DRIVERS <span id="driverPickCount">(0/3)</span></h3>
+                            <p class="ftp-hint">Pick 3 drivers</p>
+                            <div class="ftp-grid" id="driverPickGrid"></div>
+                        </div>
+                        <div class="ftp-section">
+                            <h3>CONSTRUCTOR</h3>
+                            <p class="ftp-hint">Pick 1 team</p>
+                            <div class="ftp-grid" id="constructorPickGrid"></div>
+                        </div>
+                        <button class="btn btn-primary" id="fantasySubmitBtn" onclick="fantasySubmit()" style="margin-top:1rem;">SAVE TEAM</button>
+                    </div>
+                    <div class="fantasy-my-picks" id="fantasyMyPicks" style="margin-top:2rem;"></div>
+                </div>
+                <div class="fantasy-leaderboard" style="margin-top:2.5rem;">
+                    <h2>LEADERBOARD</h2>
+                    <div class="results-panel" id="fantasyLeaderboard">
+                        <p style="padding:1.5rem;color:var(--muted);">No teams yet. Be the first to join!</p>
+                    </div>
+                </div>
+            </div>
+            <div id="fantasyTabPredictions" class="hidden">
+                <div id="predictionsContent"></div>
+            </div>
+        </section>
+
+        <!-- DRIVER OF THE DAY -->
+        <section id="dotd" class="page">
+            <h1 class="cal-title">DRIVER OF THE DAY</h1>
+            <p class="drivers-sub">Vote for the standout performer from each race.</p>
+            <div id="dotdContent"><p style="padding:2rem;color:var(--muted);text-align:center;">Loading races...</p></div>
+        </section>
+    </main>
+
+    <div id="modal" class="modal hidden">
+        <div class="modal-inner">
+            <button id="modalClose" class="modal-close">&times;</button>
+            <div id="modalContent"></div>
+        </div>
+    </div>
+
+    <footer class="footer">
+        <div class="footer-content">
+            <p>&copy; 2026 Fortnite Global Endurance. Elite GT Racing.</p>
+            <div class="footer-links"><a href="#">Rules</a><a href="#">Privacy</a><a href="#">Contact</a></div>
+        </div>
+    </footer>
+
+    <!-- iOS install banner -->
+    <div id="iosInstallBanner" style="display:none;position:fixed;bottom:0;left:0;right:0;z-index:9999;background:#0D1117;border-top:2px solid var(--accent);padding:1rem 1.5rem;align-items:center;justify-content:space-between;gap:1rem;">
+        <div style="display:flex;align-items:center;gap:0.8rem;">
+            <span style="font-size:1.5rem;">🏎️</span>
+            <div>
+                <div style="color:#fff;font-weight:700;font-size:0.9rem;font-family:'911PorscheCond',sans-serif;letter-spacing:0.05em;">INSTALL FGE</div>
+                <div style="color:#999;font-size:0.8rem;">Tap <strong style="color:#fff;">Share</strong> ⬆️ then <strong style="color:#fff;">"Add to Home Screen"</strong></div>
+            </div>
+        </div>
+        <button onclick="dismissIosInstall()" style="background:transparent;color:#999;border:1px solid #333;padding:0.5rem 0.8rem;border-radius:6px;cursor:pointer;font-size:1rem;min-width:44px;min-height:44px;">✕</button>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

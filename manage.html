@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FGE Admin Panel</title>
+<style>
+@font-face { font-family:'911Porsche'; src:url('911porschav3.ttf') format('truetype'); font-weight:normal; }
+@font-face { font-family:'911Porsche'; src:url('911porschav3bold.ttf') format('truetype'); font-weight:bold; }
+@font-face { font-family:'911PorscheCond'; src:url('911porschav3cond.ttf') format('truetype'); }
+@font-face { font-family:'911PorscheTitle'; src:url('911porschav3title.ttf') format('truetype'); }
+:root{--accent:#0A4FBF;--accent2:#1A7FFF;--gt3:#1A7FFF;--gt4:#00C9A7;--carbon:#0D1117;--surface:#181F2A;--surface2:#1E2A3A;--line:rgba(26,127,255,0.15);--text:#C8D8F0;--muted:#5A7A9A;--white:#E8F0FF;--font-display:'911PorscheTitle','911PorscheCond','911Porsche',Impact,sans-serif;--font-ui:'911PorscheCond','911Porsche','Arial Narrow',sans-serif;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--carbon);color:var(--text);font-family:'Segoe UI',Arial,sans-serif;min-height:100vh;}
+.admin-header{background:linear-gradient(180deg,rgba(10,12,18,0.98) 0%,rgba(13,17,23,0.95) 100%);border-bottom:2px solid var(--accent);padding:1rem 1.5rem;display:flex;align-items:center;justify-content:space-between;gap:1rem;}
+.admin-header h1{font-family:var(--font-display);font-size:1.3rem;letter-spacing:0.1em;color:var(--white);}
+.admin-header span{font-size:0.75rem;color:var(--muted);font-family:var(--font-ui);}
+.admin-wrap{display:grid;grid-template-columns:220px 1fr;min-height:calc(100vh - 64px);}
+@media(max-width:700px){.admin-wrap{grid-template-columns:1fr;}}
+.admin-sidebar{background:rgba(10,12,18,0.7);border-right:1px solid var(--line);padding:1.5rem 0;}
+.class-toggle{display:flex;gap:0.5rem;padding:0 1rem 1rem;border-bottom:1px solid var(--line);margin-bottom:1rem;}
+.ct-btn{flex:1;padding:0.5rem;border-radius:4px;border:2px solid var(--line);background:var(--surface);color:var(--muted);cursor:pointer;font-family:var(--font-display);font-size:0.9rem;letter-spacing:0.08em;transition:all 0.2s;}
+.ct-btn.active.gt3{border-color:var(--gt3);color:var(--gt3);background:rgba(26,127,255,0.1);}
+.ct-btn.active.gt4{border-color:var(--gt4);color:var(--gt4);background:rgba(0,201,167,0.1);}
+.sidebar-nav a{display:block;padding:0.7rem 1.2rem;color:var(--muted);text-decoration:none;font-family:var(--font-ui);font-size:0.82rem;letter-spacing:0.06em;transition:all 0.2s;border-left:3px solid transparent;}
+.sidebar-nav a:hover,.sidebar-nav a.active{color:var(--white);background:rgba(26,127,255,0.08);border-left-color:var(--accent2);}
+.admin-main{padding:2rem;}
+.admin-section{display:none;}
+.admin-section.active{display:block;}
+.section-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:1.5rem;gap:1rem;flex-wrap:wrap;}
+.section-head h2{font-family:var(--font-display);font-size:1.3rem;color:var(--white);letter-spacing:0.08em;}
+.btn{display:inline-flex;align-items:center;padding:0.6rem 1.2rem;border-radius:4px;cursor:pointer;font-family:var(--font-display);font-size:0.82rem;letter-spacing:0.08em;border:none;transition:all 0.2s;}
+.btn-primary{background:var(--accent);color:#fff;}
+.btn-primary:hover{background:var(--accent2);}
+.btn-danger{background:#c62828;color:#fff;}
+.btn-danger:hover{background:#b71c1c;}
+.btn-sm{padding:0.35rem 0.7rem;font-size:0.75rem;}
+.admin-table{width:100%;border-collapse:collapse;font-size:0.88rem;}
+.admin-table thead th{font-family:var(--font-ui);font-size:0.72rem;letter-spacing:0.1em;color:var(--muted);padding:0.6rem 0.8rem;text-align:left;border-bottom:1px solid var(--line);background:var(--surface2);}
+.admin-table tbody tr{border-bottom:1px solid rgba(255,255,255,0.04);}
+.admin-table tbody tr:hover{background:rgba(26,127,255,0.04);}
+.admin-table td{padding:0.65rem 0.8rem;}
+.table-wrap{background:var(--surface);border:1px solid var(--line);border-radius:4px;overflow:hidden;overflow-x:auto;}
+.form-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:1rem;margin-bottom:1.2rem;}
+.form-group{display:flex;flex-direction:column;gap:0.3rem;}
+label.fg-label{font-family:var(--font-ui);font-size:0.72rem;letter-spacing:0.08em;color:var(--muted);}
+input,select,textarea{background:var(--surface2);border:1px solid var(--line);color:var(--white);padding:0.6rem 0.8rem;border-radius:4px;font-size:0.88rem;font-family:'Segoe UI',sans-serif;width:100%;transition:border-color 0.2s;}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent2);}
+textarea{resize:vertical;min-height:80px;}
+.color-preview{width:24px;height:24px;border-radius:50%;border:2px solid var(--line);flex-shrink:0;}
+.toast{position:fixed;bottom:2rem;right:2rem;background:var(--accent);color:#fff;padding:0.8rem 1.5rem;border-radius:4px;font-family:var(--font-ui);font-size:0.85rem;z-index:999;opacity:0;transform:translateY(10px);transition:all 0.3s;pointer-events:none;}
+.toast.show{opacity:1;transform:translateY(0);}
+.login-wrap{display:flex;align-items:center;justify-content:center;min-height:100vh;background:var(--carbon);}
+.login-card{background:var(--surface);border:1px solid var(--line);border-top:4px solid var(--accent);border-radius:4px;padding:2.5rem;width:100%;max-width:360px;}
+.login-card h2{font-family:var(--font-display);font-size:1.5rem;color:var(--white);letter-spacing:0.1em;margin-bottom:1.5rem;}
+.status-dot{width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:0.4rem;}
+.dot-green{background:#2e7d32;}
+.dot-red{background:#c62828;}
+.dot-orange{background:#FF8000;}
+.results-form{display:flex;flex-direction:column;gap:0.6rem;}
+.result-row{display:flex;align-items:center;gap:0.6rem;}
+.result-row .pos-label{font-family:var(--font-display);color:var(--accent2);width:32px;flex-shrink:0;font-size:0.85rem;}
+.add-pos-btn{background:var(--surface2);border:1px dashed var(--line);color:var(--muted);padding:0.5rem;border-radius:4px;cursor:pointer;font-size:0.8rem;font-family:var(--font-ui);letter-spacing:0.05em;transition:all 0.2s;}
+.add-pos-btn:hover{border-color:var(--accent2);color:var(--accent2);}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="loginWrap">
+  <div class="login-card">
+    <h2>FGE ADMIN</h2>
+    <div class="form-group" style="margin-bottom:1rem">
+      <label class="fg-label">PASSCODE</label>
+      <input type="password" id="loginInput" placeholder="Enter admin passcode" onkeydown="if(event.key==='Enter')checkLogin()">
+    </div>
+    <button class="btn btn-primary" style="width:100%" onclick="checkLogin()">ENTER</button>
+    <p id="loginErr" style="color:#e57373;font-size:0.82rem;margin-top:0.8rem;display:none">Incorrect passcode.</p>
+  </div>
+</div>
+
+<!-- ADMIN PANEL -->
+<div id="adminPanel" style="display:none">
+  <div class="admin-header">
+    <h1>⚙️ FGE ADMIN PANEL</h1>
+    <span id="syncStatus"><span class="status-dot dot-orange"></span>Loading…</span>
+  </div>
+  <div class="admin-wrap">
+    <aside class="admin-sidebar">
+      <div class="class-toggle">
+        <button class="ct-btn gt3 active" id="ctGT3" onclick="switchAdminClass('GT3')">GT3</button>
+        <button class="ct-btn gt4" id="ctGT4" onclick="switchAdminClass('GT4')">GT4</button>
+      </div>
+      <nav class="sidebar-nav">
+        <a href="#" class="active" onclick="showSection('news')">📰 News</a>
+        <a href="#" onclick="showSection('drivers')">👤 Drivers</a>
+        <a href="#" onclick="showSection('teams')">🏎 Teams</a>
+        <a href="#" onclick="showSection('races')">🏁 Races</a>
+        <a href="#" onclick="showSection('results')">📊 Results</a>
+        <a href="#" onclick="showSection('dotd')">⭐ DOTD</a>
+        <a href="#" onclick="showSection('season')">🗓 Season</a>
+      </nav>
+    </aside>
+    <main class="admin-main">
+
+      <!-- NEWS -->
+      <div class="admin-section active" id="sec-news">
+        <div class="section-head"><h2>NEWS</h2><button class="btn btn-primary" onclick="openAddNews()">+ Add News</button></div>
+        <div id="newsForm" style="display:none;background:var(--surface);border:1px solid var(--line);border-radius:4px;padding:1.5rem;margin-bottom:1.5rem">
+          <h3 style="font-family:var(--font-display);color:var(--white);margin-bottom:1rem;letter-spacing:0.06em" id="newsFormTitle">ADD NEWS</h3>
+          <div class="form-grid">
+            <div class="form-group"><label class="fg-label">TITLE</label><input id="nTitle" placeholder="Article title"></div>
+            <div class="form-group"><label class="fg-label">TAG</label><input id="nTag" placeholder="e.g. Race Report"></div>
+            <div class="form-group"><label class="fg-label">DATE</label><input id="nDate" type="date"></div>
+            <div class="form-group"><label class="fg-label">IMAGE URL</label><input id="nImage" placeholder="https://…"></div>
+          </div>
+          <div class="form-group" style="margin-bottom:0.8rem"><label class="fg-label">EXCERPT</label><input id="nExcerpt" placeholder="Short summary…"></div>
+          <div class="form-group" style="margin-bottom:1rem"><label class="fg-label">BODY</label><textarea id="nBody" rows="5" placeholder="Full article text…"></textarea></div>
+          <div style="display:flex;gap:0.6rem"><button class="btn btn-primary" onclick="saveNews()">SAVE</button><button class="btn" style="background:var(--surface2);color:var(--muted)" onclick="closeNewsForm()">CANCEL</button></div>
+        </div>
+        <div class="table-wrap"><table class="admin-table"><thead><tr><th>TITLE</th><th>DATE</th><th>TAG</th><th></th></tr></thead><tbody id="newsTbody"></tbody></table></div>
+      </div>
+
+      <!-- DRIVERS -->
+      <div class="admin-section" id="sec-drivers">
+        <div class="section-head"><h2>DRIVERS</h2><button class="btn btn-primary" onclick="openAddDriver()">+ Add Driver</button></div>
+        <div id="driverForm" style="display:none;background:var(--surface);border:1px solid var(--line);border-radius:4px;padding:1.5rem;margin-bottom:1.5rem">
+          <h3 style="font-family:var(--font-display);color:var(--white);margin-bottom:1rem;letter-spacing:0.06em" id="driverFormTitle">ADD DRIVER</h3>
+          <div class="form-grid">
+            <div class="form-group"><label class="fg-label">FULL NAME</label><input id="dName" placeholder="First Last"></div>
+            <div class="form-group"><label class="fg-label">NUMBER</label><input id="dNumber" placeholder="44" type="number"></div>
+            <div class="form-group"><label class="fg-label">NATIONALITY</label><input id="dNat" placeholder="British"></div>
+            <div class="form-group"><label class="fg-label">TEAM</label><input id="dTeam" placeholder="Team name"></div>
+            <div class="form-group"><label class="fg-label">PHOTO URL</label><input id="dPhoto" placeholder="https://…"></div>
+          </div>
+          <div class="form-group" style="margin-bottom:1rem"><label class="fg-label">BIO</label><textarea id="dBio" rows="3" placeholder="Short bio…"></textarea></div>
+          <div style="display:flex;gap:0.6rem"><button class="btn btn-primary" onclick="saveDriver()">SAVE</button><button class="btn" style="background:var(--surface2);color:var(--muted)" onclick="closeDriverForm()">CANCEL</button></div>
+        </div>
+        <div class="table-wrap"><table class="admin-table"><thead><tr><th>#</th><th>NAME</th><th>TEAM</th><th>NAT</th><th></th></tr></thead><tbody id="driversTbody"></tbody></table></div>
+      </div>
+
+      <!-- TEAMS -->
+      <div class="admin-section" id="sec-teams">
+        <div class="section-head"><h2>TEAMS</h2><button class="btn btn-primary" onclick="openAddTeam()">+ Add Team</button></div>
+        <div id="teamForm" style="display:none;background:var(--surface);border:1px solid var(--line);border-radius:4px;padding:1.5rem;margin-bottom:1.5rem">
+          <h3 style="font-family:var(--font-display);color:var(--white);margin-bottom:1rem;letter-spacing:0.06em" id="teamFormTitle">ADD TEAM</h3>
+          <div class="form-grid">
+            <div class="form-group"><label class="fg-label">TEAM NAME</label><input id="tName" placeholder="Team name"></div>
+            <div class="form-group"><label class="fg-label">COLOUR</label><div style="display:flex;gap:0.5rem;align-items:center"><input id="tColor" type="color" value="#0A4FBF" style="width:48px;height:38px;padding:2px;cursor:pointer"><input id="tColorHex" value="#0A4FBF" placeholder="#hex" style="flex:1"></div></div>
+            <div class="form-group"><label class="fg-label">LOGO URL</label><input id="tLogo" placeholder="https://…"></div>
+          </div>
+          <div class="form-group" style="margin-bottom:1rem"><label class="fg-label">DESCRIPTION</label><textarea id="tDesc" rows="3" placeholder="Team description…"></textarea></div>
+          <div style="display:flex;gap:0.6rem"><button class="btn btn-primary" onclick="saveTeam()">SAVE</button><button class="btn" style="background:var(--surface2);color:var(--muted)" onclick="closeTeamForm()">CANCEL</button></div>
+        </div>
+        <div class="table-wrap"><table class="admin-table"><thead><tr><th>COLOUR</th><th>NAME</th><th></th></tr></thead><tbody id="teamsTbody"></tbody></table></div>
+      </div>
+
+      <!-- RACES -->
+      <div class="admin-section" id="sec-races">
+        <div class="section-head"><h2>RACES</h2><button class="btn btn-primary" onclick="openAddRace()">+ Add Race</button></div>
+        <div id="raceForm" style="display:none;background:var(--surface);border:1px solid var(--line);border-radius:4px;padding:1.5rem;margin-bottom:1.5rem">
+          <h3 style="font-family:var(--font-display);color:var(--white);margin-bottom:1rem;letter-spacing:0.06em" id="raceFormTitle">ADD RACE</h3>
+          <div class="form-grid">
+            <div class="form-group"><label class="fg-label">ROUND</label><input id="rRound" type="number" placeholder="1"></div>
+            <div class="form-group"><label class="fg-label">NAME</label><input id="rName" placeholder="Monaco Grand Prix"></div>
+            <div class="form-group"><label class="fg-label">TRACK</label><input id="rTrack" placeholder="Circuit de Monaco"></div>
+            <div class="form-group"><label class="fg-label">DATE</label><input id="rDate" type="date"></div>
+            <div class="form-group"><label class="fg-label">LAPS</label><input id="rLaps" type="number" placeholder="50"></div>
+          </div>
+          <div style="display:flex;gap:0.6rem"><button class="btn btn-primary" onclick="saveRace()">SAVE</button><button class="btn" style="background:var(--surface2);color:var(--muted)" onclick="closeRaceForm()">CANCEL</button></div>
+        </div>
+        <div class="table-wrap"><table class="admin-table"><thead><tr><th>RD</th><th>NAME</th><th>TRACK</th><th>DATE</th><th></th></tr></thead><tbody id="racesTbody"></tbody></table></div>
+      </div>
+
+      <!-- RESULTS -->
+      <div class="admin-section" id="sec-results">
+        <div class="section-head"><h2>RESULTS</h2></div>
+        <div class="form-group" style="margin-bottom:1rem;max-width:300px"><label class="fg-label">SELECT RACE</label><select id="resultsRaceSelect" onchange="loadResultsForm()"></select></div>
+        <div id="resultsFormWrap"></div>
+      </div>
+
+      <!-- DOTD -->
+      <div class="admin-section" id="sec-dotd">
+        <div class="section-head"><h2>DRIVER OF THE DAY</h2></div>
+        <div class="form-group" style="margin-bottom:1rem;max-width:300px"><label class="fg-label">SELECT RACE</label><select id="dotdRaceSelect"></select></div>
+        <div style="display:flex;align-items:center;gap:1rem;margin-bottom:1rem;flex-wrap:wrap">
+          <div class="form-group" style="flex:1"><label class="fg-label">DOTD WINNER</label><select id="dotdDriverSelect"></select></div>
+          <button class="btn btn-primary" style="margin-top:1.1rem" onclick="saveDOTD()">SAVE DOTD</button>
+        </div>
+      </div>
+
+      <!-- SEASON -->
+      <div class="admin-section" id="sec-season">
+        <div class="section-head"><h2>SEASON SETTINGS</h2></div>
+        <div class="form-grid">
+          <div class="form-group"><label class="fg-label">SEASON NAME</label><input id="seasonName" placeholder="Season 1"></div>
+        </div>
+        <button class="btn btn-primary" onclick="saveSeason()">SAVE SEASON</button>
+      </div>
+
+    </main>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const BIN_ID     = 'YOUR_FGE_BIN_ID';
+const MASTER_KEY = '$2a$10$YOUR_FGE_MASTER_KEY';
+const ADMIN_PASS = 'YOUR_ADMIN_PASS';
+const BIN_URL    = `https://api.jsonbin.io/v3/b/${BIN_ID}`;
+
+let adminData = null;
+let adminClass = 'GT3';
+let editingIdx = null;
+
+// ── AUTH ──
+function checkLogin() {
+    const v = document.getElementById('loginInput').value;
+    if (v === ADMIN_PASS) {
+        document.getElementById('loginWrap').style.display = 'none';
+        document.getElementById('adminPanel').style.display = 'block';
+        loadData();
+    } else {
+        document.getElementById('loginErr').style.display = 'block';
+    }
+}
+
+// ── DATA ──
+async function loadData() {
+    setStatus('orange','Loading…');
+    try {
+        const r = await fetch(`${BIN_URL}/latest`, { headers:{'X-Master-Key': MASTER_KEY} });
+        const json = await r.json();
+        adminData = json.record || { gt3: emptyClass(), gt4: emptyClass() };
+        if (!adminData.gt3) adminData.gt3 = emptyClass();
+        if (!adminData.gt4) adminData.gt4 = emptyClass();
+        setStatus('green','Synced');
+        refreshCurrentSection();
+    } catch(e) {
+        setStatus('red','Error loading');
+    }
+}
+
+async function saveData() {
+    setStatus('orange','Saving…');
+    try {
+        await fetch(BIN_URL, {
+            method:'PUT',
+            headers:{'Content-Type':'application/json','X-Master-Key':MASTER_KEY},
+            body: JSON.stringify(adminData)
+        });
+        setStatus('green','Saved ✓');
+        toast('Saved!');
+    } catch(e) {
+        setStatus('red','Save failed');
+        toast('Error saving!');
+    }
+}
+
+function emptyClass() { return { drivers:[], teams:[], races:[], news:[], fantasy:{}, archive:{}, seasonName:'Season 1' }; }
+function d() { return adminData?.[adminClass.toLowerCase()] || emptyClass(); }
+
+function setStatus(col, txt) {
+    const cols = { green:'#2e7d32', orange:'#FF8000', red:'#c62828' };
+    document.getElementById('syncStatus').innerHTML = `<span class="status-dot" style="background:${cols[col]}"></span>${txt}`;
+}
+
+function toast(msg) {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.classList.add('show');
+    setTimeout(() => el.classList.remove('show'), 2500);
+}
+
+// ── SWITCHING ──
+function switchAdminClass(cls) {
+    adminClass = cls;
+    document.getElementById('ctGT3').className = 'ct-btn gt3' + (cls==='GT3'?' active':'');
+    document.getElementById('ctGT4').className = 'ct-btn gt4' + (cls==='GT4'?' active':'');
+    refreshCurrentSection();
+}
+
+let currentSection = 'news';
+function showSection(name) {
+    currentSection = name;
+    document.querySelectorAll('.admin-section').forEach(s => s.classList.remove('active'));
+    document.getElementById(`sec-${name}`).classList.add('active');
+    document.querySelectorAll('.sidebar-nav a').forEach((a,i) => {
+        a.classList.toggle('active', a.getAttribute('onclick').includes(`'${name}'`));
+    });
+    refreshCurrentSection();
+}
+
+function refreshCurrentSection() {
+    switch(currentSection) {
+        case 'news':    renderNewsTable(); break;
+        case 'drivers': renderDriversTable(); break;
+        case 'teams':   renderTeamsTable(); break;
+        case 'races':   renderRacesTable(); break;
+        case 'results': populateResultsSelects(); break;
+        case 'dotd':    populateDOTDSelects(); break;
+        case 'season':  document.getElementById('seasonName').value = d().seasonName||'Season 1'; break;
+    }
+}
+
+// ── NEWS ──
+function renderNewsTable() {
+    const news = (d().news||[]).slice().reverse();
+    document.getElementById('newsTbody').innerHTML = news.length ? news.map((n,i) => `
+      <tr>
+        <td style="color:var(--white)">${n.title||''}</td>
+        <td style="color:var(--muted)">${n.date||''}</td>
+        <td><span style="background:var(--accent);color:#fff;padding:0.1rem 0.4rem;border-radius:3px;font-size:0.72rem;font-family:var(--font-ui)">${n.tag||''}</span></td>
+        <td><button class="btn btn-danger btn-sm" onclick="deleteNews(${(d().news||[]).length-1-i})">DEL</button></td>
+      </tr>`).join('') : '<tr><td colspan="4" style="color:var(--muted);padding:1.5rem">No news yet.</td></tr>';
+}
+
+function openAddNews() {
+    editingIdx = null;
+    document.getElementById('newsFormTitle').textContent = 'ADD NEWS';
+    ['nTitle','nTag','nDate','nImage','nExcerpt','nBody'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('newsForm').style.display = 'block';
+}
+
+function closeNewsForm() { document.getElementById('newsForm').style.display='none'; }
+
+function saveNews() {
+    const item = { title: document.getElementById('nTitle').value.trim(), tag: document.getElementById('nTag').value.trim(), date: document.getElementById('nDate').value, image: document.getElementById('nImage').value.trim(), excerpt: document.getElementById('nExcerpt').value.trim(), body: document.getElementById('nBody').value.trim() };
+    if (!item.title) { alert('Title required'); return; }
+    const cls = adminClass.toLowerCase();
+    if (!adminData[cls].news) adminData[cls].news = [];
+    if (editingIdx !== null) adminData[cls].news[editingIdx] = item;
+    else adminData[cls].news.push(item);
+    closeNewsForm();
+    saveData();
+    renderNewsTable();
+}
+
+function deleteNews(idx) {
+    if (!confirm('Delete this news item?')) return;
+    adminData[adminClass.toLowerCase()].news.splice(idx,1);
+    saveData(); renderNewsTable();
+}
+
+// ── DRIVERS ──
+function renderDriversTable() {
+    const drivers = d().drivers||[];
+    document.getElementById('driversTbody').innerHTML = drivers.length ? drivers.map((drv,i) => `
+      <tr>
+        <td style="font-family:var(--font-display);color:var(--accent2)">${drv.number||''}</td>
+        <td style="color:var(--white)">${drv.name||''}</td>
+        <td style="color:var(--muted)">${drv.team||''}</td>
+        <td style="color:var(--muted)">${drv.nationality||''}</td>
+        <td style="display:flex;gap:0.4rem">
+          <button class="btn btn-primary btn-sm" onclick="editDriver(${i})">EDIT</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteDriver(${i})">DEL</button>
+        </td>
+      </tr>`).join('') : '<tr><td colspan="5" style="color:var(--muted);padding:1.5rem">No drivers yet.</td></tr>';
+}
+
+function openAddDriver() {
+    editingIdx = null;
+    document.getElementById('driverFormTitle').textContent = 'ADD DRIVER';
+    ['dName','dNumber','dNat','dTeam','dPhoto','dBio'].forEach(id => document.getElementById(id).value='');
+    document.getElementById('driverForm').style.display='block';
+}
+
+function editDriver(i) {
+    editingIdx = i;
+    const drv = d().drivers[i];
+    document.getElementById('driverFormTitle').textContent = 'EDIT DRIVER';
+    document.getElementById('dName').value = drv.name||'';
+    document.getElementById('dNumber').value = drv.number||'';
+    document.getElementById('dNat').value = drv.nationality||'';
+    document.getElementById('dTeam').value = drv.team||'';
+    document.getElementById('dPhoto').value = drv.photo||'';
+    document.getElementById('dBio').value = drv.bio||'';
+    document.getElementById('driverForm').style.display='block';
+}
+
+function closeDriverForm() { document.getElementById('driverForm').style.display='none'; }
+
+function saveDriver() {
+    const item = { name: document.getElementById('dName').value.trim(), number: document.getElementById('dNumber').value, nationality: document.getElementById('dNat').value.trim(), team: document.getElementById('dTeam').value.trim(), photo: document.getElementById('dPhoto').value.trim(), bio: document.getElementById('dBio').value.trim() };
+    if (!item.name) { alert('Name required'); return; }
+    const cls = adminClass.toLowerCase();
+    if (!adminData[cls].drivers) adminData[cls].drivers = [];
+    if (editingIdx !== null) adminData[cls].drivers[editingIdx] = item;
+    else adminData[cls].drivers.push(item);
+    closeDriverForm(); saveData(); renderDriversTable();
+}
+
+function deleteDriver(i) {
+    if (!confirm('Delete this driver?')) return;
+    adminData[adminClass.toLowerCase()].drivers.splice(i,1);
+    saveData(); renderDriversTable();
+}
+
+// ── TEAMS ──
+function renderTeamsTable() {
+    const teams = d().teams||[];
+    document.getElementById('teamsTbody').innerHTML = teams.length ? teams.map((t,i) => `
+      <tr>
+        <td><span style="display:inline-block;width:18px;height:18px;border-radius:50%;background:${t.color||'#888'}"></span></td>
+        <td style="color:var(--white)">${t.name||''}</td>
+        <td style="display:flex;gap:0.4rem">
+          <button class="btn btn-primary btn-sm" onclick="editTeam(${i})">EDIT</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteTeam(${i})">DEL</button>
+        </td>
+      </tr>`).join('') : '<tr><td colspan="3" style="color:var(--muted);padding:1.5rem">No teams yet.</td></tr>';
+}
+
+function openAddTeam() {
+    editingIdx = null;
+    document.getElementById('teamFormTitle').textContent = 'ADD TEAM';
+    ['tName','tLogo','tDesc'].forEach(id => document.getElementById(id).value='');
+    document.getElementById('tColor').value='#0A4FBF';
+    document.getElementById('tColorHex').value='#0A4FBF';
+    document.getElementById('teamForm').style.display='block';
+}
+
+function editTeam(i) {
+    editingIdx = i;
+    const t = d().teams[i];
+    document.getElementById('teamFormTitle').textContent = 'EDIT TEAM';
+    document.getElementById('tName').value = t.name||'';
+    document.getElementById('tColor').value = t.color||'#0A4FBF';
+    document.getElementById('tColorHex').value = t.color||'#0A4FBF';
+    document.getElementById('tLogo').value = t.logo||'';
+    document.getElementById('tDesc').value = t.description||'';
+    document.getElementById('teamForm').style.display='block';
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('tColor').addEventListener('input', function(){ document.getElementById('tColorHex').value = this.value; });
+    document.getElementById('tColorHex').addEventListener('input', function(){ if(/^#[0-9a-f]{6}$/i.test(this.value)) document.getElementById('tColor').value = this.value; });
+});
+
+function closeTeamForm() { document.getElementById('teamForm').style.display='none'; }
+
+function saveTeam() {
+    const item = { name: document.getElementById('tName').value.trim(), color: document.getElementById('tColorHex').value.trim()||document.getElementById('tColor').value, logo: document.getElementById('tLogo').value.trim(), description: document.getElementById('tDesc').value.trim() };
+    if (!item.name) { alert('Name required'); return; }
+    const cls = adminClass.toLowerCase();
+    if (!adminData[cls].teams) adminData[cls].teams = [];
+    if (editingIdx !== null) adminData[cls].teams[editingIdx] = item;
+    else adminData[cls].teams.push(item);
+    closeTeamForm(); saveData(); renderTeamsTable();
+}
+
+function deleteTeam(i) {
+    if (!confirm('Delete this team?')) return;
+    adminData[adminClass.toLowerCase()].teams.splice(i,1);
+    saveData(); renderTeamsTable();
+}
+
+// ── RACES ──
+function renderRacesTable() {
+    const races = d().races||[];
+    document.getElementById('racesTbody').innerHTML = races.length ? races.map((r,i) => `
+      <tr>
+        <td style="font-family:var(--font-display);color:var(--accent2)">${r.round||i+1}</td>
+        <td style="color:var(--white)">${r.name||''}</td>
+        <td style="color:var(--muted)">${r.track||''}</td>
+        <td style="color:var(--muted)">${r.date||''}</td>
+        <td style="display:flex;gap:0.4rem">
+          <button class="btn btn-primary btn-sm" onclick="editRace(${i})">EDIT</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteRace(${i})">DEL</button>
+        </td>
+      </tr>`).join('') : '<tr><td colspan="5" style="color:var(--muted);padding:1.5rem">No races yet.</td></tr>';
+}
+
+function openAddRace() {
+    editingIdx = null;
+    document.getElementById('raceFormTitle').textContent = 'ADD RACE';
+    ['rRound','rName','rTrack','rDate','rLaps'].forEach(id => document.getElementById(id).value='');
+    document.getElementById('raceForm').style.display='block';
+}
+
+function editRace(i) {
+    editingIdx = i;
+    const r = d().races[i];
+    document.getElementById('raceFormTitle').textContent = 'EDIT RACE';
+    document.getElementById('rRound').value = r.round||'';
+    document.getElementById('rName').value = r.name||'';
+    document.getElementById('rTrack').value = r.track||'';
+    document.getElementById('rDate').value = r.date||'';
+    document.getElementById('rLaps').value = r.laps||'';
+    document.getElementById('raceForm').style.display='block';
+}
+
+function closeRaceForm() { document.getElementById('raceForm').style.display='none'; }
+
+function saveRace() {
+    const item = { round: parseInt(document.getElementById('rRound').value)||1, name: document.getElementById('rName').value.trim(), track: document.getElementById('rTrack').value.trim(), date: document.getElementById('rDate').value, laps: parseInt(document.getElementById('rLaps').value)||0 };
+    if (!item.name) { alert('Name required'); return; }
+    const cls = adminClass.toLowerCase();
+    if (!adminData[cls].races) adminData[cls].races = [];
+    if (editingIdx !== null) adminData[cls].races[editingIdx] = item;
+    else adminData[cls].races.push(item);
+    closeRaceForm(); saveData(); renderRacesTable();
+}
+
+function deleteRace(i) {
+    if (!confirm('Delete this race?')) return;
+    adminData[adminClass.toLowerCase()].races.splice(i,1);
+    saveData(); renderRacesTable();
+}
+
+// ── RESULTS ──
+function populateResultsSelects() {
+    const races = d().races||[];
+    const sel = document.getElementById('resultsRaceSelect');
+    sel.innerHTML = races.map((r,i) => `<option value="${i}">R${r.round||i+1}: ${r.name}</option>`).join('') || '<option>No races</option>';
+    loadResultsForm();
+}
+
+function loadResultsForm() {
+    const idx = parseInt(document.getElementById('resultsRaceSelect').value);
+    const race = d().races?.[idx];
+    const el = document.getElementById('resultsFormWrap');
+    if (!race) { el.innerHTML=''; return; }
+    const existing = race.results||[];
+    const drivers = d().drivers||[];
+    const makeRow = (pos, val, time) => `
+      <div class="result-row" id="resRow${pos}">
+        <span class="pos-label">P${pos}</span>
+        <select style="flex:1">${drivers.map(drv=>`<option value="${drv.name}" ${val===drv.name?'selected':''}>${drv.name}</option>`).join('')}<option value="DNF" ${val==='DNF'?'selected':''}>DNF</option></select>
+        <input placeholder="Time/Gap" value="${time||''}" style="width:120px">
+      </div>`;
+    let rows = existing.map((res,i) => makeRow(i+1, typeof res==='string'?res:res.driver, typeof res==='object'?res.time:''));
+    if (!rows.length) rows = drivers.slice(0,10).map((_,i)=>makeRow(i+1,'',''));
+    el.innerHTML = `
+      <div class="results-form" id="resultsForm">${rows.join('')}</div>
+      <button class="add-pos-btn" style="margin-top:0.6rem" onclick="addResultRow()">+ Add Row</button>
+      <div style="margin-top:0.6rem;display:flex;align-items:center;gap:0.8rem;flex-wrap:wrap">
+        <div class="form-group" style="min-width:200px"><label class="fg-label">FASTEST LAP DRIVER</label>
+          <select id="flDriver"><option value="">— None —</option>${drivers.map(dr=>`<option value="${dr.name}" ${race.fastestLap===dr.name?'selected':''}>${dr.name}</option>`).join('')}</select>
+        </div>
+        <button class="btn btn-primary" style="margin-top:1rem" onclick="saveResults(${idx})">SAVE RESULTS</button>
+      </div>`;
+}
+
+function addResultRow() {
+    const f = document.getElementById('resultsForm');
+    const pos = f.children.length+1;
+    const drivers = d().drivers||[];
+    const div = document.createElement('div');
+    div.className = 'result-row';
+    div.id = `resRow${pos}`;
+    div.innerHTML = `<span class="pos-label">P${pos}</span><select style="flex:1">${drivers.map(drv=>`<option>${drv.name}</option>`).join('')}<option>DNF</option></select><input placeholder="Time/Gap" style="width:120px">`;
+    f.appendChild(div);
+}
+
+function saveResults(idx) {
+    const f = document.getElementById('resultsForm');
+    const rows = Array.from(f.children);
+    const results = rows.map(row => {
+        const sel = row.querySelector('select');
+        const inp = row.querySelector('input');
+        return { driver: sel.value, time: inp.value.trim() };
+    }).filter(r => r.driver && r.driver !== '');
+    const fl = document.getElementById('flDriver').value;
+    const cls = adminClass.toLowerCase();
+    adminData[cls].races[idx].results = results;
+    if (fl) adminData[cls].races[idx].fastestLap = fl;
+    saveData();
+}
+
+// ── DOTD ──
+function populateDOTDSelects() {
+    const races = (d().races||[]).filter(r=>r.results?.length);
+    document.getElementById('dotdRaceSelect').innerHTML = races.map((r,i)=>`<option value="${d().races.indexOf(r)}">R${r.round}: ${r.name}</option>`).join('')||'<option>No completed races</option>';
+    const drivers = d().drivers||[];
+    document.getElementById('dotdDriverSelect').innerHTML = drivers.map(drv=>`<option value="${drv.name}">${drv.name}</option>`).join('')||'<option>No drivers</option>';
+}
+
+function saveDOTD() {
+    const raceIdx = parseInt(document.getElementById('dotdRaceSelect').value);
+    const winner = document.getElementById('dotdDriverSelect').value;
+    adminData[adminClass.toLowerCase()].races[raceIdx].dotdWinner = winner;
+    saveData();
+}
+
+// ── SEASON ──
+function saveSeason() {
+    adminData[adminClass.toLowerCase()].seasonName = document.getElementById('seasonName').value.trim()||'Season 1';
+    saveData();
+}
+</script>
+</body>
+</html>
