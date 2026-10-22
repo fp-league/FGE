@@ -1,5 +1,5 @@
-const CACHE = 'fge-v3';
-const ASSETS = ['./', './index.html', './styles.css', './app.js', './manifest.json', './logo.png',
+const CACHE = 'fge-v4';
+const ASSETS = ['./', './index.html', './styles.css', './app.js', './manifest.json', './logo.png', './porsche.png',
   './911porschav3.ttf', './911porschav3bold.ttf', './911porschav3cond.ttf', './911porschav3title.ttf'];
 
 self.addEventListener('install', e => {

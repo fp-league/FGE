@@ -164,40 +164,70 @@ body::before {
 
 /* ── GREEN FLAG INTRO ── */
 .lights-out {
-    position: fixed; inset: 0; background: #000; z-index: 9000;
-    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1.5rem;
-    transition: opacity 0.6s ease;
+    position: fixed; inset: 0;
+    background: #000;
+    z-index: 9000;
+    overflow: hidden;
+    transition: opacity 0.5s ease;
 }
 .lights-out.hidden { opacity: 0; pointer-events: none; }
-.gf-wrap {
-    display: flex; align-items: flex-start; gap: 0;
-    filter: drop-shadow(0 0 24px rgba(29,185,84,0.5));
+
+/* Road line */
+.intro-track-line {
+    position: absolute;
+    bottom: 28%;
+    left: 0; right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, transparent 0%, #E10600 30%, #E10600 70%, transparent 100%);
+    opacity: 0.5;
 }
-.gf-pole {
-    width: 6px; height: 200px;
-    background: linear-gradient(180deg, #ccc 0%, #888 100%);
-    border-radius: 3px; flex-shrink: 0;
+
+/* Porsche driving across */
+.intro-car {
+    position: absolute;
+    bottom: 28%;
+    left: -60%;
+    width: min(55vw, 700px);
+    transform: scaleX(-1); /* face right */
+    filter: drop-shadow(0 10px 40px rgba(225,6,0,0.4)) drop-shadow(0 0 80px rgba(10,79,191,0.3));
+    animation: carDrive 1.1s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.1s forwards;
 }
-.gf-flag {
-    transform-origin: left center;
-    animation: flagWave 0.7s ease-in-out infinite alternate;
-    margin-top: 10px;
+@keyframes carDrive {
+    0%   { left: -60%; }
+    100% { left: 20%; }
 }
-@keyframes flagWave {
-    0%   { transform: skewY(-3deg) scaleX(1);    }
-    33%  { transform: skewY(2deg)  scaleX(0.97); }
-    66%  { transform: skewY(-2deg) scaleX(1.02); }
-    100% { transform: skewY(3deg)  scaleX(0.97); }
+
+/* Title fades in after car arrives */
+.intro-title {
+    position: absolute;
+    top: 50%;
+    right: 5%;
+    transform: translateY(-50%);
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.3rem;
+    opacity: 0;
+    animation: introFadeIn 0.5s ease 0.9s forwards;
 }
-.gf-title {
+.intro-fge {
     font-family: var(--font-display);
-    font-size: clamp(0.9rem, 3vw, 1.3rem);
-    letter-spacing: 0.25em;
-    color: rgba(255,255,255,0.5);
-    text-align: center;
-    animation: gfPulse 1s ease-in-out infinite alternate;
+    font-size: clamp(3rem, 12vw, 8rem);
+    color: #fff;
+    letter-spacing: 0.1em;
+    line-height: 1;
+    text-shadow: 0 0 40px rgba(225,6,0,0.8);
 }
-@keyframes gfPulse { from { opacity: 0.4; } to { opacity: 0.9; } }
+.intro-sub {
+    font-family: var(--font-ui);
+    font-size: clamp(0.5rem, 2vw, 1rem);
+    color: var(--muted);
+    letter-spacing: 0.3em;
+}
+@keyframes introFadeIn {
+    from { opacity: 0; transform: translateY(-50%) translateX(20px); }
+    to   { opacity: 1; transform: translateY(-50%) translateX(0); }
+}
 
 /* ── CLASS SWITCHER ── */
 .class-switcher {
