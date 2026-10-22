@@ -769,7 +769,7 @@ function lightsOut() {
     sessionStorage.setItem('fge_lit','1');
     const el = document.getElementById('lightsOut');
     if (!el) return;
-    setTimeout(() => { el.classList.add('hidden'); el.style.display='none'; }, 2800);
+    setTimeout(() => { el.classList.add('hidden'); setTimeout(()=>{ el.style.display='none'; },400); }, 1400);
 }
 
 // ── PWA INSTALL ───────────────────────────────────────────
