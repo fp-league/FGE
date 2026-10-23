@@ -259,6 +259,7 @@ function switchClass(cls) {
     // Drives --class-color and --page-bg: red for GT3, blue for GT4
     document.body.classList.toggle('gt4-mode', cls === 'GT4');
     applyThemeColor(cls);
+    syncFviNav();
     const car = document.getElementById('csCar');
     if (car) {
         car.classList.toggle('gt4-pos', cls === 'GT4');
@@ -790,118 +791,187 @@ function renderDriverProfile(id) {
 }
 
 // ── FANTASY PAGE ─────────────────────────────────────────
+// ── FIRE VS ICE ──────────────────────────────────────────
+// Season-long faction battle. Every team is assigned Fire or Ice in the
+// admin; a team's championship points roll up to its side. Nothing is
+// stored for this - it is derived from the same results as the standings.
+
+// Off until the admin turns it on, so it can be set up ahead of a season
+// without appearing on the site.
+function fviEnabled(d) {
+    const cfg = ((d || cls()).fireVsIce) || {};
+    return cfg.enabled === true;
+}
+
+/** Hide the nav entry while the feature is switched off for this class. */
+function syncFviNav() {
+    const link = document.querySelector('.nav-link[data-page="fantasy"]');
+    if (!link) return;
+    const on = fviEnabled();
+    const li = link.closest('li') || link;
+    li.style.display = on ? '' : 'none';
+}
+
+const SIDES = {
+    fire: { label: 'FIRE', icon: '🔥', color: '#FF5722' },
+    ice:  { label: 'ICE',  icon: '❄️', color: '#29B6F6' },
+};
+
+function fireIceStandings(d) {
+    const { tpts } = calcStandings(d.races||[], d.drivers||[], d.teams||[]);
+    const out = {
+        fire: { pts: 0, teams: [] },
+        ice:  { pts: 0, teams: [] },
+        unassigned: [],
+    };
+    (d.teams||[]).forEach(t => {
+        const pts = tpts[t.name] || 0;
+        const side = t.side === 'fire' || t.side === 'ice' ? t.side : null;
+        if (!side) { out.unassigned.push({ ...t, pts }); return; }
+        out[side].pts += pts;
+        out[side].teams.push({ ...t, pts });
+    });
+    out.fire.teams.sort((a,b) => b.pts - a.pts);
+    out.ice.teams.sort((a,b) => b.pts - a.pts);
+    return out;
+}
+
+/** Which side won a given round, for the round-by-round strip. */
+function roundSwing(race, d) {
+    const sideOf = {};
+    (d.teams||[]).forEach(t => { if (t.side) sideOf[t.name] = t.side; });
+    const teamOf = {};
+    (d.drivers||[]).forEach(dr => { teamOf[dr.name] = dr.team; });
+
+    const cfg = pointsCfg(d);
+    const tally = { fire: 0, ice: 0 };
+    (race.results||[]).forEach((res, i) => {
+        const name = typeof res === 'string' ? res : res && res.driver;
+        if (!name) return;
+        const pos = (typeof res === 'object' && res.pos != null) ? res.pos : (i + 1);
+        if (String(pos).toUpperCase() === 'DNF') return;
+        let earn = cfg.table[Number(pos) - 1] || 0;
+        if (race.fastestLap === name) earn += cfg.fastestLap;
+        if (race.dotdWinner === name) earn += cfg.dotd;
+        const side = sideOf[teamOf[name]];
+        if (side) tally[side] += earn;
+    });
+    return tally;
+}
+
 function renderFantasy() {
     const el = document.getElementById('fantasyContent');
     if (!el) return;
-    if (!userId) {
-        el.innerHTML = `
-          <div class="fantasy-join">
-            <div class="fj-card">
-              <h2>JOIN FANTASY LEAGUE</h2>
-              <p>Pick your driver, team and fastest lap for each race and compete for the championship.</p>
-              <input id="fantasyNameInput" type="text" placeholder="Enter your username…" maxlength="20">
-              <button class="btn btn-primary" style="width:100%" onclick="joinFantasy()">JOIN NOW</button>
-            </div>
+    const d = cls();
+
+    if (!fviEnabled(d)) {
+        el.innerHTML = `<div class="fvi-empty">
+            <p><b>Coming next season.</b><br>
+               Fire Vs Ice launches with the new season — five teams a side,
+               every point they score counting towards their faction.</p>
           </div>`;
         return;
     }
-    const d = cls();
-    const next = findNextRace(d.races);
-    const past = (d.races||[]).filter(r=>r.results?.length).slice().reverse();
-    el.innerHTML = `
-      <div class="fantasy-header">
-        <h2 style="font-family:var(--font-display);color:var(--white);letter-spacing:0.08em">FANTASY — ${currentClass}</h2>
-        <span style="color:var(--muted);font-size:0.85rem">Playing as: <b style="color:var(--white)">${userName}</b></span>
-      </div>
-      <div class="fantasy-tabs">
-        <button class="fantasy-tab-btn active" id="ftab-pick" onclick="switchFantasyTab('pick')">MY PICKS</button>
-        <button class="fantasy-tab-btn" id="ftab-lb" onclick="switchFantasyTab('leaderboard')">LEADERBOARD</button>
-      </div>
-      <div id="fantasyTabContent">${renderFantasyPicks(next, d)}</div>`;
-}
 
-function renderFantasyPicks(next, d) {
-    if (!next) return '<p style="color:var(--muted)">No upcoming races to pick for.</p>';
-    const key = `${currentClass}_${next.round||next.name}_${userId}`;
-    let saved = {};
-    try { saved = JSON.parse(localStorage.getItem(`fge_fp_${key}`) || '{}'); } catch(e) {}
-    return `
-      <div class="ftp-section">
-        <h3>${next.name||'Next Race'} — Round ${next.round||'?'}</h3>
-        <p class="ftp-hint">📅 ${fmtDate(next.date)}</p>
-        <div class="ftp-hint">Pick your race winner, fastest lap driver, and team of the race.</div>
-      </div>
-      <div class="ftp-section">
-        <h3>🏆 Race Winner</h3>
-        <p class="ftp-hint">Who wins the race?</p>
-        <div class="ftp-grid">
-          ${(d.drivers||[]).map(drv => {
-              const col = colourFor(drv.team, d.teams);
-              const picked = saved.winner === drv.name;
-              return `<div class="ftp-card ${picked?'picked':''}" style="${picked?`--tc:${col}`:''}" onclick="pickFantasy('winner','${drv.name}','${key}')">
-                <span class="team-dot" style="background:${col}"></span>
-                <div class="ftpc-name">${drv.name}</div>
-                <div class="ftpc-team">${drv.team||''}</div>
-                ${picked ? '<div class="ftpc-check">✓ PICKED</div>' : ''}
-              </div>`;
-          }).join('')}
-        </div>
-      </div>
-      <div class="ftp-section">
-        <h3>⚡ Fastest Lap</h3>
-        <p class="ftp-hint">Who sets the fastest lap?</p>
-        <div class="ftp-grid">
-          ${(d.drivers||[]).map(drv => {
-              const col = colourFor(drv.team, d.teams);
-              const picked = saved.fastest === drv.name;
-              return `<div class="ftp-card ${picked?'picked':''}" style="${picked?`--tc:${col}`:''}" onclick="pickFantasy('fastest','${drv.name}','${key}')">
-                <span class="team-dot" style="background:${col}"></span>
-                <div class="ftpc-name">${drv.name}</div>
-                <div class="ftpc-team">${drv.team||''}</div>
-                ${picked ? '<div class="ftpc-check">✓ PICKED</div>' : ''}
-              </div>`;
-          }).join('')}
-        </div>
-      </div>`;
-}
+    const teams = d.teams || [];
 
-function switchFantasyTab(tab) {
-    document.querySelectorAll('.fantasy-tab-btn').forEach(b => b.classList.remove('active'));
-    document.getElementById(`ftab-${tab}`)?.classList.add('active');
-    const el = document.getElementById('fantasyTabContent');
-    if (!el) return;
-    const d = cls();
-    if (tab === 'leaderboard') {
-        // Simple local leaderboard placeholder
-        el.innerHTML = '<p style="color:var(--muted);padding:1.5rem">Leaderboard coming soon.</p>';
-    } else {
-        const next = findNextRace(d.races);
-        el.innerHTML = renderFantasyPicks(next, d);
+    if (!teams.length) {
+        el.innerHTML = `<div class="fvi-empty">
+            <p>No teams yet. Add teams in the admin and assign each one to Fire or Ice.</p>
+          </div>`;
+        return;
     }
+
+    const s = fireIceStandings(d);
+    const assigned = s.fire.teams.length + s.ice.teams.length;
+    if (!assigned) {
+        el.innerHTML = `<div class="fvi-empty">
+            <p>No teams have been assigned a side yet. Set each team to Fire or Ice
+               in the admin and the battle starts here.</p>
+          </div>`;
+        return;
+    }
+
+    const total = s.fire.pts + s.ice.pts;
+    const firePct = total ? (s.fire.pts / total) * 100 : 50;
+    const lead = Math.abs(s.fire.pts - s.ice.pts);
+    const leader = s.fire.pts === s.ice.pts ? null : (s.fire.pts > s.ice.pts ? 'fire' : 'ice');
+
+    const sideColumn = key => {
+        const side = SIDES[key];
+        const data = s[key];
+        return `
+          <div class="fvi-col ${key}">
+            <div class="fvi-col-head">
+              <span class="fvi-icon">${side.icon}</span>
+              <span class="fvi-name">${side.label}</span>
+              <span class="fvi-col-pts">${data.pts}</span>
+            </div>
+            ${data.teams.length ? data.teams.map(t => `
+              <div class="fvi-team">
+                <span class="team-dot" style="background:${safeHex(t.color, side.color)}"></span>
+                <span class="fvi-team-name">${esc(t.name)}</span>
+                <span class="fvi-team-pts">${t.pts}</span>
+              </div>`).join('')
+            : `<p class="fvi-none">No teams on this side yet.</p>`}
+          </div>`;
+    };
+
+    const scored = (d.races||[]).filter(r => (r.results||[]).length);
+    const strip = scored.map(r => {
+        const sw = roundSwing(r, d);
+        const won = sw.fire === sw.ice ? 'draw' : (sw.fire > sw.ice ? 'fire' : 'ice');
+        return `<div class="fvi-round ${won}" title="${esc(r.name||'')}: Fire ${sw.fire} - ${sw.ice} Ice">
+            <span class="fvi-round-no">R${r.round || '?'}</span>
+            <span class="fvi-round-score">${sw.fire}–${sw.ice}</span>
+          </div>`;
+    }).join('');
+
+    el.innerHTML = `
+      <div class="fvi-board">
+        <div class="fvi-score">
+          <div class="fvi-score-side fire ${leader==='fire'?'winning':''}">
+            <span class="fvi-icon">🔥</span>
+            <span class="fvi-score-val">${s.fire.pts}</span>
+            <span class="fvi-score-label">FIRE</span>
+          </div>
+          <div class="fvi-vs">VS</div>
+          <div class="fvi-score-side ice ${leader==='ice'?'winning':''}">
+            <span class="fvi-icon">❄️</span>
+            <span class="fvi-score-val">${s.ice.pts}</span>
+            <span class="fvi-score-label">ICE</span>
+          </div>
+        </div>
+        <div class="fvi-bar">
+          <div class="fvi-bar-fire" style="width:${firePct.toFixed(1)}%"></div>
+          <div class="fvi-bar-ice" style="width:${(100-firePct).toFixed(1)}%"></div>
+        </div>
+        <p class="fvi-verdict">${
+          !total ? 'No points scored yet — all square.'
+          : leader === null ? 'Dead level.'
+          : `<b class="${leader}">${SIDES[leader].label}</b> leads by <b>${lead}</b> point${lead===1?'':'s'}.`
+        }</p>
+      </div>
+
+      ${scored.length ? `
+      <div class="section-head"><h2>ROUND BY ROUND</h2></div>
+      <div class="fvi-rounds">${strip}</div>` : ''}
+
+      <div class="section-head"><h2>THE SIDES</h2></div>
+      <div class="fvi-cols">
+        ${sideColumn('fire')}
+        ${sideColumn('ice')}
+      </div>
+
+      ${s.unassigned.length ? `
+      <div class="section-head"><h2>UNASSIGNED</h2></div>
+      <div class="fvi-unassigned">
+        <p>These teams have no side yet, so their points count for neither:</p>
+        ${s.unassigned.map(t => `<span class="fvi-chip">${esc(t.name)} · ${t.pts}</span>`).join('')}
+      </div>` : ''}
+    `;
 }
 
-function joinFantasy() {
-    const val = document.getElementById('fantasyNameInput')?.value.trim();
-    if (!val) return;
-    userId = `${val}_${Date.now()}`;
-    userName = val;
-    localStorage.setItem('fge_userId', userId);
-    localStorage.setItem('fge_userName', userName);
-    renderFantasy();
-}
-
-function pickFantasy(type, val, key) {
-    let saved = {};
-    try { saved = JSON.parse(localStorage.getItem(`fge_fp_${key}`) || '{}'); } catch(e) {}
-    saved[type] = val;
-    localStorage.setItem(`fge_fp_${key}`, JSON.stringify(saved));
-    const d = cls();
-    const next = findNextRace(d.races);
-    const el = document.getElementById('fantasyTabContent');
-    if (el) el.innerHTML = renderFantasyPicks(next, d);
-}
-
-// ── DOTD PAGE ─────────────────────────────────────────────
 function renderDOTD() {
     const d = cls();
     const el = document.getElementById('dotdContent');
@@ -1087,6 +1157,7 @@ async function init() {
 
     // A failed fetch must not stop the page from rendering
     try { await fetchData(); } catch(e) { console.error('fetchData failed', e); }
+    try { syncFviNav(); } catch(e) {}
     try { navigate('home'); } catch(e) { console.error('navigate failed', e); }
     try { startCountdownTick(); } catch(e) {}
 

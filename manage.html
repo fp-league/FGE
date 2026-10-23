@@ -148,6 +148,18 @@ textarea { resize:vertical; min-height:80px; }
 .color-pair { display:flex; gap:0.5rem; align-items:center; }
 .color-pair input[type=color] { width:40px; height:36px; padding:2px; cursor:pointer; flex-shrink:0; }
 
+/* ── FIRE VS ICE ── */
+.fvi-switch { display:flex; align-items:center; gap:0.6rem; cursor:pointer; margin-bottom:0.6rem; font-size:0.86rem; color:var(--off); }
+.fvi-switch input { width:auto; cursor:pointer; }
+.fvi-switch b { color:var(--accent); }
+.fvi-status { font-size:0.78rem; color:var(--grey); margin-bottom:1rem; line-height:1.5; }
+.fvi-status b { color:var(--off); }
+
+.side-badge { font-family:var(--fu); font-size:0.64rem; letter-spacing:0.1em; padding:0.12rem 0.45rem; border-radius:2px; white-space:nowrap; }
+.side-badge.fire { background:rgba(255,87,34,0.18); color:#ff8a5c; border:1px solid rgba(255,87,34,0.45); }
+.side-badge.ice  { background:rgba(41,182,246,0.16); color:#7fd4f7; border:1px solid rgba(41,182,246,0.45); }
+.side-badge.none { color:var(--grey2); }
+
 /* ── POINTS EDITOR ── */
 .pts-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(68px,1fr)); gap:0.5rem; margin-bottom:0.9rem; }
 .pts-cell { display:flex; flex-direction:column; gap:0.2rem; }
@@ -354,6 +366,14 @@ textarea { resize:vertical; min-height:80px; }
                 <input id="tColorHex" value="#E10600" placeholder="#hex">
               </div>
             </div>
+            <div class="form-group">
+              <label class="fg-label">FIRE VS ICE SIDE</label>
+              <select id="tSide">
+                <option value="">— Unassigned —</option>
+                <option value="fire">🔥 Fire</option>
+                <option value="ice">❄️ Ice</option>
+              </select>
+            </div>
             <div class="form-group img-field">
               <label class="fg-label">TEAM LOGO</label>
               <div class="img-pick">
@@ -378,7 +398,7 @@ textarea { resize:vertical; min-height:80px; }
 
         <div class="tbl-wrap">
           <table class="adm-table">
-            <thead><tr><th>COLOUR</th><th>NAME</th><th>DESCRIPTION</th><th style="width:110px"></th></tr></thead>
+            <thead><tr><th>COLOUR</th><th>NAME</th><th>SIDE</th><th>DESCRIPTION</th><th style="width:110px"></th></tr></thead>
             <tbody id="teamsTbody"></tbody>
           </table>
         </div>
@@ -447,6 +467,19 @@ textarea { resize:vertical; min-height:80px; }
         <div class="form-card" style="max-width:400px">
           <div class="form-group" style="margin-bottom:1rem"><label class="fg-label">SEASON NAME</label><input id="seasonName" placeholder="Season 1"></div>
           <button class="btn btn-white" onclick="saveSeason()">SAVE</button>
+        </div>
+
+        <div class="form-card" style="max-width:560px">
+          <h3>FIRE VS ICE</h3>
+          <p class="bk-note">Assign each team a side on the Teams tab, then switch this on
+             when the season starts. While it's off the page is hidden from the site's
+             navigation entirely, so you can set it all up in advance.</p>
+          <label class="fvi-switch">
+            <input type="checkbox" id="fviEnabled">
+            <span>Show Fire Vs Ice on the site for <b id="fviClassLabel">GT3</b></span>
+          </label>
+          <p class="fvi-status" id="fviStatus"></p>
+          <button class="btn btn-white" onclick="saveFvi()">SAVE</button>
         </div>
 
         <div class="form-card" style="max-width:560px">
@@ -625,7 +658,7 @@ function refreshSec() {
         case 'races':   renderRacesTable(); break;
         case 'results': populateResultsSelect(); break;
         case 'dotd':    populateDotdSelects(); break;
-        case 'season':  document.getElementById('seasonName').value = d().seasonName||'Season 1'; renderPointsEditor(); renderStorageMeter(); break;
+        case 'season':  document.getElementById('seasonName').value = d().seasonName||'Season 1'; renderFviPanel(); renderPointsEditor(); renderStorageMeter(); break;
     }
 }
 
@@ -786,14 +819,20 @@ function deleteDriver(i) {
 }
 
 // ── TEAMS ─────────────────────────────────────────────────
+function sideBadge(side) {
+    if (side === 'fire') return '<span class="side-badge fire">🔥 FIRE</span>';
+    if (side === 'ice')  return '<span class="side-badge ice">❄️ ICE</span>';
+    return '<span class="side-badge none">—</span>';
+}
 function renderTeamsTable() {
     const teams = d().teams||[];
     const tbody = document.getElementById('teamsTbody');
-    if (!teams.length) { tbody.innerHTML = '<tr class="empty-row"><td colspan="4">No teams yet.</td></tr>'; return; }
+    if (!teams.length) { tbody.innerHTML = '<tr class="empty-row"><td colspan="5">No teams yet.</td></tr>'; return; }
     tbody.innerHTML = teams.map((t,i) => `<tr>
       <td><span style="display:inline-block;width:20px;height:20px;border-radius:50%;background:${t.color||'#888'};border:1px solid rgba(255,255,255,0.1)"></span></td>
       <td style="color:var(--white);font-weight:500">${t.name||''}</td>
-      <td style="color:var(--grey);font-size:0.8rem;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.description||'—'}</td>
+      <td>${sideBadge(t.side)}</td>
+      <td style="color:var(--grey);font-size:0.8rem;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.description||'—'}</td>
       <td>${actionCell(`editTeam(${i})`, `deleteTeam(${i})`)}</td>
     </tr>`).join('');
 }
@@ -802,6 +841,7 @@ function openTeamForm() {
     editingIdx = null;
     document.getElementById('teamFormTitle').textContent = 'ADD TEAM';
     ['tName','tLogo','tDesc'].forEach(id => document.getElementById(id).value='');
+    document.getElementById('tSide').value = '';
     document.getElementById('tColor').value = '#E10600';
     document.getElementById('tColorHex').value = '#E10600';
     syncPreview('tLogo');
@@ -818,6 +858,7 @@ function editTeam(i) {
     document.getElementById('tColorHex').value = t.color||'#E10600';
     document.getElementById('tLogo').value     = t.logo||'';
     document.getElementById('tDesc').value     = t.description||'';
+    document.getElementById('tSide').value     = t.side||'';
     syncPreview('tLogo');
     document.getElementById('teamForm').style.display = 'block';
     document.getElementById('teamForm').scrollIntoView({behavior:'smooth', block:'start'});
@@ -830,7 +871,8 @@ function saveTeam() {
         name:        document.getElementById('tName').value.trim(),
         color:       document.getElementById('tColorHex').value.trim() || document.getElementById('tColor').value,
         logo:        document.getElementById('tLogo').value.trim(),
-        description: document.getElementById('tDesc').value.trim()
+        description: document.getElementById('tDesc').value.trim(),
+        side:        document.getElementById('tSide').value
     };
     if (!item.name) { toast('Name is required','err'); return; }
     const c = adminClass.toLowerCase();
@@ -1083,6 +1125,38 @@ function saveSeason() {
     const name = document.getElementById('seasonName').value.trim()||'Season 1';
     adminData[adminClass.toLowerCase()].seasonName = name;
     saveData('Season settings saved');
+}
+
+// ── FIRE VS ICE ───────────────────────────────────────────
+function renderFviPanel() {
+    const cls = d();
+    const on = ((cls.fireVsIce||{}).enabled === true);
+    const box = document.getElementById('fviEnabled');
+    if (box) box.checked = on;
+    const lbl = document.getElementById('fviClassLabel');
+    if (lbl) lbl.textContent = adminClass;
+
+    // Tell them whether the sides are actually ready, since switching it
+    // on with nothing assigned would publish an empty page.
+    const teams = cls.teams || [];
+    const fire = teams.filter(t => t.side === 'fire').length;
+    const ice  = teams.filter(t => t.side === 'ice').length;
+    const none = teams.length - fire - ice;
+    const el = document.getElementById('fviStatus');
+    if (!el) return;
+    el.innerHTML = teams.length
+        ? `${adminClass} sides: <b>${fire}</b> Fire · <b>${ice}</b> Ice` +
+          (none ? ` · <b>${none}</b> unassigned` : '') +
+          (fire && ice ? '' : ' — assign teams to both sides before switching this on.')
+        : 'No teams added yet.';
+}
+
+function saveFvi() {
+    const on = document.getElementById('fviEnabled').checked;
+    const c = adminClass.toLowerCase();
+    adminData[c].fireVsIce = { ...(adminData[c].fireVsIce||{}), enabled: on };
+    saveData(on ? `Fire Vs Ice is now live for ${adminClass}` : `Fire Vs Ice hidden for ${adminClass}`);
+    renderFviPanel();
 }
 
 // ── POINTS SYSTEM ─────────────────────────────────────────

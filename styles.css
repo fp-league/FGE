@@ -1020,3 +1020,60 @@ select:focus { outline: none; border-color: var(--class-color); }
 /* ── UTIL ── */
 .hidden { display: none !important; }
 .season-divider { height: 2px; background: linear-gradient(90deg, var(--class-color) 0%, transparent 60%); margin-bottom: 1.5rem; border-radius: 1px; transition: background 0.3s; }
+
+/* ══════════ FIRE VS ICE ══════════ */
+.fvi-empty { background: var(--surface); border: 1px dashed var(--line-strong); border-radius: var(--radius); padding: 2.5rem 1.5rem; text-align: center; }
+.fvi-empty p { color: var(--grey); font-size: 0.88rem; line-height: 1.6; max-width: 46ch; margin: 0 auto; }
+
+.fvi-board {
+    background: linear-gradient(100deg, rgba(255,87,34,0.16) 0%, transparent 42%, transparent 58%, rgba(41,182,246,0.16) 100%),
+                var(--surface);
+    border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 2rem 1.5rem 1.5rem; margin-bottom: 1rem;
+}
+.fvi-score { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 1rem; }
+.fvi-score-side { display: flex; flex-direction: column; align-items: center; gap: 0.2rem; opacity: 0.78; transition: opacity 0.3s, transform 0.3s; }
+.fvi-score-side.winning { opacity: 1; transform: scale(1.06); }
+.fvi-icon { font-size: 1.5rem; line-height: 1; }
+.fvi-score-val { font-family: var(--font-display); font-size: clamp(2.6rem, 10vw, 4.4rem); line-height: 1; color: var(--white); }
+.fvi-score-side.fire .fvi-score-val { color: #FF7043; text-shadow: 0 0 26px rgba(255,87,34,0.5); }
+.fvi-score-side.ice  .fvi-score-val { color: #4FC3F7; text-shadow: 0 0 26px rgba(41,182,246,0.5); }
+.fvi-score-label { font-family: var(--font-ui); font-size: 0.72rem; letter-spacing: 0.26em; color: var(--grey-light); }
+.fvi-vs { font-family: var(--font-display); font-size: 0.85rem; letter-spacing: 0.14em; color: var(--grey); }
+
+.fvi-bar { display: flex; height: 10px; border-radius: 5px; overflow: hidden; margin: 1.5rem 0 0.9rem; background: var(--surface2); border: 1px solid var(--line); }
+.fvi-bar-fire { background: linear-gradient(90deg, #E64A19, #FF7043); transition: width 0.6s cubic-bezier(.2,.6,.2,1); }
+.fvi-bar-ice  { background: linear-gradient(90deg, #4FC3F7, #0288D1); transition: width 0.6s cubic-bezier(.2,.6,.2,1); }
+.fvi-verdict { text-align: center; font-size: 0.88rem; color: var(--grey-light); }
+.fvi-verdict b { color: var(--white); }
+.fvi-verdict b.fire { color: #FF7043; }
+.fvi-verdict b.ice  { color: #4FC3F7; }
+
+.fvi-rounds { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.5rem; }
+.fvi-round { border: 1px solid var(--line); border-radius: var(--radius); padding: 0.5rem 0.7rem; display: flex; flex-direction: column; align-items: center; gap: 0.15rem; min-width: 64px; background: var(--surface); }
+.fvi-round.fire { border-bottom: 2px solid #FF7043; }
+.fvi-round.ice  { border-bottom: 2px solid #4FC3F7; }
+.fvi-round.draw { border-bottom: 2px solid var(--grey-mid); }
+.fvi-round-no { font-family: var(--font-ui); font-size: 0.62rem; letter-spacing: 0.1em; color: var(--grey); }
+.fvi-round-score { font-family: var(--font-display); font-size: 0.86rem; color: var(--white); }
+
+.fvi-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+@media (max-width: 620px) { .fvi-cols { grid-template-columns: 1fr; } }
+.fvi-col { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+.fvi-col.fire { border-top: 3px solid #FF5722; }
+.fvi-col.ice  { border-top: 3px solid #29B6F6; }
+.fvi-col-head { display: flex; align-items: center; gap: 0.5rem; padding: 0.9rem 1rem; border-bottom: 1px solid var(--line); }
+.fvi-col-head .fvi-icon { font-size: 1rem; }
+.fvi-name { font-family: var(--font-display); font-size: 0.92rem; letter-spacing: 0.14em; color: var(--white); flex: 1; }
+.fvi-col-pts { font-family: var(--font-display); font-size: 1.15rem; color: var(--white); }
+.fvi-col.fire .fvi-col-pts { color: #FF7043; }
+.fvi-col.ice  .fvi-col-pts { color: #4FC3F7; }
+.fvi-team { display: flex; align-items: center; gap: 0.6rem; padding: 0.6rem 1rem; border-bottom: 1px solid rgba(255,255,255,0.04); }
+.fvi-team:last-child { border-bottom: none; }
+.fvi-team-name { flex: 1; color: var(--off-white); font-size: 0.86rem; }
+.fvi-team-pts { font-family: var(--font-display); color: var(--white); font-size: 0.95rem; }
+.fvi-none { padding: 1.2rem 1rem; color: var(--grey); font-size: 0.82rem; font-family: var(--font-ui); letter-spacing: 0.04em; }
+
+.fvi-unassigned { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 1rem 1.2rem; }
+.fvi-unassigned p { color: var(--grey); font-size: 0.82rem; margin-bottom: 0.7rem; }
+.fvi-chip { display: inline-block; font-family: var(--font-ui); font-size: 0.76rem; color: var(--grey-light); border: 1px solid var(--line-strong); border-radius: 2px; padding: 0.18rem 0.5rem; margin: 0 0.35rem 0.35rem 0; }
