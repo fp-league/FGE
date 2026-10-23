@@ -1004,16 +1004,29 @@ function saveSeason() {
 // compression below is deliberately aggressive and every save is checked
 // against the budget before it is sent.
 
-// Set these two after deploying worker/ and images go to R2 instead of
-// into the bin — then the 1MB ceiling stops mattering, because the bin
-// only ever stores a short URL. Left blank, uploads fall back to being
-// stored inline in the bin (which the storage meter below tracks).
+// ── WHERE UPLOADED IMAGES GO ──────────────────────────────
+//
+// Paste a free imgBB API key here and uploads are hosted there, with the
+// bin storing only a short URL. Get one in about a minute:
+//   api.imgbb.com -> sign up -> "Get API key"
+// No card, nothing to deploy, nothing to configure.
+const IMGBB_KEY = '';
+
+// Optional alternative: if the Worker in worker/ is deployed, uploads can
+// go through it instead. Leave blank unless you've set it up.
 const API_BASE    = '';   // e.g. 'https://fge-api.yourname.workers.dev'
 const ADMIN_TOKEN = '';   // must match the Worker's ADMIN_TOKEN secret
 
 const BIN_LIMIT  = 1024 * 1024;   // JSONBin hard ceiling for one bin
 const BIN_BUDGET = 0.95;          // refuse to save past 95% of it
-const useR2 = () => Boolean(API_BASE);
+
+// Nothing configured => images are stored inline in the bin, which the
+// storage meter tracks and saveData() refuses to overflow.
+function imageHost() {
+    if (IMGBB_KEY) return 'imgbb';
+    if (API_BASE)  return 'worker';
+    return 'bin';
+}
 
 const IMG_PRESETS = {
     avatar: { max: 256, q: 0.82 },   // shown at 132px, so 256 covers retina
@@ -1065,7 +1078,31 @@ async function compressImage(file, presetName) {
     return { dataUrl: out, blob, type, w, h };
 }
 
-/** Send the compressed image to the Worker, which stores it in R2. */
+/**
+ * Upload to imgBB and return the hosted URL.
+ * The key only permits uploading images, so it being visible in this file
+ * is low-stakes — and it can be regenerated from the imgBB dashboard.
+ */
+async function uploadToImgbb(dataUrl) {
+    const base64 = dataUrl.slice(dataUrl.indexOf(',') + 1);
+    const form = new FormData();
+    form.append('image', base64);
+
+    const res = await fetch(`https://api.imgbb.com/1/upload?key=${encodeURIComponent(IMGBB_KEY)}`, {
+        method: 'POST',
+        body: form,
+    });
+
+    let body = {};
+    try { body = await res.json(); } catch(e) {}
+    if (!res.ok || !body.success || !body.data) {
+        const why = (body.error && body.error.message) || `HTTP ${res.status}`;
+        throw new Error('imgBB upload failed: ' + why);
+    }
+    return body.data.display_url || body.data.url;
+}
+
+/** Send the compressed image to the Worker, which stores it in KV or R2. */
 async function uploadToR2(blob, type) {
     const res = await fetch(`${API_BASE.replace(/\/+$/,'')}/api/upload`, {
         method: 'POST',
@@ -1098,16 +1135,20 @@ async function handleImage(input, targetId, presetName) {
         const { dataUrl, blob, type, w, h } = await compressImage(file, presetName);
         const bytes = dataUrlBytes(dataUrl);
 
-        // With R2 configured the bin only stores a URL, so there is no
+        // Hosted externally: the bin only stores a URL, so there is no
         // size pressure and nothing to check against the budget.
-        if (useR2()) {
+        const host = imageHost();
+        if (host !== 'bin') {
             if (sizeEl) sizeEl.textContent = 'uploading…';
-            const url = await uploadToR2(blob, type);
+            const url = host === 'imgbb'
+                ? await uploadToImgbb(dataUrl)
+                : await uploadToR2(blob, type);
             document.getElementById(targetId).value = url;
-            if (sizeEl) sizeEl.textContent = `${w}×${h} · ${fmtBytes(blob.size)} · stored in R2`;
+            if (sizeEl) sizeEl.textContent =
+                `${w}×${h} · ${fmtBytes(blob ? blob.size : bytes)} · hosted`;
             syncPreview(targetId);
             renderStorageMeter();
-            toast(`Uploaded (${fmtBytes(file.size)} → ${fmtBytes(blob.size)})`, 'ok');
+            toast(`Uploaded (${fmtBytes(file.size)} → ${fmtBytes(blob ? blob.size : bytes)})`, 'ok');
             return;
         }
 
@@ -1115,7 +1156,7 @@ async function handleImage(input, targetId, presetName) {
         const projected = payloadBytes() + bytes;
         if (projected > BIN_LIMIT * BIN_BUDGET) {
             if (sizeEl) sizeEl.textContent = '';
-            toast('No room left in the bin for that image — set up R2','err');
+            toast('No room left in the bin — add an imgBB key to host images','err');
             input.value = '';
             renderStorageMeter();
             return;
@@ -1175,10 +1216,11 @@ function renderStorageMeter() {
         : state === 'warn' ? 'Getting full.'
         : 'This is the JSONBin record — drivers, teams, races, results and news.'
       }</p>
-      <p class="sm-store">Images: ${ useR2()
-        ? '<b>Cloudflare R2</b> — stored outside the bin, so they cost nothing here and there is no practical limit.'
-        : '<b>stored inline in the bin</b>, so they count against the 1MB above. Deploy <code>worker/</code> and set <code>API_BASE</code> to move them to R2.'
-      }</p>`;
+      <p class="sm-store">Images: ${ {
+        imgbb:  '<b>hosted on imgBB</b> — stored outside the bin, so they cost nothing here and there is no practical limit.',
+        worker: '<b>hosted via your Worker</b> — stored outside the bin, so they cost nothing here.',
+        bin:    '<b>stored inline in the bin</b>, so they count against the 1MB above. Paste a free imgBB key into <code>IMGBB_KEY</code> to host them instead.'
+      }[imageHost()] }</p>`;
 }
 
 // Races are timed, not lap-counted. `laps` is read as a fallback so any
