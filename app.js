@@ -3,9 +3,9 @@
 
 // ── CONFIG ──────────────────────────────────────────────
 const BIN_ID      = '6ada83fdac6210605a4a3a74';
+// Read-only key. The public site never writes, so the master (read/write)
+// key must never appear in this file — it was here unused and is now gone.
 const ACCESS_KEY  = '$2a$10$G0A4V5Q7TOSTCAm/D4oskenfMyJjU.5SXbAVK5kdCNIkmelTS/.be';
-const MASTER_KEY  = '$2a$10$wTYTzJ9.QfJDLLb52xi7hO4ILuoejGhm9MIlOYUReOH/t3JpyrRPS';
-const ADMIN_PASS  = 'YOUR_ADMIN_PASS';
 const BIN_URL     = `https://api.jsonbin.io/v3/b/${BIN_ID}`;
 
 // ── STATE ────────────────────────────────────────────────
@@ -106,8 +106,12 @@ function calcStandings(races, drivers, teams) {
     races.forEach(r => {
         if (!r.results) return;
         r.results.forEach((res, i) => {
-            if (!res || !res.driver) return;
+            // Results come in two shapes: a bare driver name (legacy) or
+            // { driver, time }. The old guard required .driver, which a
+            // string never has, so legacy results silently scored nothing.
+            if (!res) return;
             const p = (typeof res === 'string') ? res : res.driver;
+            if (!p) return;
             const pos = (typeof res === 'object' && res.pos != null) ? res.pos : (i + 1);
             if (String(pos).toUpperCase() === 'DNF') return;
             const earn = pointsTable()[Number(pos) - 1] || 0;
