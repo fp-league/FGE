@@ -84,6 +84,18 @@
             <span class="intro-sub">FORTNITE GLOBAL ENDURANCE</span>
         </div>
     </div>
+    <script>
+        // Failsafe: the intro overlay covers the whole screen and is only ever
+        // removed by JS. If app.js fails to load or throws, this guarantees the
+        // site is still usable. Runs independently of app.js.
+        setTimeout(function () {
+            var el = document.getElementById('lightsOut');
+            if (el && el.style.display !== 'none') {
+                el.classList.add('hidden');
+                el.style.display = 'none';
+            }
+        }, 4000);
+    </script>
 
     <!-- CLASS SWITCHER -->
     <div class="class-switcher" id="classSwitcher">

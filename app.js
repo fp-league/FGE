@@ -768,12 +768,32 @@ function closeModal() {
 }
 
 // ── LIGHTS OUT INTRO ──────────────────────────────────────
+function killIntro(el) {
+    if (!el) return;
+    el.classList.add('hidden');
+    el.style.display = 'none';
+}
+
 function lightsOut() {
-    if (sessionStorage.getItem('fge_lit')) return;
-    sessionStorage.setItem('fge_lit','1');
     const el = document.getElementById('lightsOut');
     if (!el) return;
-    setTimeout(() => { el.classList.add('hidden'); setTimeout(()=>{ el.style.display='none'; },400); }, 1400);
+
+    // Failsafe: no matter what happens below (JS error, storage throw,
+    // slow network), the overlay is gone after 3s. It must never be able
+    // to sit on top of the page forever.
+    setTimeout(() => killIntro(el), 3000);
+
+    let alreadyPlayed = false;
+    try { alreadyPlayed = !!sessionStorage.getItem('fge_lit'); } catch(e) {}
+
+    // Intro already played this session (eg. a refresh) — drop the overlay now.
+    if (alreadyPlayed) { killIntro(el); return; }
+
+    try { sessionStorage.setItem('fge_lit','1'); } catch(e) {}
+    setTimeout(() => {
+        el.classList.add('hidden');
+        setTimeout(() => { el.style.display = 'none'; }, 400);
+    }, 1400);
 }
 
 // ── PWA INSTALL ───────────────────────────────────────────
@@ -850,9 +870,10 @@ async function init() {
         if (b) b.style.display = 'none';
     }
 
-    await fetchData();
-    navigate('home');
-    startCountdownTick();
+    // A failed fetch must not stop the page from rendering
+    try { await fetchData(); } catch(e) { console.error('fetchData failed', e); }
+    try { navigate('home'); } catch(e) { console.error('navigate failed', e); }
+    try { startCountdownTick(); } catch(e) {}
 
     // Register service worker
     if ('serviceWorker' in navigator) {
