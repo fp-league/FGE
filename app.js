@@ -260,10 +260,6 @@ function switchClass(cls) {
     document.body.classList.toggle('gt4-mode', cls === 'GT4');
     applyThemeColor(cls);
     syncFviNav();
-    const car = document.getElementById('csCar');
-    if (car) {
-        car.classList.toggle('gt4-pos', cls === 'GT4');
-    }
     document.getElementById('csGT3')?.classList.toggle('active', cls === 'GT3');
     document.getElementById('csGT4')?.classList.toggle('active', cls === 'GT4');
     renderCurrentPage();
@@ -1161,8 +1157,6 @@ async function init() {
     // Init class switcher UI — apply the saved class colour on first paint
     document.body.classList.toggle('gt4-mode', currentClass === 'GT4');
     applyThemeColor(currentClass);
-    const car = document.getElementById('csCar');
-    if (car) car.classList.toggle('gt4-pos', currentClass === 'GT4');
     document.getElementById('csGT3')?.classList.toggle('active', currentClass === 'GT3');
     document.getElementById('csGT4')?.classList.toggle('active', currentClass === 'GT4');
 

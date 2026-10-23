@@ -99,19 +99,15 @@
 
     <!-- CLASS SWITCHER -->
     <div class="class-switcher" id="classSwitcher">
-        <div class="cs-track">
-            <div class="cs-car" id="csCar">🏎️</div>
-        </div>
-        <div class="cs-buttons">
-            <button class="cs-btn active" id="csGT3" onclick="switchClass('GT3')">
-                <span class="cs-label">GT3</span>
-                <span class="cs-sub">Pro Class</span>
-            </button>
-            <button class="cs-btn" id="csGT4" onclick="switchClass('GT4')">
-                <span class="cs-label">GT4</span>
-                <span class="cs-sub">Am Class</span>
-            </button>
-        </div>
+        <button class="cs-btn active" id="csGT3" onclick="switchClass('GT3')" aria-label="Show GT3">
+            <img src="gt3-logo.webp" alt="GT3" class="cs-logo">
+            <span class="cs-sub">Pro Class</span>
+        </button>
+        <div class="cs-divider"></div>
+        <button class="cs-btn" id="csGT4" onclick="switchClass('GT4')" aria-label="Show GT4">
+            <img src="gt4-logo.webp" alt="GT4" class="cs-logo">
+            <span class="cs-sub">Am Class</span>
+        </button>
     </div>
 
     <main class="container">

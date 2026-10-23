@@ -216,36 +216,46 @@ body {
 .class-switcher {
     background: var(--surface);
     border-bottom: 1px solid var(--line);
-    padding: 0.5rem 1.5rem;
-    display: flex; align-items: center; justify-content: center; gap: 1.5rem;
+    padding: 0.7rem 1.5rem;
+    display: flex; align-items: center; justify-content: center; gap: 1.6rem;
     position: relative; z-index: 50;
 }
-.cs-track {
-    position: relative; width: 120px; height: 30px;
-    background: var(--input-bg); border-radius: 15px;
-    border: 1px solid var(--line-strong); overflow: hidden; flex-shrink: 0;
-}
-.cs-car {
-    position: absolute; left: 8px; top: 50%;
-    transform: translateY(-50%);
-    font-size: 1.1rem;
-    transition: left 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-.cs-car.gt4-pos { left: calc(100% - 34px); }
-.cs-buttons { display: flex; gap: 0.5rem; }
+.cs-divider { width: 1px; height: 34px; background: var(--line-strong); flex-shrink: 0; }
+
 .cs-btn {
-    background: transparent; border: 1px solid var(--line);
-    border-radius: var(--radius); padding: 0.35rem 1.2rem;
-    cursor: pointer; transition: all 0.25s; min-width: 76px;
+    background: transparent; border: none; cursor: pointer;
+    padding: 0.3rem 0.9rem; border-radius: var(--radius);
+    display: flex; flex-direction: column; align-items: center; gap: 0.25rem;
+    transition: transform 0.3s cubic-bezier(.34,1.4,.64,1);
 }
-.cs-label {
-    display: block; font-family: var(--font-display); font-size: 0.95rem;
-    letter-spacing: 0.12em; color: var(--grey); transition: color 0.25s;
+.cs-btn:hover { transform: translateY(-2px); }
+
+/* Dimmed until selected, then lit in the class colour. */
+.cs-logo {
+    height: 30px; width: auto; display: block;
+    opacity: 0.3; filter: grayscale(1) brightness(1.6);
+    transition: opacity 0.35s ease, filter 0.35s ease, transform 0.35s ease;
 }
-.cs-btn#csGT3.active { border-color: var(--gt3); }
-.cs-btn#csGT3.active .cs-label { color: var(--gt3); }
-.cs-btn#csGT4.active { border-color: var(--gt4-bright); }
-.cs-btn#csGT4.active .cs-label { color: var(--gt4-bright); }
+.cs-btn:hover .cs-logo { opacity: 0.6; }
+
+.cs-btn.active .cs-logo { opacity: 1; filter: none; transform: scale(1.06); }
+.cs-btn#csGT3.active .cs-logo { filter: drop-shadow(0 0 12px rgba(225,6,0,0.75)); }
+.cs-btn#csGT4.active .cs-logo { filter: drop-shadow(0 0 12px rgba(85,153,255,0.75)); }
+
+.cs-sub {
+    font-family: var(--font-ui); font-size: 0.58rem;
+    letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--grey-mid); transition: color 0.3s;
+}
+.cs-btn.active .cs-sub { color: var(--grey-light); }
+.cs-btn#csGT3.active .cs-sub { color: var(--gt3); }
+.cs-btn#csGT4.active .cs-sub { color: var(--gt4-bright); }
+
+@media (max-width: 480px) {
+    .class-switcher { gap: 1rem; padding: 0.55rem 1rem; }
+    .cs-logo { height: 24px; }
+    .cs-sub { font-size: 0.52rem; letter-spacing: 0.12em; }
+}
 
 /* ── HERO ── */
 .hero-section {
