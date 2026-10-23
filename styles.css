@@ -45,6 +45,9 @@ body.gt4-mode {
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html { scroll-behavior: smooth; }
+/* A single over-wide element used to scale the whole page up on phones.
+   Clamp it at the root so one long string can never do that again. */
+html, body { max-width: 100%; overflow-x: hidden; }
 
 body {
     background: var(--page-bg);
@@ -113,6 +116,7 @@ body {
 /* ── FULL-SCREEN NAV OVERLAY ── */
 .nav-overlay {
     position: fixed; inset: 0;
+    width: 100%; max-width: 100vw; overflow: hidden auto;
     background: var(--page-bg);
     z-index: 400;
     display: flex; flex-direction: column;
@@ -182,7 +186,7 @@ body {
 }
 .intro-car {
     position: absolute; bottom: 28%; left: -65%;
-    width: min(58vw, 720px);
+    width: min(58vw, 720px); height: auto;
     filter: drop-shadow(0 8px 32px rgba(225,6,0,0.5));
     animation: carDrive 1.1s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.1s forwards;
 }
@@ -336,8 +340,8 @@ body {
     margin-bottom: 1.5rem; flex-wrap: wrap;
     transition: border-left-color 0.3s;
 }
-.cb-label { font-family: var(--font-display); font-size: 0.75rem; letter-spacing: 0.18em; color: var(--grey); flex-shrink: 0; }
-.cb-units { display: flex; align-items: center; gap: 0.4rem; }
+.cb-label { font-family: var(--font-display); font-size: 0.75rem; letter-spacing: 0.18em; color: var(--grey); min-width: 0; overflow-wrap: anywhere; }
+.cb-units { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; min-width: 0; }
 .cb-unit { text-align: center; }
 .cb-unit span { display: block; font-family: var(--font-display); font-size: 1.8rem; color: var(--white); line-height: 1; }
 .cb-unit label { font-size: 0.58rem; letter-spacing: 0.1em; color: var(--grey); font-family: var(--font-ui); }
@@ -1098,3 +1102,47 @@ select:focus { outline: none; border-color: var(--class-color); }
 .fvi-group span { color: var(--grey2); }
 .fvi-note { text-align: center; font-size: 0.78rem; color: var(--grey); margin-top: 0.5rem; line-height: 1.5; }
 .fvi-chip .fvi-cls { margin-right: 0.35rem; vertical-align: middle; }
+
+/* ══════════ PHONES ══════════
+   The display font is very wide and heavily letter-spaced, so at phone
+   widths headings and the countdown need tighter tracking and smaller
+   steps or they push the page wider than the screen. */
+@media (max-width: 520px) {
+    .container { padding-left: 1rem; padding-right: 1rem; }
+
+    /* Section headings: CHAMPIONSHIP was within a few px of overflowing */
+    .section-head { margin-top: 1.8rem; }
+    .section-head h2 { font-size: 0.92rem; letter-spacing: 0.08em; }
+    .section-head a, .section-head button { font-size: 0.66rem; letter-spacing: 0.08em; }
+
+    .cal-title { font-size: 1.5rem; letter-spacing: 0.06em; }
+    .drivers-sub { font-size: 0.82rem; }
+
+    /* Countdown: stack the label above the clock and shrink the digits */
+    .countdown-bar { flex-direction: column; align-items: flex-start; gap: 0.7rem; padding: 0.9rem 1rem; }
+    .cb-label { font-size: 0.64rem; letter-spacing: 0.1em; line-height: 1.4; }
+    .cb-units { gap: 0.3rem; width: 100%; justify-content: space-between; }
+    .cb-unit span { font-size: 1.4rem; }
+    .cb-unit label { font-size: 0.52rem; letter-spacing: 0.06em; }
+    .cb-sep { font-size: 1.1rem; }
+    .cb-raceday { font-size: 1.3rem; }
+
+    /* Race strip: let the pieces wrap instead of forcing one wide row */
+    .race-strip { flex-wrap: wrap; gap: 0.5rem 0.9rem; padding: 0.8rem 1rem; }
+    .rs-name { font-size: 0.95rem; }
+
+    /* Hero */
+    .hero-section { padding: 2.5rem 1rem 2rem; }
+    .hero-tagline { letter-spacing: 0.2em; font-size: 0.55rem; }
+
+    /* Menu: the links were 440px wide on a 375px screen */
+    .nav-overlay { padding: 1.5rem 1.25rem; }
+    .nav-overlay .nav-link { font-size: 1.75rem; letter-spacing: 0.04em; }
+    .nav-overlay li { width: 100%; }
+}
+
+@media (max-width: 380px) {
+    .section-head h2 { font-size: 0.82rem; letter-spacing: 0.05em; }
+    .cb-unit span { font-size: 1.2rem; }
+    .nav-overlay .nav-link { font-size: 1.5rem; }
+}
