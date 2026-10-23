@@ -159,7 +159,9 @@ function countdownHTML(targetDate) {
 function switchClass(cls) {
     if (cls === currentClass) return;
     currentClass = cls;
-    localStorage.setItem('fge_class', cls);
+    try { localStorage.setItem('fge_class', cls); } catch(e) {}
+    // Drives --class-color: red for GT3, blue for GT4
+    document.body.classList.toggle('gt4-mode', cls === 'GT4');
     const car = document.getElementById('csCar');
     if (car) {
         car.classList.toggle('gt4-pos', cls === 'GT4');
@@ -850,7 +852,8 @@ async function init() {
         if (e.target.id === 'modal') closeModal();
     });
 
-    // Init class switcher UI
+    // Init class switcher UI — apply the saved class colour on first paint
+    document.body.classList.toggle('gt4-mode', currentClass === 'GT4');
     const car = document.getElementById('csCar');
     if (car) car.classList.toggle('gt4-pos', currentClass === 'GT4');
     document.getElementById('csGT3')?.classList.toggle('active', currentClass === 'GT3');

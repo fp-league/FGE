@@ -19,10 +19,13 @@
     --font-body: 'Segoe UI', Arial, sans-serif;
     --radius: 3px;
     --nav-h: 60px;
+    --gt4-bright: #5599FF;
     --class-color: var(--gt3);
 }
 
-body.gt4-mode { --class-color: var(--gt4); }
+/* #0033A0 is too dark to read on black, so the on-black class colour
+   uses a brighter blue. --gt4 stays the official colour for fills. */
+body.gt4-mode { --class-color: var(--gt4-bright); }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html { scroll-behavior: smooth; }
@@ -222,16 +225,27 @@ body {
 }
 .cs-btn#csGT3.active { border-color: var(--gt3); }
 .cs-btn#csGT3.active .cs-label { color: var(--gt3); }
-.cs-btn#csGT4.active { border-color: var(--gt4); }
-.cs-btn#csGT4.active .cs-label { color: #5599FF; }
+.cs-btn#csGT4.active { border-color: var(--gt4-bright); }
+.cs-btn#csGT4.active .cs-label { color: var(--gt4-bright); }
 
 /* ── HERO ── */
 .hero-section {
+    position: relative; overflow: hidden;
     border-bottom: 1px solid var(--line);
     padding: 4rem 1.5rem 3rem;
     display: flex; flex-direction: column; align-items: center;
     text-align: center; gap: 0.5rem;
 }
+/* Class-coloured glow behind the hero — red on GT3, blue on GT4 */
+.hero-section::before {
+    content: ''; position: absolute; top: -40%; left: 50%;
+    transform: translateX(-50%);
+    width: 140%; height: 150%;
+    background: radial-gradient(ellipse at center, var(--class-color) 0%, transparent 62%);
+    opacity: 0.22; pointer-events: none;
+    transition: background 0.4s ease;
+}
+.hero-section > * { position: relative; z-index: 1; }
 .hero-logo {
     display: flex; align-items: center; gap: 1.2rem; margin-bottom: 1.5rem;
 }
@@ -250,10 +264,11 @@ body {
     text-transform: uppercase;
 }
 .hero-divider {
-    width: 60px; height: 2px;
+    width: 120px; height: 3px;
     background: var(--class-color);
-    margin: 1.2rem auto 0; border-radius: 1px;
-    transition: background 0.3s;
+    margin: 1.2rem auto 0; border-radius: 2px;
+    box-shadow: 0 0 18px var(--class-color);
+    transition: background 0.3s, box-shadow 0.3s;
 }
 
 /* ── SECTION HEADER ── */
@@ -266,6 +281,13 @@ body {
 .section-head h2 {
     font-family: var(--font-display); font-size: 1.1rem;
     letter-spacing: 0.15em; color: var(--white);
+    display: flex; align-items: center; gap: 0.6rem;
+}
+/* Class-coloured marker before each section title */
+.section-head h2::before {
+    content: ''; width: 4px; height: 1.05em;
+    background: var(--class-color); border-radius: 1px;
+    flex-shrink: 0; transition: background 0.3s;
 }
 .section-head a, .section-head button {
     font-family: var(--font-ui); font-size: 0.72rem;
