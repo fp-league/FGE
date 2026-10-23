@@ -10,10 +10,13 @@
     --grey-light: #CCCCCC;
     --grey-dark: #1A1A1A;
     --grey-mid: #333333;
-    --line: rgba(255,255,255,0.1);
-    --line-strong: rgba(255,255,255,0.2);
-    --surface: #111111;
-    --surface2: #1A1A1A;
+    --line: rgba(255,255,255,0.14);
+    --line-strong: rgba(255,255,255,0.26);
+    /* Surfaces are translucent white so they tint themselves against
+       whichever class background is active — no per-class values needed. */
+    --surface: rgba(255,255,255,0.055);
+    --surface2: rgba(255,255,255,0.1);
+    --input-bg: rgba(0,0,0,0.35);
     --font-display: '911PorscheTitle', '911PorscheCond', '911Porsche', 'Impact', sans-serif;
     --font-ui: '911PorscheCond', '911Porsche', 'Arial Narrow', sans-serif;
     --font-body: 'Segoe UI', Arial, sans-serif;
@@ -21,21 +24,30 @@
     --nav-h: 60px;
     --gt4-bright: #5599FF;
     --class-color: var(--gt3);
+    /* Whole-page background, class coloured. GT3 = red. */
+    --page-bg: #450A07;
+    --page-deep: #2A0604;
 }
 
-/* #0033A0 is too dark to read on black, so the on-black class colour
-   uses a brighter blue. --gt4 stays the official colour for fills. */
-body.gt4-mode { --class-color: var(--gt4-bright); }
+/* GT4 = blue. #0033A0 is too dark to read on a dark page, so the
+   on-page class colour uses a brighter blue; --gt4 stays official. */
+body.gt4-mode {
+    --class-color: var(--gt4-bright);
+    --page-bg: #071C45;
+    --page-deep: #04102A;
+}
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html { scroll-behavior: smooth; }
 
 body {
-    background: var(--black);
+    background: var(--page-bg);
+    background-attachment: fixed;
     color: var(--off-white);
     font-family: var(--font-body);
     min-height: 100vh;
     overflow-x: hidden;
+    transition: background-color 0.45s ease;
 }
 
 .container { max-width: 1200px; margin: 0 auto; padding: 0 1.5rem 4rem; }
@@ -43,9 +55,10 @@ body {
 /* ── NAVBAR ── */
 .navbar {
     position: sticky; top: 0; z-index: 500;
-    background: var(--black);
+    background: var(--page-deep);
     border-bottom: 1px solid var(--line);
     height: var(--nav-h);
+    transition: background-color 0.45s ease;
 }
 .nav-container {
     max-width: 1200px; margin: 0 auto;
@@ -94,7 +107,7 @@ body {
 /* ── FULL-SCREEN NAV OVERLAY ── */
 .nav-overlay {
     position: fixed; inset: 0;
-    background: var(--black);
+    background: var(--page-bg);
     z-index: 400;
     display: flex; flex-direction: column;
     align-items: flex-start; justify-content: center;
@@ -150,7 +163,7 @@ body {
 /* ── PORSCHE INTRO ── */
 .lights-out {
     position: fixed; inset: 0;
-    background: var(--black);
+    background: var(--page-deep);
     z-index: 9000; overflow: hidden;
     transition: opacity 0.5s ease;
 }
@@ -203,7 +216,7 @@ body {
 }
 .cs-track {
     position: relative; width: 120px; height: 30px;
-    background: var(--black); border-radius: 15px;
+    background: var(--input-bg); border-radius: 15px;
     border: 1px solid var(--line-strong); overflow: hidden; flex-shrink: 0;
 }
 .cs-car {
@@ -379,11 +392,13 @@ body {
 .season-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.2rem; gap: 1rem; flex-wrap: wrap; }
 .season-head h2 { font-family: var(--font-display); font-size: 1.4rem; color: var(--white); letter-spacing: 0.1em; }
 select {
-    background: var(--surface); color: var(--white); border: 1px solid var(--line);
+    /* Opaque — native dropdown lists don't render translucent backgrounds */
+    background: var(--page-deep); color: var(--white); border: 1px solid var(--line);
     padding: 0.4rem 0.8rem; border-radius: var(--radius); font-family: var(--font-ui);
     font-size: 0.8rem; cursor: pointer;
 }
-select:focus { outline: none; border-color: var(--white); }
+select option { background: var(--page-deep); color: var(--white); }
+select:focus { outline: none; border-color: var(--class-color); }
 
 /* ── TABS ── */
 .standings-controls { display: flex; gap: 0.4rem; margin-bottom: 1.2rem; flex-wrap: wrap; }
@@ -620,7 +635,7 @@ select:focus { outline: none; border-color: var(--white); }
 .fj-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 2rem; max-width: 360px; width: 100%; text-align: center; }
 .fj-card h2 { font-family: var(--font-display); font-size: 1.3rem; color: var(--white); letter-spacing: 0.1em; margin-bottom: 0.8rem; }
 .fj-card p { color: var(--grey); font-size: 0.88rem; margin-bottom: 1.2rem; }
-.fj-card input { width: 100%; background: var(--black); border: 1px solid var(--line); color: var(--white); padding: 0.7rem 1rem; border-radius: var(--radius); font-size: 0.88rem; margin-bottom: 0.8rem; font-family: var(--font-body); }
+.fj-card input { width: 100%; background: var(--input-bg); border: 1px solid var(--line); color: var(--white); padding: 0.7rem 1rem; border-radius: var(--radius); font-size: 0.88rem; margin-bottom: 0.8rem; font-family: var(--font-body); }
 .fj-card input:focus { outline: none; border-color: var(--white); }
 .fantasy-header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
 .fantasy-tabs { display: flex; gap: 0.4rem; margin-bottom: 1.5rem; }

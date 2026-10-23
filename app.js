@@ -156,12 +156,19 @@ function countdownHTML(targetDate) {
 }
 
 // ── CLASS SWITCHER ──────────────────────────────────────
+// Keeps the browser/PWA chrome in step with the class background
+function applyThemeColor(cls) {
+    const meta = document.getElementById('themeColorMeta');
+    if (meta) meta.setAttribute('content', cls === 'GT4' ? '#071C45' : '#450A07');
+}
+
 function switchClass(cls) {
     if (cls === currentClass) return;
     currentClass = cls;
     try { localStorage.setItem('fge_class', cls); } catch(e) {}
-    // Drives --class-color: red for GT3, blue for GT4
+    // Drives --class-color and --page-bg: red for GT3, blue for GT4
     document.body.classList.toggle('gt4-mode', cls === 'GT4');
+    applyThemeColor(cls);
     const car = document.getElementById('csCar');
     if (car) {
         car.classList.toggle('gt4-pos', cls === 'GT4');
@@ -854,6 +861,7 @@ async function init() {
 
     // Init class switcher UI — apply the saved class colour on first paint
     document.body.classList.toggle('gt4-mode', currentClass === 'GT4');
+    applyThemeColor(currentClass);
     const car = document.getElementById('csCar');
     if (car) car.classList.toggle('gt4-pos', currentClass === 'GT4');
     document.getElementById('csGT3')?.classList.toggle('active', currentClass === 'GT3');
