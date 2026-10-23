@@ -108,11 +108,33 @@ function ordinal(n) {
 
 function driverName(d) { return d ? (d.name || d.username || 'Unknown') : 'TBC'; }
 
-function pointsTable() { return [25,18,15,12,10,8,6,4,2,1]; }
+// Scoring is editable per class from the admin Season tab. These are only
+// the fallbacks used before anything has been saved.
+const DEFAULT_POINTS = {
+    table: [20, 15, 12, 10, 8, 6, 4, 3, 2, 1],
+    fastestLap: 1,
+    dotd: 1,
+};
 
-function calcStandings(races, drivers, teams) {
+function pointsCfg(data) {
+    const p = ((data || cls()).points) || {};
+    const table = Array.isArray(p.table) && p.table.length
+        ? p.table.map(n => Number(n) || 0)
+        : DEFAULT_POINTS.table;
+    const num = (v, d) => (v === '' || v == null || isNaN(Number(v)) ? d : Number(v));
+    return {
+        table,
+        fastestLap: num(p.fastestLap, DEFAULT_POINTS.fastestLap),
+        dotd:       num(p.dotd,       DEFAULT_POINTS.dotd),
+    };
+}
+
+function pointsTable() { return pointsCfg().table; }
+
+function calcStandings(races, drivers, teams, cfg) {
     const pts = {};
     const tpts = {};
+    const scoring = cfg || pointsCfg();
     races.forEach(r => {
         if (!r.results) return;
         r.results.forEach((res, i) => {
@@ -124,14 +146,17 @@ function calcStandings(races, drivers, teams) {
             if (!p) return;
             const pos = (typeof res === 'object' && res.pos != null) ? res.pos : (i + 1);
             if (String(pos).toUpperCase() === 'DNF') return;
-            const earn = pointsTable()[Number(pos) - 1] || 0;
+            const earn = scoring.table[Number(pos) - 1] || 0;
             if (!pts[p]) pts[p] = 0;
             pts[p] += earn;
             // fastest lap bonus
-            if (r.fastestLap && r.fastestLap === p) pts[p] += 1;
+            if (r.fastestLap && r.fastestLap === p) pts[p] += scoring.fastestLap;
         });
         // DOTD bonus
-        if (r.dotdWinner) { if (!pts[r.dotdWinner]) pts[r.dotdWinner] = 0; pts[r.dotdWinner] += 1; }
+        if (r.dotdWinner) {
+            if (!pts[r.dotdWinner]) pts[r.dotdWinner] = 0;
+            pts[r.dotdWinner] += scoring.dotd;
+        }
     });
     // Team standings
     drivers.forEach(d => {

@@ -148,6 +148,15 @@ textarea { resize:vertical; min-height:80px; }
 .color-pair { display:flex; gap:0.5rem; align-items:center; }
 .color-pair input[type=color] { width:40px; height:36px; padding:2px; cursor:pointer; flex-shrink:0; }
 
+/* ── POINTS EDITOR ── */
+.pts-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(68px,1fr)); gap:0.5rem; margin-bottom:0.9rem; }
+.pts-cell { display:flex; flex-direction:column; gap:0.2rem; }
+.pts-cell label { font-family:var(--fu); font-size:0.64rem; letter-spacing:0.08em; color:var(--grey); text-align:center; }
+.pts-cell input { text-align:center; padding:0.4rem 0.3rem; font-size:0.85rem; }
+.pts-cell:first-child input { border-color:var(--accent-line); color:var(--accent); font-weight:600; }
+.pts-total { font-size:0.78rem; color:var(--grey); margin-bottom:0.9rem; line-height:1.5; }
+.pts-total b { color:var(--off); }
+
 /* ── IMAGE PICKER ── */
 .img-field { grid-column:1 / -1; }
 .img-pick { display:flex; gap:0.9rem; align-items:flex-start; margin-bottom:0.5rem; }
@@ -441,6 +450,30 @@ textarea { resize:vertical; min-height:80px; }
         </div>
 
         <div class="form-card" style="max-width:560px">
+          <h3>POINTS SYSTEM</h3>
+          <p class="bk-note">Applies to <b id="ptsClassLabel">GT3</b> only — the two classes
+             score independently. Changing these recalculates every standing immediately.</p>
+          <div id="ptsRows" class="pts-grid"></div>
+          <div class="form-actions" style="margin-bottom:1.2rem">
+            <button class="btn btn-ghost btn-sm" onclick="addPointsRow()">+ ADD POSITION</button>
+            <button class="btn btn-ghost btn-sm" onclick="removePointsRow()">− REMOVE LAST</button>
+            <button class="btn btn-ghost btn-sm" onclick="resetPoints()">RESET</button>
+          </div>
+          <div class="form-grid" style="margin-bottom:0.9rem">
+            <div class="form-group">
+              <label class="fg-label">FASTEST LAP BONUS</label>
+              <input id="ptsFL" type="number" step="1" oninput="renderPointsTotal()">
+            </div>
+            <div class="form-group">
+              <label class="fg-label">DRIVER OF THE DAY BONUS</label>
+              <input id="ptsDotd" type="number" step="1" oninput="renderPointsTotal()">
+            </div>
+          </div>
+          <p class="pts-total" id="ptsTotal"></p>
+          <button class="btn btn-white" onclick="savePoints()">SAVE POINTS</button>
+        </div>
+
+        <div class="form-card" style="max-width:560px">
           <h3>STORAGE</h3>
           <div id="storageMeter"></div>
         </div>
@@ -592,7 +625,7 @@ function refreshSec() {
         case 'races':   renderRacesTable(); break;
         case 'results': populateResultsSelect(); break;
         case 'dotd':    populateDotdSelects(); break;
-        case 'season':  document.getElementById('seasonName').value = d().seasonName||'Season 1'; renderStorageMeter(); break;
+        case 'season':  document.getElementById('seasonName').value = d().seasonName||'Season 1'; renderPointsEditor(); renderStorageMeter(); break;
     }
 }
 
@@ -1050,6 +1083,99 @@ function saveSeason() {
     const name = document.getElementById('seasonName').value.trim()||'Season 1';
     adminData[adminClass.toLowerCase()].seasonName = name;
     saveData('Season settings saved');
+}
+
+// ── POINTS SYSTEM ─────────────────────────────────────────
+const DEFAULT_POINTS = {
+    table: [20, 15, 12, 10, 8, 6, 4, 3, 2, 1],
+    fastestLap: 1,
+    dotd: 1,
+};
+
+function currentPoints() {
+    const p = d().points || {};
+    const num = (v, dflt) => (v === '' || v == null || isNaN(Number(v)) ? dflt : Number(v));
+    return {
+        table: Array.isArray(p.table) && p.table.length
+            ? p.table.map(n => Number(n) || 0)
+            : DEFAULT_POINTS.table.slice(),
+        fastestLap: num(p.fastestLap, DEFAULT_POINTS.fastestLap),
+        dotd:       num(p.dotd,       DEFAULT_POINTS.dotd),
+    };
+}
+
+function renderPointsEditor() {
+    const cfg = currentPoints();
+    const label = document.getElementById('ptsClassLabel');
+    if (label) label.textContent = adminClass;
+    const wrap = document.getElementById('ptsRows');
+    if (!wrap) return;
+    wrap.innerHTML = cfg.table.map((v, i) => `
+      <div class="pts-cell">
+        <label>P${i+1}</label>
+        <input type="number" step="1" value="${v}" oninput="renderPointsTotal()">
+      </div>`).join('');
+    document.getElementById('ptsFL').value   = cfg.fastestLap;
+    document.getElementById('ptsDotd').value = cfg.dotd;
+    renderPointsTotal();
+}
+
+function readPointsEditor() {
+    const table = [...document.querySelectorAll('#ptsRows input')]
+        .map(i => Number(i.value) || 0);
+    const num = id => Number(document.getElementById(id).value) || 0;
+    return { table, fastestLap: num('ptsFL'), dotd: num('ptsDotd') };
+}
+
+function renderPointsTotal() {
+    const cfg = readPointsEditor();
+    const el = document.getElementById('ptsTotal');
+    if (!el) return;
+    const win = (cfg.table[0] || 0) + cfg.fastestLap + cfg.dotd;
+    el.innerHTML = `Scoring positions: <b>${cfg.table.length}</b> ·
+      Win: <b>${cfg.table[0]||0}</b> ·
+      Maximum from one race: <b>${win}</b> (win + fastest lap + DOTD)`;
+}
+
+function addPointsRow() {
+    const cfg = readPointsEditor();
+    cfg.table.push(0);
+    writePointsEditor(cfg);
+}
+
+function removePointsRow() {
+    const cfg = readPointsEditor();
+    if (cfg.table.length <= 1) { toast('Keep at least one scoring position','err'); return; }
+    cfg.table.pop();
+    writePointsEditor(cfg);
+}
+
+function resetPoints() {
+    writePointsEditor({
+        table: DEFAULT_POINTS.table.slice(),
+        fastestLap: DEFAULT_POINTS.fastestLap,
+        dotd: DEFAULT_POINTS.dotd,
+    });
+    toast('Reset to default — not saved yet','ok');
+}
+
+function writePointsEditor(cfg) {
+    const wrap = document.getElementById('ptsRows');
+    wrap.innerHTML = cfg.table.map((v, i) => `
+      <div class="pts-cell">
+        <label>P${i+1}</label>
+        <input type="number" step="1" value="${v}" oninput="renderPointsTotal()">
+      </div>`).join('');
+    document.getElementById('ptsFL').value   = cfg.fastestLap;
+    document.getElementById('ptsDotd').value = cfg.dotd;
+    renderPointsTotal();
+}
+
+function savePoints() {
+    const cfg = readPointsEditor();
+    if (!cfg.table.length) { toast('Add at least one scoring position','err'); return; }
+    adminData[adminClass.toLowerCase()].points = cfg;
+    saveData(`${adminClass} points system saved`);
 }
 
 // ── IMAGE UPLOAD ──────────────────────────────────────────
