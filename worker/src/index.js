@@ -264,8 +264,13 @@ async function postFantasy(request, env) {
  * only 1MB in total and that has to cover all the league data. The bin
  * stores just the returned URL.
  */
+/** R2 if it's bound, otherwise KV. KV needs no card, so it's the default. */
+const imageStore = env =>
+  env.IMAGES ? 'r2' : (env.IMAGES_KV ? 'kv' : null);
+
 async function postUpload(request, env) {
-  if (!env.IMAGES) {
+  const store = imageStore(env);
+  if (!store) {
     return bad('image storage is not configured on this Worker', request, env, 501);
   }
   if (env.ADMIN_TOKEN) {
@@ -301,12 +306,18 @@ async function postUpload(request, env) {
   } catch { /* uploads table missing — don't block the upload on it */ }
 
   const key = `${new Date().toISOString().slice(0,10)}/${crypto.randomUUID()}.${ext}`;
-  await env.IMAGES.put(key, bytes, {
-    httpMetadata: {
-      contentType: type,
-      cacheControl: 'public, max-age=31536000, immutable',
-    },
-  });
+
+  if (store === 'r2') {
+    await env.IMAGES.put(key, bytes, {
+      httpMetadata: {
+        contentType: type,
+        cacheControl: 'public, max-age=31536000, immutable',
+      },
+    });
+  } else {
+    // KV values can be an ArrayBuffer; the content type rides along as metadata.
+    await env.IMAGES_KV.put(key, bytes, { metadata: { type } });
+  }
 
   try {
     await env.DB.prepare(
@@ -319,21 +330,46 @@ async function postUpload(request, env) {
   return json({ ok: true, url, key, bytes: bytes.length }, null, request, env);
 }
 
-/** GET /img/<key> — serves an image straight from R2. */
+/**
+ * GET /img/<key> — serves an uploaded image.
+ *
+ * Responses are cached in Cloudflare's edge cache as well as the browser,
+ * so a popular page doesn't spend a KV read per image per visitor.
+ */
 async function getImage(request, env, pathname) {
-  if (!env.IMAGES) return new Response('not configured', { status: 501 });
+  const store = imageStore(env);
+  if (!store) return new Response('not configured', { status: 501 });
+
   const key = decodeURIComponent(pathname.replace(/^\/img\//, ''));
   if (!key) return new Response('not found', { status: 404 });
 
-  const obj = await env.IMAGES.get(key);
-  if (!obj) return new Response('not found', { status: 404 });
+  const cache = caches.default;
+  const hit = await cache.match(request);
+  if (hit) return hit;
 
-  const headers = new Headers();
-  obj.writeHttpMetadata(headers);
-  headers.set('etag', obj.httpEtag);
-  headers.set('Cache-Control', 'public, max-age=31536000, immutable');
-  headers.set('Access-Control-Allow-Origin', '*');
-  return new Response(obj.body, { headers });
+  let body, type;
+  if (store === 'r2') {
+    const obj = await env.IMAGES.get(key);
+    if (!obj) return new Response('not found', { status: 404 });
+    body = await obj.arrayBuffer();
+    type = (obj.httpMetadata && obj.httpMetadata.contentType) || 'application/octet-stream';
+  } else {
+    const got = await env.IMAGES_KV.getWithMetadata(key, { type: 'arrayBuffer' });
+    if (!got || !got.value) return new Response('not found', { status: 404 });
+    body = got.value;
+    type = (got.metadata && got.metadata.type) || 'application/octet-stream';
+  }
+
+  const res = new Response(body, {
+    headers: {
+      'Content-Type': type,
+      // Keys are random and never reused, so these are safe to cache forever.
+      'Cache-Control': 'public, max-age=31536000, immutable',
+      'Access-Control-Allow-Origin': '*',
+    },
+  });
+  await cache.put(request, res.clone());
+  return res;
 }
 
 /* ── entry ───────────────────────────────────────────────── */
@@ -365,7 +401,7 @@ export default {
         return json({
           ok: true,
           now: Date.now(),
-          images: Boolean(env.IMAGES),
+          images: imageStore(env) || 'none',
         }, null, request, env);
       }
       return bad('not found', request, env, 404);

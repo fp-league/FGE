@@ -55,17 +55,28 @@ npx wrangler secret put VOTE_SALT      # any long random string, e.g. openssl ra
 `VOTE_SALT` can be anything, but don't change it later — it would reset
 everyone's "already voted" state.
 
-**4. Create the image bucket**
+**4. Create the image store**
 
 ```bash
-npx wrangler r2 bucket create fge-images
+npx wrangler kv namespace create IMAGES_KV
 npx wrangler secret put ADMIN_TOKEN    # any long random string
 ```
 
+Paste the `id` it prints into `wrangler.toml`, replacing
+`PASTE_KV_NAMESPACE_ID_HERE`.
+
+(On older wrangler the command is `kv:namespace create` with a colon.)
+
 This is what lets you upload driver photos, team logos and news images.
 A JSONBin bin only holds 1MB in total, shared with all the league data, so
-images can't live there — R2 gives you 10GB free and the bin then stores
-just a short URL.
+images can't live there. KV gives 1GB free and the bin then stores just a
+short URL.
+
+KV is used rather than R2 because R2 has to be enabled in the dashboard and
+asks for payment details even on its free tier. If you'd rather use R2, the
+Worker prefers it whenever it's bound — enable R2, uncomment the
+`[[r2_buckets]]` block in `wrangler.toml`, create the bucket and redeploy.
+Nothing else changes.
 
 **5. Deploy**
 
@@ -93,12 +104,21 @@ const ADMIN_TOKEN = 'the same string you set as the ADMIN_TOKEN secret';
 Commit and push. The admin panel's Season tab will then show images as
 living in R2 rather than in the bin.
 
-### Serving images faster (optional)
+### How images are served
 
-By default images are served by the Worker at `/img/<key>`. To serve them
-straight from R2 instead, enable a public `r2.dev` URL or attach a custom
-domain to the bucket in the Cloudflare dashboard, then set
-`IMAGE_BASE_URL` in `wrangler.toml` to it and redeploy.
+Images are served by the Worker at `/img/<key>`, and every response is put
+in Cloudflare's edge cache with a one-year immutable `Cache-Control`. Keys
+are random and never reused, so repeat views are served from cache and don't
+spend a KV read.
+
+If you later switch to R2 and give the bucket a public `r2.dev` URL or a
+custom domain, set `IMAGE_BASE_URL` in `wrangler.toml` to it and redeploy to
+bypass the Worker entirely.
+
+### Free tier notes
+
+KV allows 1,000 writes and 100,000 reads per day, and 1GB of storage. An
+upload is one write; a cached image view costs no read at all.
 
 ## Checking it works
 

@@ -22,8 +22,17 @@ database_id = "PASTE_DATABASE_ID_HERE"
 #   npx wrangler secret put BIN_READ_KEY   <- JSONBin read-only key
 #   npx wrangler secret put VOTE_SALT      <- any long random string
 
-# R2 bucket for uploaded images. Create it with:
+# Image storage. KV is the default because it needs no payment details.
+# Create it with:
+#   npx wrangler kv namespace create IMAGES_KV
+# then paste the id it prints below.
+[[kv_namespaces]]
+binding = "IMAGES_KV"
+id = "PASTE_KV_NAMESPACE_ID_HERE"
+
+# Optional: R2 instead of KV, if you ever enable R2 on the account.
+# Uncomment, create the bucket, redeploy - the Worker prefers R2 when bound.
 #   npx wrangler r2 bucket create fge-images
-[[r2_buckets]]
-binding = "IMAGES"
-bucket_name = "fge-images"
+# [[r2_buckets]]
+# binding = "IMAGES"
+# bucket_name = "fge-images"
