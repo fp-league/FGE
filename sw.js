@@ -2,7 +2,7 @@ const CACHE = 'fge-v7';
 
 // Only pre-cache fonts and images — they never change between deploys
 const IMMUTABLE = [
-  './porsche.png', './gt3-logo.webp', './gt4-logo.webp',
+  './porsche.webp', './gt3-logo.webp', './gt4-logo.webp',
   './911porschav3.ttf', './911porschav3bold.ttf', './911porschav3cond.ttf', './911porschav3title.ttf'
 ];
 
