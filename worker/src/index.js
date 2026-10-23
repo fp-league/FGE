@@ -19,6 +19,16 @@ const MAX_IDENT = 64;
 const MAX_ENTRIES_PER_VOTER = 3;   // stops one person farming fantasy sign-ups
 const LEAGUE_TTL_MS = 30_000;
 
+const MAX_UPLOAD_BYTES = 3 * 1024 * 1024;   // 3MB per image
+const UPLOADS_PER_HOUR = 40;                // per IP, stops bucket flooding
+const ALLOWED_IMAGE_TYPES = {
+  'image/webp': 'webp',
+  'image/jpeg': 'jpg',
+  'image/png':  'png',
+  'image/gif':  'gif',
+  'image/avif': 'avif',
+};
+
 /* ── helpers ─────────────────────────────────────────────── */
 
 function corsHeaders(request, env) {
@@ -242,6 +252,90 @@ async function postFantasy(request, env) {
     null, request, env);
 }
 
+/* ── image uploads (R2) ──────────────────────────────────── */
+
+/**
+ * POST /api/upload
+ *   headers: Content-Type: image/*, X-Admin-Token: <token>
+ *   body:    raw image bytes
+ *   → { ok, url }
+ *
+ * Images live in R2 rather than in the JSONBin record, because a bin holds
+ * only 1MB in total and that has to cover all the league data. The bin
+ * stores just the returned URL.
+ */
+async function postUpload(request, env) {
+  if (!env.IMAGES) {
+    return bad('image storage is not configured on this Worker', request, env, 501);
+  }
+  if (env.ADMIN_TOKEN) {
+    const given = request.headers.get('X-Admin-Token') || '';
+    if (given !== env.ADMIN_TOKEN) return bad('not authorised', request, env, 401);
+  }
+
+  const type = (request.headers.get('Content-Type') || '').split(';')[0].trim().toLowerCase();
+  const ext = ALLOWED_IMAGE_TYPES[type];
+  if (!ext) return bad('unsupported image type: ' + (type || 'none'), request, env, 415);
+
+  const declared = Number(request.headers.get('Content-Length') || 0);
+  if (declared > MAX_UPLOAD_BYTES) {
+    return bad(`image too large, max ${Math.round(MAX_UPLOAD_BYTES/1048576)}MB`, request, env, 413);
+  }
+
+  const bytes = new Uint8Array(await request.arrayBuffer());
+  if (!bytes.length) return bad('empty body', request, env);
+  if (bytes.length > MAX_UPLOAD_BYTES) {
+    return bad(`image too large, max ${Math.round(MAX_UPLOAD_BYTES/1048576)}MB`, request, env, 413);
+  }
+
+  // Cheap per-IP rate limit so the bucket can't be flooded.
+  const who = await voterHash(request, env);
+  const since = Date.now() - 3_600_000;
+  try {
+    const recent = await env.DB.prepare(
+      `SELECT COUNT(*) AS n FROM uploads WHERE voter = ? AND created_at > ?`
+    ).bind(who, since).first();
+    if ((recent && recent.n) >= UPLOADS_PER_HOUR) {
+      return bad('upload limit reached, try again later', request, env, 429);
+    }
+  } catch { /* uploads table missing — don't block the upload on it */ }
+
+  const key = `${new Date().toISOString().slice(0,10)}/${crypto.randomUUID()}.${ext}`;
+  await env.IMAGES.put(key, bytes, {
+    httpMetadata: {
+      contentType: type,
+      cacheControl: 'public, max-age=31536000, immutable',
+    },
+  });
+
+  try {
+    await env.DB.prepare(
+      `INSERT INTO uploads (key, voter, bytes, created_at) VALUES (?, ?, ?, ?)`
+    ).bind(key, who, bytes.length, Date.now()).run();
+  } catch { /* logging only */ }
+
+  const base = String(env.IMAGE_BASE_URL || '').replace(/\/+$/, '');
+  const url = base ? `${base}/${key}` : new URL(`/img/${key}`, request.url).toString();
+  return json({ ok: true, url, key, bytes: bytes.length }, null, request, env);
+}
+
+/** GET /img/<key> — serves an image straight from R2. */
+async function getImage(request, env, pathname) {
+  if (!env.IMAGES) return new Response('not configured', { status: 501 });
+  const key = decodeURIComponent(pathname.replace(/^\/img\//, ''));
+  if (!key) return new Response('not found', { status: 404 });
+
+  const obj = await env.IMAGES.get(key);
+  if (!obj) return new Response('not found', { status: 404 });
+
+  const headers = new Headers();
+  obj.writeHttpMetadata(headers);
+  headers.set('etag', obj.httpEtag);
+  headers.set('Cache-Control', 'public, max-age=31536000, immutable');
+  headers.set('Access-Control-Allow-Origin', '*');
+  return new Response(obj.body, { headers });
+}
+
 /* ── entry ───────────────────────────────────────────────── */
 
 export default {
@@ -261,8 +355,18 @@ export default {
         if (request.method === 'GET')  return await getFantasy(request, env);
         if (request.method === 'POST') return await postFantasy(request, env);
       }
+      if (pathname === '/api/upload' && request.method === 'POST') {
+        return await postUpload(request, env);
+      }
+      if (pathname.startsWith('/img/') && request.method === 'GET') {
+        return await getImage(request, env, pathname);
+      }
       if (pathname === '/api/health') {
-        return json({ ok: true, now: Date.now() }, null, request, env);
+        return json({
+          ok: true,
+          now: Date.now(),
+          images: Boolean(env.IMAGES),
+        }, null, request, env);
       }
       return bad('not found', request, env, 404);
     } catch (err) {

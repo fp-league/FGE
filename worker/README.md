@@ -55,7 +55,19 @@ npx wrangler secret put VOTE_SALT      # any long random string, e.g. openssl ra
 `VOTE_SALT` can be anything, but don't change it later — it would reset
 everyone's "already voted" state.
 
-**4. Deploy**
+**4. Create the image bucket**
+
+```bash
+npx wrangler r2 bucket create fge-images
+npx wrangler secret put ADMIN_TOKEN    # any long random string
+```
+
+This is what lets you upload driver photos, team logos and news images.
+A JSONBin bin only holds 1MB in total, shared with all the league data, so
+images can't live there — R2 gives you 10GB free and the bin then stores
+just a short URL.
+
+**5. Deploy**
 
 ```bash
 npx wrangler deploy
@@ -63,15 +75,30 @@ npx wrangler deploy
 
 It prints a URL like `https://fge-api.<your-subdomain>.workers.dev`.
 
-**5. Point the site at it**
+**6. Point the site at it**
 
-Put that URL in `app.js`:
+In `app.js`:
 
 ```js
 const API_BASE = 'https://fge-api.your-subdomain.workers.dev';
 ```
 
-Commit and push. Done.
+In `manage.html` (near the top of the script block):
+
+```js
+const API_BASE    = 'https://fge-api.your-subdomain.workers.dev';
+const ADMIN_TOKEN = 'the same string you set as the ADMIN_TOKEN secret';
+```
+
+Commit and push. The admin panel's Season tab will then show images as
+living in R2 rather than in the bin.
+
+### Serving images faster (optional)
+
+By default images are served by the Worker at `/img/<key>`. To serve them
+straight from R2 instead, enable a public `r2.dev` URL or attach a custom
+domain to the bucket in the Cloudflare dashboard, then set
+`IMAGE_BASE_URL` in `wrangler.toml` to it and redeploy.
 
 ## Checking it works
 

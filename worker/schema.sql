@@ -29,3 +29,14 @@ CREATE TABLE fantasy_entries (
 );
 CREATE INDEX idx_fantasy_race  ON fantasy_entries (class, race);
 CREATE INDEX idx_fantasy_voter ON fantasy_entries (class, race, voter);
+
+-- Upload log. Only used for the per-IP rate limit and for seeing what's
+-- in the bucket; the images themselves live in R2.
+DROP TABLE IF EXISTS uploads;
+CREATE TABLE uploads (
+  key        TEXT    PRIMARY KEY,
+  voter      TEXT    NOT NULL,
+  bytes      INTEGER NOT NULL,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX idx_uploads_voter ON uploads (voter, created_at);

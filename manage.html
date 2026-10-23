@@ -139,6 +139,35 @@ textarea { resize:vertical; min-height:80px; }
 .color-pair { display:flex; gap:0.5rem; align-items:center; }
 .color-pair input[type=color] { width:40px; height:36px; padding:2px; cursor:pointer; flex-shrink:0; }
 
+/* ── IMAGE PICKER ── */
+.img-field { grid-column:1 / -1; }
+.img-pick { display:flex; gap:0.9rem; align-items:flex-start; margin-bottom:0.5rem; }
+.img-prev {
+  width:84px; height:84px; flex-shrink:0; border-radius:3px;
+  border:1px solid var(--line2); background:var(--page-deep);
+  background-size:cover; background-position:center;
+}
+.img-prev.round { border-radius:50%; }
+.img-prev.empty::after {
+  content:'no image'; display:flex; align-items:center; justify-content:center;
+  width:100%; height:100%; font-family:var(--fu); font-size:0.6rem;
+  letter-spacing:0.1em; color:var(--grey2); text-align:center;
+}
+.img-pick-side { flex:1; min-width:0; display:flex; flex-direction:column; gap:0.5rem; }
+.img-pick-side input[type=file] { font-size:0.78rem; padding:0.4rem; cursor:pointer; }
+.img-row { display:flex; align-items:center; justify-content:space-between; gap:0.5rem; }
+.img-size { font-family:var(--fu); font-size:0.7rem; letter-spacing:0.06em; color:var(--grey); }
+
+/* ── STORAGE METER ── */
+.sm-head { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:0.45rem; font-family:var(--fu); font-size:0.7rem; letter-spacing:0.12em; color:var(--grey); }
+.sm-val.ok { color:#7ddf7d; } .sm-val.warn { color:#ffc97d; } .sm-val.crit { color:#ff9d9d; }
+.sm-bar { height:7px; background:var(--page-deep); border:1px solid var(--line2); border-radius:4px; overflow:hidden; }
+.sm-fill { height:100%; transition:width 0.3s ease, background 0.3s; }
+.sm-fill.ok { background:#4caf50; } .sm-fill.warn { background:#ffb300; } .sm-fill.crit { background:var(--danger); }
+.sm-note { font-size:0.75rem; color:var(--grey); margin-top:0.5rem; line-height:1.5; }
+.sm-store { font-size:0.75rem; color:var(--grey); margin-top:0.6rem; line-height:1.5; }
+.sm-store b { color:var(--off); }
+
 /* ── BACKUP / RESTORE ── */
 .bk-note { font-size:0.8rem; color:var(--grey); line-height:1.55; margin-bottom:0.9rem; }
 .bk-note strong { color:var(--off); }
@@ -214,7 +243,20 @@ textarea { resize:vertical; min-height:80px; }
             <div class="form-group"><label class="fg-label">TITLE</label><input id="nTitle" placeholder="Article title"></div>
             <div class="form-group"><label class="fg-label">TAG</label><input id="nTag" placeholder="Race Report, News, Update…"></div>
             <div class="form-group"><label class="fg-label">DATE</label><input id="nDate" type="date"></div>
-            <div class="form-group"><label class="fg-label">IMAGE URL</label><input id="nImage" placeholder="https://…"></div>
+            <div class="form-group img-field">
+              <label class="fg-label">ARTICLE IMAGE</label>
+              <div class="img-pick">
+                <div class="img-prev" id="nImagePrev"></div>
+                <div class="img-pick-side">
+                  <input type="file" accept="image/*" onchange="handleImage(this,'nImage','hero')">
+                  <div class="img-row">
+                    <span class="img-size" id="nImageSize"></span>
+                    <button type="button" class="btn btn-ghost btn-sm" onclick="clearImage('nImage')">REMOVE</button>
+                  </div>
+                </div>
+              </div>
+              <input id="nImage" placeholder="…or paste an image URL" oninput="syncPreview('nImage')">
+            </div>
           </div>
           <div class="form-group" style="margin-bottom:0.9rem"><label class="fg-label">EXCERPT</label><input id="nExcerpt" placeholder="One-line summary shown in news grid…"></div>
           <div class="form-group" style="margin-bottom:0.9rem"><label class="fg-label">BODY</label><textarea id="nBody" rows="5" placeholder="Full article text…"></textarea></div>
@@ -246,7 +288,20 @@ textarea { resize:vertical; min-height:80px; }
             <div class="form-group"><label class="fg-label">NUMBER</label><input id="dNumber" type="number" placeholder="44"></div>
             <div class="form-group"><label class="fg-label">NATIONALITY</label><input id="dNat" placeholder="British"></div>
             <div class="form-group"><label class="fg-label">TEAM</label><select id="dTeam"><option value="">— Select Team —</option></select></div>
-            <div class="form-group"><label class="fg-label">PHOTO URL</label><input id="dPhoto" placeholder="https://…"></div>
+            <div class="form-group img-field">
+              <label class="fg-label">DRIVER PHOTO</label>
+              <div class="img-pick">
+                <div class="img-prev round" id="dPhotoPrev"></div>
+                <div class="img-pick-side">
+                  <input type="file" accept="image/*" onchange="handleImage(this,'dPhoto','avatar')">
+                  <div class="img-row">
+                    <span class="img-size" id="dPhotoSize"></span>
+                    <button type="button" class="btn btn-ghost btn-sm" onclick="clearImage('dPhoto')">REMOVE</button>
+                  </div>
+                </div>
+              </div>
+              <input id="dPhoto" placeholder="…or paste an image URL" oninput="syncPreview('dPhoto')">
+            </div>
           </div>
           <div class="form-group" style="margin-bottom:0.9rem"><label class="fg-label">BIO</label><textarea id="dBio" rows="3" placeholder="Short driver bio…"></textarea></div>
           <div class="form-actions">
@@ -281,7 +336,20 @@ textarea { resize:vertical; min-height:80px; }
                 <input id="tColorHex" value="#E10600" placeholder="#hex">
               </div>
             </div>
-            <div class="form-group"><label class="fg-label">LOGO URL</label><input id="tLogo" placeholder="https://…"></div>
+            <div class="form-group img-field">
+              <label class="fg-label">TEAM LOGO</label>
+              <div class="img-pick">
+                <div class="img-prev" id="tLogoPrev"></div>
+                <div class="img-pick-side">
+                  <input type="file" accept="image/*" onchange="handleImage(this,'tLogo','logo')">
+                  <div class="img-row">
+                    <span class="img-size" id="tLogoSize"></span>
+                    <button type="button" class="btn btn-ghost btn-sm" onclick="clearImage('tLogo')">REMOVE</button>
+                  </div>
+                </div>
+              </div>
+              <input id="tLogo" placeholder="…or paste an image URL" oninput="syncPreview('tLogo')">
+            </div>
           </div>
           <div class="form-group" style="margin-bottom:0.9rem"><label class="fg-label">DESCRIPTION</label><textarea id="tDesc" rows="2" placeholder="Short team description…"></textarea></div>
           <div class="form-actions">
@@ -364,6 +432,11 @@ textarea { resize:vertical; min-height:80px; }
         </div>
 
         <div class="form-card" style="max-width:560px">
+          <h3>STORAGE</h3>
+          <div id="storageMeter"></div>
+        </div>
+
+        <div class="form-card" style="max-width:560px">
           <h3>BACKUP</h3>
           <p class="bk-note">Downloads everything — both GT3 and GT4 — as a single JSON file.
              There is no undo in this panel, so take one before any big edit.</p>
@@ -420,17 +493,40 @@ async function loadData() {
         if (!adminData.gt3) adminData.gt3 = emptyClass();
         if (!adminData.gt4) adminData.gt4 = emptyClass();
         setStatus('green','Synced');
+        renderStorageMeter();
         refreshSec();
     } catch(e) { setStatus('red','Error loading'); }
 }
 
 async function saveData(msg) {
+    // A bin holds 1MB. Going over makes the API reject the write, so refuse
+    // here with a clear reason rather than letting a save fail opaquely.
+    const body = JSON.stringify(adminData);
+    const size = new Blob([body]).size;
+    if (size > BIN_LIMIT * BIN_BUDGET) {
+        setStatus('red','Too large');
+        toast(`Not saved — ${fmtBytes(size)} exceeds the ${fmtBytes(BIN_LIMIT)} limit. Remove an image.`, 'err');
+        renderStorageMeter();
+        return false;
+    }
+
     setStatus('orange','Saving…');
     try {
-        await fetch(BIN_URL, { method:'PUT', headers:{'Content-Type':'application/json','X-Master-Key':MASTER_KEY}, body:JSON.stringify(adminData) });
+        const res = await fetch(BIN_URL, {
+            method:'PUT',
+            headers:{'Content-Type':'application/json','X-Master-Key':MASTER_KEY},
+            body
+        });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
         setStatus('green','Saved ✓');
         toast(msg || 'Saved!', 'ok');
-    } catch(e) { setStatus('red','Save failed'); toast('Error saving!','err'); }
+        renderStorageMeter();
+        return true;
+    } catch(e) {
+        setStatus('red','Save failed');
+        toast('Error saving: ' + (e.message || 'unknown'), 'err');
+        return false;
+    }
 }
 
 // ── STATUS / TOAST ────────────────────────────────────────
@@ -487,7 +583,7 @@ function refreshSec() {
         case 'races':   renderRacesTable(); break;
         case 'results': populateResultsSelect(); break;
         case 'dotd':    populateDotdSelects(); break;
-        case 'season':  document.getElementById('seasonName').value = d().seasonName||'Season 1'; break;
+        case 'season':  document.getElementById('seasonName').value = d().seasonName||'Season 1'; renderStorageMeter(); break;
     }
 }
 
@@ -528,6 +624,7 @@ function openNewsForm() {
     document.getElementById('newsFormTitle').textContent = 'ADD ARTICLE';
     ['nTitle','nTag','nDate','nImage','nExcerpt','nBody'].forEach(id => document.getElementById(id).value='');
     document.getElementById('nDate').value = new Date().toISOString().slice(0,10);
+    syncPreview('nImage');
     document.getElementById('newsForm').style.display = 'block';
     document.getElementById('nTitle').focus();
 }
@@ -542,6 +639,7 @@ function editNews(i) {
     document.getElementById('nImage').value   = n.image||'';
     document.getElementById('nExcerpt').value = n.excerpt||'';
     document.getElementById('nBody').value    = n.body||'';
+    syncPreview('nImage');
     document.getElementById('newsForm').style.display = 'block';
     document.getElementById('newsForm').scrollIntoView({behavior:'smooth', block:'start'});
 }
@@ -598,6 +696,7 @@ function openDriverForm() {
     document.getElementById('driverFormTitle').textContent = 'ADD DRIVER';
     ['dName','dNumber','dNat','dPhoto','dBio'].forEach(id => document.getElementById(id).value='');
     buildTeamSelect('');
+    syncPreview('dPhoto');
     document.getElementById('driverForm').style.display = 'block';
     document.getElementById('dName').focus();
 }
@@ -612,6 +711,7 @@ function editDriver(i) {
     document.getElementById('dPhoto').value  = drv.photo||'';
     document.getElementById('dBio').value    = drv.bio||'';
     buildTeamSelect(drv.team||'');
+    syncPreview('dPhoto');
     document.getElementById('driverForm').style.display = 'block';
     document.getElementById('driverForm').scrollIntoView({behavior:'smooth', block:'start'});
 }
@@ -662,6 +762,7 @@ function openTeamForm() {
     ['tName','tLogo','tDesc'].forEach(id => document.getElementById(id).value='');
     document.getElementById('tColor').value = '#E10600';
     document.getElementById('tColorHex').value = '#E10600';
+    syncPreview('tLogo');
     document.getElementById('teamForm').style.display = 'block';
     document.getElementById('tName').focus();
 }
@@ -675,6 +776,7 @@ function editTeam(i) {
     document.getElementById('tColorHex').value = t.color||'#E10600';
     document.getElementById('tLogo').value     = t.logo||'';
     document.getElementById('tDesc').value     = t.description||'';
+    syncPreview('tLogo');
     document.getElementById('teamForm').style.display = 'block';
     document.getElementById('teamForm').scrollIntoView({behavior:'smooth', block:'start'});
 }
@@ -893,6 +995,190 @@ function saveSeason() {
     const name = document.getElementById('seasonName').value.trim()||'Season 1';
     adminData[adminClass.toLowerCase()].seasonName = name;
     saveData('Season settings saved');
+}
+
+// ── IMAGE UPLOAD ──────────────────────────────────────────
+// There is no file storage behind this site, so an uploaded image is
+// resized on the client and stored inline in the bin as a data URL.
+// A JSONBin bin holds 1MB TOTAL, shared with all league data, so the
+// compression below is deliberately aggressive and every save is checked
+// against the budget before it is sent.
+
+// Set these two after deploying worker/ and images go to R2 instead of
+// into the bin — then the 1MB ceiling stops mattering, because the bin
+// only ever stores a short URL. Left blank, uploads fall back to being
+// stored inline in the bin (which the storage meter below tracks).
+const API_BASE    = '';   // e.g. 'https://fge-api.yourname.workers.dev'
+const ADMIN_TOKEN = '';   // must match the Worker's ADMIN_TOKEN secret
+
+const BIN_LIMIT  = 1024 * 1024;   // JSONBin hard ceiling for one bin
+const BIN_BUDGET = 0.95;          // refuse to save past 95% of it
+const useR2 = () => Boolean(API_BASE);
+
+const IMG_PRESETS = {
+    avatar: { max: 256, q: 0.82 },   // shown at 132px, so 256 covers retina
+    logo:   { max: 240, q: 0.86 },
+    hero:   { max: 900, q: 0.76 },   // full-width news image
+};
+
+function readFileAsDataURL(file) {
+    return new Promise((res, rej) => {
+        const fr = new FileReader();
+        fr.onload = () => res(fr.result);
+        fr.onerror = () => rej(new Error('could not read file'));
+        fr.readAsDataURL(file);
+    });
+}
+
+function loadImage(src) {
+    return new Promise((res, rej) => {
+        const img = new Image();
+        img.onload = () => res(img);
+        img.onerror = () => rej(new Error('not a readable image'));
+        img.src = src;
+    });
+}
+
+/** Resize to fit `max` on the long edge and re-encode. Prefers WebP. */
+async function compressImage(file, presetName) {
+    const p = IMG_PRESETS[presetName] || IMG_PRESETS.avatar;
+    const img = await loadImage(await readFileAsDataURL(file));
+
+    const scale = Math.min(1, p.max / Math.max(img.width, img.height));
+    const w = Math.max(1, Math.round(img.width * scale));
+    const h = Math.max(1, Math.round(img.height * scale));
+
+    const canvas = document.createElement('canvas');
+    canvas.width = w; canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(img, 0, 0, w, h);
+
+    // WebP is much smaller and keeps alpha; fall back if unsupported.
+    let type = 'image/webp';
+    let out = canvas.toDataURL(type, p.q);
+    if (!out.startsWith('data:image/webp')) {
+        type = 'image/jpeg';
+        out = canvas.toDataURL(type, p.q);
+    }
+    const blob = await new Promise(res => canvas.toBlob(res, type, p.q));
+    return { dataUrl: out, blob, type, w, h };
+}
+
+/** Send the compressed image to the Worker, which stores it in R2. */
+async function uploadToR2(blob, type) {
+    const res = await fetch(`${API_BASE.replace(/\/+$/,'')}/api/upload`, {
+        method: 'POST',
+        headers: { 'Content-Type': type, ...(ADMIN_TOKEN ? {'X-Admin-Token': ADMIN_TOKEN} : {}) },
+        body: blob,
+    });
+    let body = {};
+    try { body = await res.json(); } catch(e) {}
+    if (!res.ok || !body.url) {
+        throw new Error(body.error || `upload failed (HTTP ${res.status})`);
+    }
+    return body.url;
+}
+
+const fmtBytes = n =>
+    n < 1024 ? `${n} B` : n < 1048576 ? `${(n/1024).toFixed(0)} KB` : `${(n/1048576).toFixed(2)} MB`;
+
+const dataUrlBytes = s =>
+    !s || !s.startsWith('data:') ? 0 : Math.round((s.length - s.indexOf(',') - 1) * 3 / 4);
+
+async function handleImage(input, targetId, presetName) {
+    const file = input.files && input.files[0];
+    if (!file) return;
+    if (!/^image\//.test(file.type)) { toast('That file is not an image','err'); input.value=''; return; }
+
+    const sizeEl = document.getElementById(targetId + 'Size');
+    if (sizeEl) sizeEl.textContent = 'compressing…';
+
+    try {
+        const { dataUrl, blob, type, w, h } = await compressImage(file, presetName);
+        const bytes = dataUrlBytes(dataUrl);
+
+        // With R2 configured the bin only stores a URL, so there is no
+        // size pressure and nothing to check against the budget.
+        if (useR2()) {
+            if (sizeEl) sizeEl.textContent = 'uploading…';
+            const url = await uploadToR2(blob, type);
+            document.getElementById(targetId).value = url;
+            if (sizeEl) sizeEl.textContent = `${w}×${h} · ${fmtBytes(blob.size)} · stored in R2`;
+            syncPreview(targetId);
+            renderStorageMeter();
+            toast(`Uploaded (${fmtBytes(file.size)} → ${fmtBytes(blob.size)})`, 'ok');
+            return;
+        }
+
+        // Fallback: inline in the bin, which is capped at 1MB in total.
+        const projected = payloadBytes() + bytes;
+        if (projected > BIN_LIMIT * BIN_BUDGET) {
+            if (sizeEl) sizeEl.textContent = '';
+            toast('No room left in the bin for that image — set up R2','err');
+            input.value = '';
+            renderStorageMeter();
+            return;
+        }
+
+        document.getElementById(targetId).value = dataUrl;
+        if (sizeEl) sizeEl.textContent = `${w}×${h} · ${fmtBytes(bytes)} · in bin`;
+        syncPreview(targetId);
+        renderStorageMeter();
+        toast(`Image ready (${fmtBytes(file.size)} → ${fmtBytes(bytes)})`, 'ok');
+    } catch (e) {
+        if (sizeEl) sizeEl.textContent = '';
+        toast(e.message || 'Could not process that image','err');
+    } finally {
+        input.value = '';
+    }
+}
+
+function syncPreview(id) {
+    const box = document.getElementById(id + 'Prev');
+    if (!box) return;
+    const val = (document.getElementById(id)?.value || '').trim();
+    box.style.backgroundImage = val ? `url("${val.replace(/"/g,'\\"')}")` : '';
+    box.classList.toggle('empty', !val);
+    const sizeEl = document.getElementById(id + 'Size');
+    if (sizeEl && val && !val.startsWith('data:')) sizeEl.textContent = 'linked URL';
+    if (sizeEl && !val) sizeEl.textContent = '';
+}
+
+function clearImage(id) {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+    syncPreview(id);
+    renderStorageMeter();
+}
+
+// ── STORAGE METER ─────────────────────────────────────────
+function payloadBytes() {
+    if (!adminData) return 0;
+    try { return new Blob([JSON.stringify(adminData)]).size; } catch(e) { return 0; }
+}
+
+function renderStorageMeter() {
+    const el = document.getElementById('storageMeter');
+    if (!el) return;
+    const used = payloadBytes();
+    const pct  = Math.min(100, (used / BIN_LIMIT) * 100);
+    const state = pct > 90 ? 'crit' : pct > 70 ? 'warn' : 'ok';
+    el.innerHTML = `
+      <div class="sm-head">
+        <span>STORAGE</span>
+        <span class="sm-val ${state}">${fmtBytes(used)} / ${fmtBytes(BIN_LIMIT)}</span>
+      </div>
+      <div class="sm-bar"><div class="sm-fill ${state}" style="width:${pct.toFixed(1)}%"></div></div>
+      <p class="sm-note">${
+        state === 'crit' ? 'Almost full. Saves will be refused past 95%.'
+        : state === 'warn' ? 'Getting full.'
+        : 'This is the JSONBin record — drivers, teams, races, results and news.'
+      }</p>
+      <p class="sm-store">Images: ${ useR2()
+        ? '<b>Cloudflare R2</b> — stored outside the bin, so they cost nothing here and there is no practical limit.'
+        : '<b>stored inline in the bin</b>, so they count against the 1MB above. Deploy <code>worker/</code> and set <code>API_BASE</code> to move them to R2.'
+      }</p>`;
 }
 
 // Races are timed, not lap-counted. `laps` is read as a fallback so any

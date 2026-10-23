@@ -7,6 +7,9 @@ compatibility_date = "2025-01-01"
 [vars]
 ALLOWED_ORIGINS = "https://fp-league.github.io"
 BIN_ID = "6ada83fdac6210605a4a3a74"
+# Leave blank to serve images through the Worker at /img/<key>.
+# Set it to a custom domain or r2.dev URL to serve straight from R2.
+IMAGE_BASE_URL = ""
 
 # D1 database. database_id is filled in by:
 #   npx wrangler d1 create fge
@@ -18,3 +21,9 @@ database_id = "PASTE_DATABASE_ID_HERE"
 # Secrets are NOT set here. Set them once, from the terminal:
 #   npx wrangler secret put BIN_READ_KEY   <- JSONBin read-only key
 #   npx wrangler secret put VOTE_SALT      <- any long random string
+
+# R2 bucket for uploaded images. Create it with:
+#   npx wrangler r2 bucket create fge-images
+[[r2_buckets]]
+binding = "IMAGES"
+bucket_name = "fge-images"
