@@ -115,102 +115,58 @@
     </div>
 
     <main class="container">
-        <!-- HOME -->
+        <!-- ══ HOME ══ -->
         <section id="home" class="page active">
             <div class="hero-section">
                 <div class="hero-fge">FGE</div>
                 <div class="hero-tagline">FORTNITE GLOBAL ENDURANCE</div>
                 <div class="hero-divider"></div>
             </div>
-            <div class="section-head" style="margin-top:1.8rem;">
-                <h2>LATEST NEWS</h2>
-            </div>
-            <section class="home-news" id="homeNewsBlock">
-                <div class="news-hero" id="newsHero"></div>
-                <div class="news-side" id="newsSide"></div>
-            </section>
-            <div class="section-head">
-                <h2>NEXT RACE</h2>
+
+            <div class="section-head"><h2>NEXT RACE</h2>
+                <a href="#" data-page="calendar">FULL CALENDAR &rarr;</a>
             </div>
             <div class="race-strip" id="raceStrip"></div>
-            <div class="countdown-bar" id="countdownBar">
-                <span class="cb-label">NEXT RACE IN</span>
-                <div class="cb-units">
-                    <div class="cb-unit"><span id="cdDays">00</span><label>DAYS</label></div>
-                    <div class="cb-sep">:</div>
-                    <div class="cb-unit"><span id="cdHours">00</span><label>HRS</label></div>
-                    <div class="cb-sep">:</div>
-                    <div class="cb-unit"><span id="cdMins">00</span><label>MIN</label></div>
-                    <div class="cb-sep">:</div>
-                    <div class="cb-unit"><span id="cdSecs">00</span><label>SEC</label></div>
-                </div>
+            <div class="countdown-bar" id="countdownBar"></div>
+
+            <div class="section-head"><h2>LATEST NEWS</h2></div>
+            <section class="home-news" id="homeNews"></section>
+
+            <div class="section-head"><h2>CHAMPIONSHIP</h2>
+                <a href="#" data-page="standings">FULL STANDINGS &rarr;</a>
             </div>
-            <section class="season-block">
-                <div class="season-divider"></div>
-                <div class="season-head">
-                    <h2 id="seasonHeading">SEASON</h2>
-                    <select id="homeSeasonSelect"></select>
-                </div>
-                <div class="standings-controls">
-                    <button class="tab-btn htab-btn active" data-htab="drivers">DRIVERS</button>
-                    <button class="tab-btn htab-btn" data-htab="teams">TEAMS</button>
-                </div>
-                <div class="podium" id="podium"></div>
-                <div class="table-container">
-                    <table class="standings-table full">
-                        <thead><tr><th class="pos">POS</th><th class="driver">DRIVER</th><th class="team">TEAM</th><th class="points">PTS</th></tr></thead>
-                        <tbody id="homeStandingsBody"><tr class="loading"><td colspan="4">Loading...</td></tr></tbody>
-                    </table>
-                </div>
-                <a href="#" class="btn btn-secondary" data-page="standings">VIEW FULL STANDINGS &rarr;</a>
-            </section>
+            <div id="homeStandings"></div>
         </section>
 
-        <!-- STANDINGS -->
+        <!-- ══ STANDINGS ══ -->
         <section id="standings" class="page">
-            <div class="cal-top">
-                <select id="seasonSelect"></select>
-            </div>
+            <h1 class="cal-title">STANDINGS</h1>
             <div class="standings-controls">
                 <button class="tab-btn active" data-tab="drivers">DRIVERS</button>
                 <button class="tab-btn" data-tab="teams">TEAMS</button>
             </div>
-            <h1 class="cal-title" id="standingsTitle">DRIVERS' STANDINGS</h1>
-            <div class="results-panel" id="standingsPanel"><div class="loading">Loading standings...</div></div>
-            <div id="seasonRaces"></div>
+            <div id="standingsContent"></div>
         </section>
 
-        <!-- RESULTS -->
+        <!-- ══ RESULTS ══ -->
         <section id="results" class="page">
-            <div class="cal-top">
-                <select id="resultsSeasonSelect"></select>
-            </div>
-            <div class="standings-controls">
-                <button class="tab-btn rtab-btn active" data-rtab="races">RACES</button>
-                <button class="tab-btn rtab-btn" data-rtab="drivers">DRIVERS</button>
-                <button class="tab-btn rtab-btn" data-rtab="teams">TEAMS</button>
-            </div>
-            <h1 class="cal-title" id="resultsTitle">RACE RESULTS</h1>
-            <div class="results-panel" id="resultsPanel"><div class="loading">Loading results...</div></div>
+            <h1 class="cal-title">RACE RESULTS</h1>
+            <p class="drivers-sub">Every completed round this season.</p>
+            <div id="resultsContent"></div>
         </section>
 
-        <!-- CALENDAR -->
+        <!-- ══ CALENDAR ══ -->
         <section id="calendar" class="page">
-            <div class="cal-top">
-                <select id="calSeasonSelect"></select>
-            </div>
-            <h1 class="cal-title" id="calTitle">RACE CALENDAR</h1>
-            <div class="cal-featured" id="calFeatured"></div>
-            <div class="cal-grid" id="calGrid"><div class="loading">Loading calendar...</div></div>
+            <h1 class="cal-title">RACE CALENDAR</h1>
+            <p class="drivers-sub">The full schedule for this season.</p>
+            <div id="calendarContent"></div>
         </section>
 
-        <!-- TEAMS -->
+        <!-- ══ TEAMS ══ -->
         <section id="teams" class="page">
-            <h1 class="cal-title" id="teamsTitle">FGE TEAMS</h1>
+            <h1 class="cal-title">FGE TEAMS</h1>
             <p class="drivers-sub">The teams competing in this season's championship.</p>
-            <div class="f1-teams-grid" id="teamsGrid">
-                <div class="team-card loading"></div><div class="team-card loading"></div>
-            </div>
+            <div id="teamsContent"></div>
             <div class="drivers-banner" data-page="drivers">
                 <h2 data-page="drivers">FGE DRIVERS</h2>
                 <p data-page="drivers">Check out this season's line-up of drivers.</p>
@@ -218,77 +174,25 @@
             </div>
         </section>
 
-        <!-- DRIVERS -->
+        <!-- ══ DRIVERS ══ -->
         <section id="drivers" class="page">
-            <h1 class="cal-title" id="driversTitle">FGE DRIVERS</h1>
-            <p class="drivers-sub">The drivers competing this season.</p>
-            <div class="f1-drivers-grid" id="driversGrid">
-                <div class="driver-card loading"></div><div class="driver-card loading"></div><div class="driver-card loading"></div>
-            </div>
-            <div class="hof-banner" data-page="standings">
-                <h2 data-page="standings">FGE HALL OF FAME</h2>
-                <p data-page="standings">Browse past-season champions and full standings.</p>
-                <span class="hof-btn" data-page="standings">View past seasons &rarr;</span>
-            </div>
+            <h1 class="cal-title">FGE DRIVERS</h1>
+            <p class="drivers-sub">The drivers competing this season. Tap any driver for their full profile.</p>
+            <div id="driversContent"></div>
         </section>
 
-        <!-- FANTASY -->
+        <!-- ══ FANTASY ══ -->
         <section id="fantasy" class="page">
             <h1 class="cal-title">FGE FANTASY</h1>
             <p class="drivers-sub">Pick your team. Score points from real race results.</p>
-            <div class="fantasy-tabs">
-                <button class="fantasy-tab-btn active" onclick="switchFantasyTab('team')" id="ftab-team">MY TEAM</button>
-                <button class="fantasy-tab-btn" onclick="switchFantasyTab('predictions')" id="ftab-predictions">🔮 PREDICTIONS</button>
-            </div>
-            <div id="fantasyTabTeam">
-                <div id="fantasyJoin" class="fantasy-join hidden">
-                    <div class="fj-card">
-                        <h2>JOIN FANTASY</h2>
-                        <p>Enter a username to create your team.</p>
-                        <input type="text" id="fjUsername" placeholder="Your username" maxlength="24" />
-                        <button class="btn btn-primary" onclick="fantasyJoin()" style="width:100%;margin-top:0;">JOIN</button>
-                    </div>
-                </div>
-                <div id="fantasyMyTeam" class="hidden">
-                    <div class="fantasy-header">
-                        <div>
-                            <h2 id="fantasyWelcome">MY TEAM</h2>
-                            <p class="drivers-sub" id="fantasySubtitle" style="margin:0;"></p>
-                        </div>
-                        <button class="tab-btn" onclick="fantasyLogout()">CHANGE USER</button>
-                    </div>
-                    <div class="fantasy-team-picker" id="fantasyPicker">
-                        <div class="ftp-section">
-                            <h3>DRIVERS <span id="driverPickCount">(0/3)</span></h3>
-                            <p class="ftp-hint">Pick 3 drivers</p>
-                            <div class="ftp-grid" id="driverPickGrid"></div>
-                        </div>
-                        <div class="ftp-section">
-                            <h3>CONSTRUCTOR</h3>
-                            <p class="ftp-hint">Pick 1 team</p>
-                            <div class="ftp-grid" id="constructorPickGrid"></div>
-                        </div>
-                        <button class="btn btn-primary" id="fantasySubmitBtn" onclick="fantasySubmit()" style="margin-top:1rem;">SAVE TEAM</button>
-                    </div>
-                    <div class="fantasy-my-picks" id="fantasyMyPicks" style="margin-top:2rem;"></div>
-                </div>
-                <div class="fantasy-leaderboard" style="margin-top:2.5rem;">
-                    <h2>LEADERBOARD</h2>
-                    <div class="results-panel" id="fantasyLeaderboard">
-                        <p style="padding:1.5rem;color:var(--muted);">No teams yet. Be the first to join!</p>
-                    </div>
-                </div>
-            </div>
-            <div id="fantasyTabPredictions" class="hidden">
-                <div id="predictionsContent"></div>
-            </div>
+            <div id="fantasyContent"></div>
         </section>
 
-        <!-- DRIVER OF THE DAY -->
+        <!-- ══ DRIVER OF THE DAY ══ -->
         <section id="dotd" class="page">
             <h1 class="cal-title">DRIVER OF THE DAY</h1>
             <p class="drivers-sub">Vote for the standout performer from each race.</p>
-            <div id="dotdContent"><p style="padding:2rem;color:var(--muted);text-align:center;">Loading races...</p></div>
+            <div id="dotdContent"></div>
         </section>
     </main>
 

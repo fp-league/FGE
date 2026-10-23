@@ -33,13 +33,34 @@ function emptyClass() {
     return { drivers:[], teams:[], races:[], news:[], fantasy:{}, archive:{}, seasonName:'Season 1' };
 }
 
+// Driver/team names and image URLs are admin-entered and get interpolated
+// into HTML attributes, so they must be escaped.
+function esc(s) {
+    return String(s == null ? '' : s)
+        .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+        .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+// Team colours are admin-entered free text and get written into style
+// attributes and parsed with parseInt. Anything that isn't a clean 6-digit
+// hex is rejected, so a stray value can't break out of the attribute or
+// turn into NaN,NaN,NaN inside rgba().
+function safeHex(v, fallback) {
+    const s = String(v == null ? '' : v).trim();
+    if (/^#[0-9a-fA-F]{6}$/.test(s)) return s.toUpperCase();
+    if (/^#[0-9a-fA-F]{3}$/.test(s)) {
+        return ('#' + s[1]+s[1] + s[2]+s[2] + s[3]+s[3]).toUpperCase();
+    }
+    return fallback;
+}
+
 function colourFor(name, teamsArr) {
     if (!name) return autoColor('');
     const arr = teamsArr || cls().teams || [];
     let t = arr.find(x => x.name === name);
     if (!t) t = arr.find(x => (x.name||'').toLowerCase() === name.toLowerCase());
     if (!t) t = arr.find(x => (x.name||'').toLowerCase().includes(name.toLowerCase()) || name.toLowerCase().includes((x.name||'').toLowerCase()));
-    return (t && t.color) ? t.color : autoColor(name);
+    return safeHex(t && t.color, autoColor(name));
 }
 
 function autoColor(name) {
@@ -295,28 +316,52 @@ function renderHomeNews(d) {
     const el = document.getElementById('homeNews');
     if (!el) return;
     const news = (d.news || []).slice().reverse();
-    if (!news.length) { el.innerHTML = '<p style="color:var(--muted)">No news yet.</p>'; return; }
+    if (!news.length) {
+        el.innerHTML = `<div class="news-empty">
+            <div class="news-empty-icon">📰</div>
+            <p>No news published yet.</p>
+          </div>`;
+        return;
+    }
     const hero = news[0];
     const mini = news.slice(1, 4);
+    const snippet = s => {
+        const t = String(s||'').replace(/\s+/g,' ').trim();
+        return t.length > 150 ? t.slice(0,150).replace(/\s\S*$/,'') + '…' : t;
+    };
+
     el.innerHTML = `
-      <div class="news-hero" onclick="openNewsModal(0)">
-        <div class="nh-bg nh-placeholder" ${hero.image ? `style="background-image:url('${hero.image}')"` : ''}></div>
+      <article class="nh" onclick="openNewsModal(0)">
+        ${hero.image
+          ? `<div class="nh-bg" style="background-image:url('${esc(hero.image)}')"></div>`
+          : `<div class="nh-bg nh-placeholder"></div>`}
         <div class="nh-overlay"></div>
         <div class="nh-content">
-          <span class="nh-tag">${hero.tag || currentClass}</span>
-          <h2>${hero.title || 'FGE News'}</h2>
-          <p>${hero.excerpt || hero.body?.substring(0,120) || ''}</p>
+          <div class="nh-meta">
+            <span class="nh-tag">${esc(hero.tag || currentClass)}</span>
+            ${hero.date ? `<span class="nh-date">${ago(hero.date)}</span>` : ''}
+          </div>
+          <h2>${esc(hero.title || 'FGE News')}</h2>
+          <p>${esc(snippet(hero.excerpt || hero.body))}</p>
+          <span class="nh-read">READ FULL STORY &rarr;</span>
         </div>
-      </div>
+      </article>
+
       <div class="news-side">
-        ${mini.map((n,i) => `
-          <div class="news-mini" onclick="openNewsModal(${i+1})">
-            <div class="news-mini-img placeholder" ${n.image ? `style="background-image:url('${n.image}')"` : ''}></div>
-            <div class="news-mini-body">
-              <div class="news-date">${ago(n.date)}</div>
-              <h4>${n.title || ''}</h4>
+        ${mini.length ? mini.map((n,i) => `
+          <article class="nm" onclick="openNewsModal(${i+1})">
+            ${n.image
+              ? `<div class="nm-img" style="background-image:url('${esc(n.image)}')"></div>`
+              : `<div class="nm-img nm-placeholder"><span>FGE</span></div>`}
+            <div class="nm-body">
+              <div class="nm-meta">
+                <span class="nm-tag">${esc(n.tag || currentClass)}</span>
+                ${n.date ? `<span class="nm-date">${ago(n.date)}</span>` : ''}
+              </div>
+              <h4>${esc(n.title || '')}</h4>
             </div>
-          </div>`).join('')}
+          </article>`).join('')
+        : `<div class="nm nm-none"><p>More stories coming soon.</p></div>`}
       </div>`;
 }
 
@@ -330,11 +375,14 @@ function openNewsModal(idx) {
     if (!m || !mc) return;
     mc.innerHTML = `
       <button class="modal-close" onclick="closeModal()">✕</button>
-      ${n.image ? `<div class="modal-news-img" style="background-image:url('${n.image}')"></div>` : ''}
-      <span class="nh-tag">${n.tag || currentClass}</span>
-      <h2 style="font-family:var(--font-display);color:var(--white);margin:0.5rem 0;letter-spacing:0.06em">${n.title||''}</h2>
-      <p style="color:var(--muted);font-size:0.82rem;margin-bottom:1rem">${fmtDate(n.date)}</p>
-      <div style="color:var(--text);line-height:1.7;font-size:0.92rem">${(n.body||'').replace(/\n/g,'<br>')}</div>`;
+      ${n.image ? `<div class="modal-news-img" style="background-image:url('${esc(n.image)}')"></div>` : ''}
+      <div class="na-meta">
+        <span class="nh-tag">${esc(n.tag || currentClass)}</span>
+        ${n.date ? `<span class="na-date">${fmtDate(n.date)}</span>` : ''}
+      </div>
+      <h2 class="na-title">${esc(n.title||'')}</h2>
+      ${n.excerpt ? `<p class="na-standfirst">${esc(n.excerpt)}</p>` : ''}
+      <div class="na-body">${esc(n.body||'').replace(/\n{2,}/g,'</p><p>').replace(/\n/g,'<br>').replace(/^/,'<p>').replace(/$/,'</p>')}</div>`;
     m.classList.remove('hidden');
 }
 
@@ -576,24 +624,36 @@ function renderDrivers() {
     if (driverFocusId) { renderDriverProfile(driverFocusId); driverFocusId = null; return; }
     const { pts } = calcStandings(d.races||[], d.drivers||[], d.teams||[]);
     if (!d.drivers?.length) { el.innerHTML = '<p style="color:var(--muted);padding:2rem">No drivers registered yet.</p>'; return; }
-    el.innerHTML = `<div class="f1-drivers-grid">` + d.drivers.map(drv => {
+    // Ranked by points so the grid reads as a championship order
+    const ranked = [...d.drivers].sort((a,b) => (pts[b.name]||0) - (pts[a.name]||0));
+    el.innerHTML = `<div class="f1-drivers-grid">` + ranked.map((drv, i) => {
         const col = colourFor(drv.team, d.teams);
         const [r,g,b] = [parseInt(col.slice(1,3),16),parseInt(col.slice(3,5),16),parseInt(col.slice(5,7),16)];
-        const names = (drv.name||'').split(' ');
-        const first = names.slice(0,-1).join(' ') || '';
-        const last = names[names.length-1] || drv.name;
+        const names = (drv.name||'').trim().split(/\s+/);
+        const first = names.slice(0,-1).join(' ');
+        const last  = names[names.length-1] || drv.name || '';
+        const initials = ((first[0]||'') + (last[0]||'')).toUpperCase();
         return `
-          <div class="f1-driver-card" style="background:linear-gradient(135deg,rgba(${r},${g},${b},0.18) 0%,var(--surface) 60%);border-left:3px solid ${col}" onclick="navigate('drivers',{driverFocusId:'${drv.id||drv.name}'})">
-            <div class="fdc-info">
-              <div class="fdc-name">
-                ${first ? `<span class="fdc-first">${first}</span>` : ''}
-                <span class="fdc-last">${last}</span>
-              </div>
-              <div class="fdc-team" style="color:${col}">${drv.team||'—'}</div>
-              <div class="fdc-nat">${drv.nationality||''}</div>
-              <div style="font-family:var(--font-display);color:var(--accent2);margin-top:0.5rem">${pts[drv.name]||0} PTS</div>
+          <div class="fdc" style="--tc:${col};--tc-rgb:${r},${g},${b}"
+               onclick="navigate('drivers',{driverFocusId:'${esc(drv.id||drv.name)}'})">
+            <div class="fdc-rank">${i+1}</div>
+            <div class="fdc-num">${esc(drv.number||'')}</div>
+            <div class="fdc-media">
+              ${drv.photo
+                ? `<img class="fdc-photo" src="${esc(drv.photo)}" alt="${esc(drv.name)}" loading="lazy">`
+                : `<div class="fdc-initials">${esc(initials)}</div>`}
             </div>
-            <div class="fdc-num">${drv.number||''}</div>
+            <div class="fdc-body">
+              <div class="fdc-name">
+                ${first ? `<span class="fdc-first">${esc(first)}</span>` : ''}
+                <span class="fdc-last">${esc(last)}</span>
+              </div>
+              <div class="fdc-team"><span class="fdc-dot"></span>${esc(drv.team||'No team')}</div>
+            </div>
+            <div class="fdc-foot">
+              <span class="fdc-nat">${esc(drv.nationality||'—')}</span>
+              <span class="fdc-pts">${pts[drv.name]||0}<small>PTS</small></span>
+            </div>
           </div>`;
     }).join('') + '</div>';
 }
@@ -609,31 +669,83 @@ function renderDriverProfile(id) {
     const races = (d.races||[]).filter(r=>r.results?.some(res=>(typeof res==='string'?res:res.driver)===drv.name));
     const wins = races.filter(r=>{const res=r.results?.[0];return (typeof res==='string'?res:res.driver)===drv.name;}).length;
     const pods = races.filter(r=>r.results?.slice(0,3).some(res=>(typeof res==='string'?res:res.driver)===drv.name)).length;
+    const [r,g,b] = [parseInt(col.slice(1,3),16),parseInt(col.slice(3,5),16),parseInt(col.slice(5,7),16)];
+    const names = (drv.name||'').trim().split(/\s+/);
+    const first = names.slice(0,-1).join(' ');
+    const last  = names[names.length-1] || drv.name || '';
+    const initials = ((first[0]||'') + (last[0]||'')).toUpperCase();
+
+    // Championship position among all drivers
+    const order = [...(d.drivers||[])].sort((a,b) => (pts[b.name]||0) - (pts[a.name]||0));
+    const position = order.findIndex(x => (x.id||x.name) === (drv.id||drv.name)) + 1;
+    const best = races.reduce((acc, rc) => {
+        const i = (rc.results||[]).findIndex(res => (typeof res==='string'?res:res.driver) === drv.name);
+        return i >= 0 && (acc === null || i < acc) ? i : acc;
+    }, null);
+
     el.innerHTML = `
-      <button class="btn btn-secondary" style="margin-bottom:1rem" onclick="driverFocusId=null;renderDrivers()">← Back to Drivers</button>
-      <div style="background:var(--surface);border:1px solid var(--line);border-top:4px solid ${col};border-radius:4px;padding:2rem;margin-bottom:1.5rem">
-        <div class="driver-profile-page">
-          <div class="dpp-photo-col">
-            ${drv.photo ? `<img class="dpp-photo" src="${drv.photo}" alt="">` : `<div class="dpp-fallback">${(drv.name||'').charAt(0)}</div>`}
-            <div class="dpp-number" style="color:${col}">#${drv.number||'?'}</div>
-            <div class="dpp-nat">${drv.nationality||''}</div>
+      <button class="btn btn-secondary dp-back" onclick="driverFocusId=null;renderDrivers()">&larr; ALL DRIVERS</button>
+
+      <div class="dp" style="--tc:${col};--tc-rgb:${r},${g},${b}">
+        <div class="dp-hero">
+          <div class="dp-bignum">${esc(drv.number||'')}</div>
+          <div class="dp-media">
+            ${drv.photo
+              ? `<img class="dp-photo" src="${esc(drv.photo)}" alt="${esc(drv.name)}">`
+              : `<div class="dp-initials">${esc(initials)}</div>`}
           </div>
-          <div class="dpp-info">
-            <h1>${drv.name}</h1>
-            <div class="dpp-team" style="color:${col}">${drv.team||'No team'}</div>
-            <div class="dpp-stats">
-              <div class="dpp-stat"><label>POINTS</label><strong style="color:var(--accent2)">${pts[drv.name]||0}</strong></div>
-              <div class="dpp-stat"><label>WINS</label><strong>${wins}</strong></div>
-              <div class="dpp-stat"><label>PODIUMS</label><strong>${pods}</strong></div>
-              <div class="dpp-stat"><label>RACES</label><strong>${races.length}</strong></div>
+          <div class="dp-ident">
+            ${position ? `<div class="dp-pos">P${position} <small>IN CHAMPIONSHIP</small></div>` : ''}
+            <h1 class="dp-name">
+              ${first ? `<span class="dp-first">${esc(first)}</span>` : ''}
+              <span class="dp-last">${esc(last)}</span>
+            </h1>
+            <div class="dp-meta">
+              <span class="dp-team"><span class="dp-dot"></span>${esc(drv.team||'No team')}</span>
+              ${drv.nationality ? `<span class="dp-nat">${esc(drv.nationality)}</span>` : ''}
+              ${drv.number ? `<span class="dp-numtag">#${esc(drv.number)}</span>` : ''}
             </div>
-            <div style="margin-top:0.8rem">
-              <div style="font-family:var(--font-display);font-size:0.72rem;letter-spacing:0.12em;color:var(--muted);margin-bottom:0.4rem">RECENT FORM</div>
-              <div class="form-guide">${formHTML(guide)}</div>
-            </div>
-            ${drv.bio ? `<p style="color:var(--muted);margin-top:1rem;line-height:1.6;font-size:0.9rem">${drv.bio}</p>` : ''}
           </div>
         </div>
+
+        <div class="dp-stats">
+          <div class="dp-stat hero"><label>POINTS</label><strong>${pts[drv.name]||0}</strong></div>
+          <div class="dp-stat"><label>WINS</label><strong>${wins}</strong></div>
+          <div class="dp-stat"><label>PODIUMS</label><strong>${pods}</strong></div>
+          <div class="dp-stat"><label>STARTS</label><strong>${races.length}</strong></div>
+          <div class="dp-stat"><label>BEST FINISH</label><strong>${best === null ? '—' : 'P'+(best+1)}</strong></div>
+        </div>
+
+        <div class="dp-panels">
+          <div class="dp-panel">
+            <h3>RECENT FORM</h3>
+            ${guide && guide.length
+              ? `<div class="form-guide">${formHTML(guide)}</div>`
+              : `<p class="dp-empty">No races completed yet.</p>`}
+          </div>
+          ${drv.bio ? `
+          <div class="dp-panel">
+            <h3>ABOUT</h3>
+            <p class="dp-bio">${esc(drv.bio).replace(/\n/g,'<br>')}</p>
+          </div>` : ''}
+        </div>
+
+        ${races.length ? `
+        <div class="dp-panel">
+          <h3>RACE BY RACE</h3>
+          <div class="dp-results">
+            ${races.slice().reverse().map(rc => {
+                const i = (rc.results||[]).findIndex(res => (typeof res==='string'?res:res.driver) === drv.name);
+                const p = i + 1;
+                const medal = p===1 ? 'gold' : p===2 ? 'silver' : p===3 ? 'bronze' : '';
+                return `<div class="dp-rrow">
+                  <span class="dp-rpos ${medal}">P${p}</span>
+                  <span class="dp-rname">${esc(rc.name||'Round '+(rc.round||''))}</span>
+                  <span class="dp-rtrack">${esc(rc.track||'')}</span>
+                </div>`;
+            }).join('')}
+          </div>
+        </div>` : ''}
       </div>`;
 }
 
@@ -891,6 +1003,24 @@ async function init() {
     // Modal backdrop close
     document.getElementById('modal')?.addEventListener('click', e => {
         if (e.target.id === 'modal') closeModal();
+    });
+
+    // Standings DRIVERS/TEAMS tabs — these had no listener at all
+    document.querySelectorAll('.tab-btn[data-tab]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            standingsTab = btn.getAttribute('data-tab');
+            document.querySelectorAll('.tab-btn[data-tab]').forEach(b =>
+                b.classList.toggle('active', b === btn));
+            renderStandings();
+        });
+    });
+
+    // data-page links (banners, "view full standings", etc.)
+    document.addEventListener('click', e => {
+        const t = e.target.closest('[data-page]');
+        if (!t || t.classList.contains('nav-link')) return;
+        e.preventDefault();
+        navigate(t.getAttribute('data-page'));
     });
 
     // Init class switcher UI — apply the saved class colour on first paint
