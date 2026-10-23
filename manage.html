@@ -27,13 +27,17 @@
   --success: #2e7d32;
   --fd: '911PorscheTitle','911PorscheCond','911Porsche',Impact,sans-serif;
   --fu: '911PorscheCond','911Porsche','Arial Narrow',sans-serif;
+  /* Active class accent — red for GT3 (default), blue for GT4 */
+  --accent:      #E10600;
+  --accent-bg:   rgba(225,6,0,0.08);
+  --accent-line: rgba(225,6,0,0.35);
 }
 *, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
 body { background:var(--bg); color:var(--off); font-family:'Segoe UI',Arial,sans-serif; min-height:100vh; font-size:0.9rem; }
 
 /* ── LOGIN ── */
 .login-wrap { display:flex; align-items:center; justify-content:center; min-height:100vh; padding:1rem; }
-.login-card { background:var(--surface); border:1px solid var(--line2); border-top:3px solid var(--white); border-radius:3px; padding:2.5rem; width:100%; max-width:340px; }
+.login-card { background:var(--surface); border:1px solid var(--line2); border-top:3px solid var(--accent); border-radius:3px; padding:2.5rem; width:100%; max-width:340px; }
 .login-card h2 { font-family:var(--fd); font-size:1.6rem; color:var(--white); letter-spacing:0.1em; margin-bottom:1.5rem; }
 .login-card p { font-size:0.8rem; color:var(--grey); margin-top:0.7rem; }
 
@@ -61,11 +65,11 @@ body { background:var(--bg); color:var(--off); font-family:'Segoe UI',Arial,sans
 }
 .snav-item { display:flex; align-items:center; gap:0.6rem; padding:0.65rem 1.1rem; color:var(--grey); text-decoration:none; cursor:pointer; background:none; border:none; width:100%; text-align:left; font-family:var(--fu); font-size:0.8rem; letter-spacing:0.06em; border-left:2px solid transparent; transition:all 0.2s; }
 .snav-item:hover { color:var(--white); background:rgba(255,255,255,0.03); }
-.snav-item.active { color:var(--white); border-left-color:var(--white); background:rgba(255,255,255,0.05); }
+.snav-item.active { color:var(--accent); border-left-color:var(--accent); background:var(--accent-bg); }
 .snav-icon { font-size:1rem; flex-shrink:0; }
 @media(max-width:700px) {
   .snav-item { border-left:none; border-bottom:2px solid transparent; padding:0.45rem 0.8rem; border-radius:2px; width:auto; flex:1; min-width:60px; justify-content:center; font-size:0.72rem; text-align:center; flex-direction:column; gap:2px; }
-  .snav-item.active { border-bottom-color:var(--white); background:rgba(255,255,255,0.07); }
+  .snav-item.active { border-bottom-color:var(--accent); background:var(--accent-bg); color:var(--accent); }
 }
 
 /* ── MAIN ── */
@@ -75,12 +79,12 @@ body { background:var(--bg); color:var(--off); font-family:'Segoe UI',Arial,sans
 
 /* ── SECTION HEAD ── */
 .sec-head { display:flex; align-items:center; justify-content:space-between; gap:1rem; margin-bottom:1.5rem; padding-bottom:0.7rem; border-bottom:1px solid var(--line); flex-wrap:wrap; }
-.sec-head h2 { font-family:var(--fd); font-size:1.2rem; color:var(--white); letter-spacing:0.1em; }
+.sec-head h2 { font-family:var(--fd); font-size:1.2rem; color:var(--accent); letter-spacing:0.1em; }
 
 /* ── BUTTONS ── */
 .btn { display:inline-flex; align-items:center; gap:0.4rem; padding:0.55rem 1.1rem; border-radius:2px; cursor:pointer; font-family:var(--fd); font-size:0.78rem; letter-spacing:0.1em; border:none; transition:all 0.2s; white-space:nowrap; }
-.btn-white   { background:var(--white); color:var(--bg); }
-.btn-white:hover { background:var(--off); }
+.btn-white   { background:var(--accent); color:var(--white); }
+.btn-white:hover { filter:brightness(1.15); }
 .btn-ghost   { background:transparent; color:var(--grey); border:1px solid var(--line2); }
 .btn-ghost:hover { color:var(--white); border-color:var(--white); }
 .btn-danger  { background:rgba(198,40,40,0.15); color:#ef9a9a; border:1px solid rgba(198,40,40,0.3); }
@@ -96,7 +100,7 @@ body { background:var(--bg); color:var(--off); font-family:'Segoe UI',Arial,sans
 .form-group { display:flex; flex-direction:column; gap:0.3rem; }
 .fg-label { font-family:var(--fu); font-size:0.68rem; letter-spacing:0.1em; color:var(--grey); }
 input, select, textarea { background:var(--surface2); border:1px solid var(--line2); color:var(--white); padding:0.55rem 0.8rem; border-radius:2px; font-size:0.88rem; font-family:'Segoe UI',sans-serif; width:100%; transition:border-color 0.2s; }
-input:focus, select:focus, textarea:focus { outline:none; border-color:rgba(255,255,255,0.4); }
+input:focus, select:focus, textarea:focus { outline:none; border-color:var(--accent-line); }
 select option { background:var(--surface2); }
 textarea { resize:vertical; min-height:80px; }
 .form-actions { display:flex; gap:0.5rem; margin-top:0.8rem; }
@@ -412,6 +416,17 @@ function switchClass(cls) {
     adminClass = cls;
     document.getElementById('cpGT3').className = 'cp-btn gt3' + (cls==='GT3'?' active':'');
     document.getElementById('cpGT4').className = 'cp-btn gt4' + (cls==='GT4'?' active':'');
+    // Swap accent colour: red for GT3, blue for GT4
+    const root = document.documentElement;
+    if (cls === 'GT3') {
+        root.style.setProperty('--accent',      '#E10600');
+        root.style.setProperty('--accent-bg',   'rgba(225,6,0,0.08)');
+        root.style.setProperty('--accent-line',  'rgba(225,6,0,0.35)');
+    } else {
+        root.style.setProperty('--accent',      '#5599ff');
+        root.style.setProperty('--accent-bg',   'rgba(85,153,255,0.08)');
+        root.style.setProperty('--accent-line',  'rgba(85,153,255,0.35)');
+    }
     // Close any open forms
     ['newsForm','driverForm','teamForm','raceForm'].forEach(id => document.getElementById(id).style.display='none');
     refreshSec();
