@@ -24,6 +24,11 @@ let userName = localStorage.getItem('fge_userName') || null;
 // ── HELPERS: DATA ───────────────────────────────────────
 function cls() { return rawData?.[currentClass.toLowerCase()] || emptyClass(); }
 
+function closeNav() {
+    document.getElementById('navOverlay')?.classList.remove('open');
+    document.getElementById('navToggle')?.classList.remove('open');
+}
+
 function emptyClass() {
     return { drivers:[], teams:[], races:[], news:[], fantasy:{}, archive:{}, seasonName:'Season 1' };
 }
@@ -192,9 +197,8 @@ function navigate(page, extra) {
     document.querySelectorAll('.nav-link').forEach(a => {
         a.classList.toggle('active', a.dataset.page === page);
     });
-    // Close mobile nav
-    document.getElementById('navMenu')?.classList.remove('open');
-    document.getElementById('navToggle')?.classList.remove('open');
+    // Close nav overlay
+    closeNav();
     window.scrollTo(0,0);
     renderCurrentPage();
 }
@@ -813,10 +817,12 @@ function startCountdownTick() {
 async function init() {
     lightsOut();
 
-    // Mobile nav toggle
+    // Full-screen nav overlay toggle
     document.getElementById('navToggle')?.addEventListener('click', () => {
-        document.getElementById('navMenu')?.classList.toggle('open');
-        document.getElementById('navToggle')?.classList.toggle('open');
+        const overlay = document.getElementById('navOverlay');
+        const toggle = document.getElementById('navToggle');
+        const isOpen = overlay?.classList.contains('open');
+        if (isOpen) { closeNav(); } else { overlay?.classList.add('open'); toggle?.classList.add('open'); }
     });
 
     // Modal backdrop close
