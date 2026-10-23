@@ -75,6 +75,16 @@ function hex2rgb(hex) {
     return `${r},${g},${b}`;
 }
 
+// Races are timed, not lap-counted. `laps` is read as a fallback so any
+// race entered before the switch still shows its length.
+function raceLength(r) {
+    const m = (r && (r.minutes ?? r.laps)) || 0;
+    if (!m) return '';
+    if (m < 60) return `${m} min`;
+    const h = Math.floor(m / 60), rem = m % 60;
+    return rem ? `${h}h ${rem}m` : `${h}h`;
+}
+
 function fmtDate(str) {
     if (!str) return '';
     const d = new Date(str);
@@ -558,7 +568,7 @@ function renderCalendar() {
             <div class="cal-track">📍 ${race.track||''}</div>
             <div class="cal-date-lg">${fmtDate(race.date)}</div>
             ${podium ? `<div class="cal-podium">${podium}</div>` : ''}
-            <div class="cal-card-foot"><span class="cal-fmt">${race.laps ? `${race.laps} laps` : ''}</span></div>
+            <div class="cal-card-foot"><span class="cal-fmt">${raceLength(race)}</span></div>
           </div>`;
     }).join('');
     el.style.display = 'grid';
