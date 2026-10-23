@@ -137,10 +137,40 @@ function formHTML(guide) {
     }).join('');
 }
 
+// A bare "YYYY-MM-DD" parses as UTC midnight, which shifts the race by the
+// viewer's UTC offset — east of UTC the race reads as already gone hours
+// before the day starts. Parse date-only strings as LOCAL midnight instead.
+function isDateOnly(s) { return /^\d{4}-\d{2}-\d{2}$/.test(String(s || '').trim()); }
+
+function raceStart(dateStr) {
+    if (!dateStr) return null;
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(dateStr).trim());
+    if (m) return new Date(+m[1], +m[2] - 1, +m[3]);
+    const dt = new Date(dateStr);
+    return isNaN(dt.getTime()) ? null : dt;
+}
+
+// A date-only race counts as upcoming until the end of that day, so race day
+// itself shows "RACE DAY" rather than jumping to the following round.
+function raceEnd(dateStr) {
+    const s = raceStart(dateStr);
+    if (!s) return null;
+    return isDateOnly(dateStr) ? new Date(s.getTime() + 86400000) : s;
+}
+
+function findNextRace(races) {
+    const now = Date.now();
+    return (races || [])
+        .filter(r => { const e = raceEnd(r.date); return e && e.getTime() > now; })
+        .sort((a, b) => raceStart(a.date) - raceStart(b.date))[0] || null;
+}
+
 function countdownHTML(targetDate) {
     if (!targetDate) return '';
-    const diff = new Date(targetDate) - Date.now();
-    if (diff <= 0) return '<span style="color:var(--gt4)">RACE DAY</span>';
+    const start = raceStart(targetDate);
+    if (!start) return '';
+    const diff = start.getTime() - Date.now();
+    if (diff <= 0) return '<span class="cb-raceday">RACE DAY</span>';
     const d = Math.floor(diff / 86400000);
     const h = Math.floor((diff % 86400000) / 3600000);
     const m = Math.floor((diff % 3600000) / 60000);
@@ -235,7 +265,7 @@ function renderHome() {
 }
 
 function renderRaceStrip(d) {
-    const next = d.races?.find(r => r.date && new Date(r.date) >= new Date()) || d.races?.[d.races.length-1];
+    const next = findNextRace(d.races) || d.races?.[d.races.length-1];
     const el = document.getElementById('raceStrip');
     if (!el || !next) return;
     const isUp = next.date && new Date(next.date) >= new Date();
@@ -248,11 +278,17 @@ function renderRaceStrip(d) {
 }
 
 function renderCountdown(d) {
-    const next = d.races?.find(r => r.date && new Date(r.date) >= new Date());
     const el = document.getElementById('countdownBar');
     if (!el) return;
-    if (!next) { el.innerHTML = '<span class="cb-label">NO UPCOMING RACE</span>'; return; }
-    el.innerHTML = `<span class="cb-label">NEXT RACE</span><div class="cb-units">${countdownHTML(next.date)}</div>`;
+    const next = findNextRace(d.races);
+    if (!next) {
+        el.style.display = 'flex';
+        el.innerHTML = '<span class="cb-label">NO UPCOMING RACE</span>';
+        return;
+    }
+    el.style.display = 'flex';
+    const label = next.name ? `NEXT RACE — ${next.name}` : 'NEXT RACE';
+    el.innerHTML = `<span class="cb-label">${label}</span><div class="cb-units">${countdownHTML(next.date)}</div>`;
 }
 
 function renderHomeNews(d) {
@@ -618,7 +654,7 @@ function renderFantasy() {
         return;
     }
     const d = cls();
-    const next = d.races?.find(r => r.date && new Date(r.date) >= new Date());
+    const next = findNextRace(d.races);
     const past = (d.races||[]).filter(r=>r.results?.length).slice().reverse();
     el.innerHTML = `
       <div class="fantasy-header">
@@ -687,7 +723,7 @@ function switchFantasyTab(tab) {
         // Simple local leaderboard placeholder
         el.innerHTML = '<p style="color:var(--muted);padding:1.5rem">Leaderboard coming soon.</p>';
     } else {
-        const next = d.races?.find(r => r.date && new Date(r.date) >= new Date());
+        const next = findNextRace(d.races);
         el.innerHTML = renderFantasyPicks(next, d);
     }
 }
@@ -708,7 +744,7 @@ function pickFantasy(type, val, key) {
     saved[type] = val;
     localStorage.setItem(`fge_fp_${key}`, JSON.stringify(saved));
     const d = cls();
-    const next = d.races?.find(r => r.date && new Date(r.date) >= new Date());
+    const next = findNextRace(d.races);
     const el = document.getElementById('fantasyTabContent');
     if (el) el.innerHTML = renderFantasyPicks(next, d);
 }
@@ -834,11 +870,9 @@ function dismissInstall() {
 function startCountdownTick() {
     setInterval(() => {
         if (currentPage !== 'home') return;
-        const d = cls();
-        const next = d.races?.find(r => r.date && new Date(r.date) >= new Date());
-        if (!next) return;
-        const el = document.getElementById('countdownBar');
-        if (el) el.innerHTML = `<span class="cb-label">NEXT RACE</span><div class="cb-units">${countdownHTML(next.date)}</div>`;
+        // Re-render through renderCountdown so the tick and the initial paint
+        // can never drift apart in markup or race selection.
+        renderCountdown(cls());
     }, 1000);
 }
 

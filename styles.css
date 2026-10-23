@@ -326,6 +326,13 @@ body {
 .cb-unit span { display: block; font-family: var(--font-display); font-size: 1.8rem; color: var(--white); line-height: 1; }
 .cb-unit label { font-size: 0.58rem; letter-spacing: 0.1em; color: var(--grey); font-family: var(--font-ui); }
 .cb-sep { font-family: var(--font-display); font-size: 1.6rem; color: var(--grey-mid); margin-bottom: 0.4rem; }
+.cb-raceday {
+    font-family: var(--font-display); font-size: 1.8rem;
+    letter-spacing: 0.12em; color: var(--class-color);
+    text-shadow: 0 0 20px var(--class-color);
+    animation: racedayPulse 1.6s ease-in-out infinite;
+}
+@keyframes racedayPulse { 0%,100% { opacity: 1; } 50% { opacity: 0.55; } }
 
 /* ── NEWS GRID ── */
 .home-news {
