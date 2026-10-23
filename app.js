@@ -113,7 +113,7 @@ function driverName(d) { return d ? (d.name || d.username || 'Unknown') : 'TBC';
 const DEFAULT_POINTS = {
     table: [20, 15, 12, 10, 8, 6, 4, 3, 2, 1],
     fastestLap: 1,
-    dotd: 1,
+    dotd: 0,            // DOTD is an award, not points
 };
 
 function pointsCfg(data) {

@@ -1089,7 +1089,7 @@ function saveSeason() {
 const DEFAULT_POINTS = {
     table: [20, 15, 12, 10, 8, 6, 4, 3, 2, 1],
     fastestLap: 1,
-    dotd: 1,
+    dotd: 0,            // DOTD is an award, not points
 };
 
 function currentPoints() {
@@ -1132,9 +1132,14 @@ function renderPointsTotal() {
     const el = document.getElementById('ptsTotal');
     if (!el) return;
     const win = (cfg.table[0] || 0) + cfg.fastestLap + cfg.dotd;
+    // Only name the parts that actually contribute, so a zeroed bonus
+    // isn't listed as if it counted.
+    const parts = ['win'];
+    if (cfg.fastestLap) parts.push('fastest lap');
+    if (cfg.dotd)       parts.push('DOTD');
     el.innerHTML = `Scoring positions: <b>${cfg.table.length}</b> ·
       Win: <b>${cfg.table[0]||0}</b> ·
-      Maximum from one race: <b>${win}</b> (win + fastest lap + DOTD)`;
+      Maximum from one race: <b>${win}</b> (${parts.join(' + ')})`;
 }
 
 function addPointsRow() {
