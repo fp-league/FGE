@@ -798,9 +798,10 @@ function renderDriverProfile(id) {
 
 // Off until the admin turns it on, so it can be set up ahead of a season
 // without appearing on the site.
-function fviEnabled(d) {
-    const cfg = ((d || cls()).fireVsIce) || {};
-    return cfg.enabled === true;
+function fviEnabled() {
+    // The battle spans both classes, so it's live if either says so.
+    return ['gt3','gt4'].some(k =>
+        ((rawData && rawData[k] && rawData[k].fireVsIce) || {}).enabled === true);
 }
 
 /** Hide the nav entry while the feature is switched off for this class. */
@@ -817,20 +818,30 @@ const SIDES = {
     ice:  { label: 'ICE',  icon: '❄️', color: '#29B6F6' },
 };
 
-function fireIceStandings(d) {
-    const { tpts } = calcStandings(d.races||[], d.drivers||[], d.teams||[]);
+function fireIceStandings() {
+    // Fire and Ice are league-wide: each side is made up of GT3 *and* GT4
+    // teams, and every point either of them scores counts for the faction.
     const out = {
-        fire: { pts: 0, teams: [] },
-        ice:  { pts: 0, teams: [] },
+        fire: { pts: 0, teams: [], byClass: { GT3: 0, GT4: 0 } },
+        ice:  { pts: 0, teams: [], byClass: { GT3: 0, GT4: 0 } },
         unassigned: [],
     };
-    (d.teams||[]).forEach(t => {
-        const pts = tpts[t.name] || 0;
-        const side = t.side === 'fire' || t.side === 'ice' ? t.side : null;
-        if (!side) { out.unassigned.push({ ...t, pts }); return; }
-        out[side].pts += pts;
-        out[side].teams.push({ ...t, pts });
+
+    ['gt3','gt4'].forEach(key => {
+        const d = (rawData && rawData[key]) || {};
+        const label = key.toUpperCase();
+        const { tpts } = calcStandings(d.races||[], d.drivers||[], d.teams||[], pointsCfg(d));
+        (d.teams||[]).forEach(t => {
+            const pts = tpts[t.name] || 0;
+            const entry = { ...t, pts, cls: label };
+            const side = (t.side === 'fire' || t.side === 'ice') ? t.side : null;
+            if (!side) { out.unassigned.push(entry); return; }
+            out[side].pts += pts;
+            out[side].byClass[label] += pts;
+            out[side].teams.push(entry);
+        });
     });
+
     out.fire.teams.sort((a,b) => b.pts - a.pts);
     out.ice.teams.sort((a,b) => b.pts - a.pts);
     return out;
@@ -862,32 +873,23 @@ function roundSwing(race, d) {
 function renderFantasy() {
     const el = document.getElementById('fantasyContent');
     if (!el) return;
-    const d = cls();
 
-    if (!fviEnabled(d)) {
+    if (!fviEnabled()) {
         el.innerHTML = `<div class="fvi-empty">
             <p><b>Coming next season.</b><br>
-               Fire Vs Ice launches with the new season — five teams a side,
-               every point they score counting towards their faction.</p>
+               Fire Vs Ice launches with the new season — GT3 and GT4 teams split
+               across two sides, with every point they score counting towards
+               their faction.</p>
           </div>`;
         return;
     }
 
-    const teams = d.teams || [];
-
-    if (!teams.length) {
-        el.innerHTML = `<div class="fvi-empty">
-            <p>No teams yet. Add teams in the admin and assign each one to Fire or Ice.</p>
-          </div>`;
-        return;
-    }
-
-    const s = fireIceStandings(d);
+    const s = fireIceStandings();
     const assigned = s.fire.teams.length + s.ice.teams.length;
     if (!assigned) {
         el.innerHTML = `<div class="fvi-empty">
-            <p>No teams have been assigned a side yet. Set each team to Fire or Ice
-               in the admin and the battle starts here.</p>
+            <p>No teams have been assigned a side yet. Set each GT3 and GT4 team to
+               Fire or Ice in the admin and the battle starts here.</p>
           </div>`;
         return;
     }
@@ -897,9 +899,22 @@ function renderFantasy() {
     const lead = Math.abs(s.fire.pts - s.ice.pts);
     const leader = s.fire.pts === s.ice.pts ? null : (s.fire.pts > s.ice.pts ? 'fire' : 'ice');
 
+    // Red = GT3, blue = GT4, matching how the sides are announced.
+    const clsDot = c => `<span class="fvi-cls ${c.toLowerCase()}" title="${c}"></span>`;
+
     const sideColumn = key => {
         const side = SIDES[key];
         const data = s[key];
+        const gt3 = data.teams.filter(t => t.cls === 'GT3');
+        const gt4 = data.teams.filter(t => t.cls === 'GT4');
+        const group = (label, list) => !list.length ? '' : `
+            <div class="fvi-group">${label} <span>${list.length}</span></div>
+            ${list.map(t => `
+              <div class="fvi-team">
+                ${clsDot(t.cls)}
+                <span class="fvi-team-name">${esc(t.name)}</span>
+                <span class="fvi-team-pts">${t.pts}</span>
+              </div>`).join('')}`;
         return `
           <div class="fvi-col ${key}">
             <div class="fvi-col-head">
@@ -907,22 +922,30 @@ function renderFantasy() {
               <span class="fvi-name">${side.label}</span>
               <span class="fvi-col-pts">${data.pts}</span>
             </div>
-            ${data.teams.length ? data.teams.map(t => `
-              <div class="fvi-team">
-                <span class="team-dot" style="background:${safeHex(t.color, side.color)}"></span>
-                <span class="fvi-team-name">${esc(t.name)}</span>
-                <span class="fvi-team-pts">${t.pts}</span>
-              </div>`).join('')
-            : `<p class="fvi-none">No teams on this side yet.</p>`}
+            <div class="fvi-split">
+              <span>GT3 <b>${data.byClass.GT3}</b></span>
+              <span>GT4 <b>${data.byClass.GT4}</b></span>
+            </div>
+            ${data.teams.length
+              ? group('GT3', gt3) + group('GT4', gt4)
+              : `<p class="fvi-none">No teams on this side yet.</p>`}
           </div>`;
     };
 
-    const scored = (d.races||[]).filter(r => (r.results||[]).length);
-    const strip = scored.map(r => {
-        const sw = roundSwing(r, d);
+    // Rounds from both classes, newest first.
+    const rounds = [];
+    ['gt3','gt4'].forEach(k => {
+        const d = (rawData && rawData[k]) || {};
+        (d.races||[]).filter(r => (r.results||[]).length).forEach(r => {
+            rounds.push({ race: r, cls: k.toUpperCase(), sw: roundSwing(r, d) });
+        });
+    });
+    rounds.sort((a,b) => (a.race.round||0) - (b.race.round||0));
+
+    const strip = rounds.map(({race, cls: c, sw}) => {
         const won = sw.fire === sw.ice ? 'draw' : (sw.fire > sw.ice ? 'fire' : 'ice');
-        return `<div class="fvi-round ${won}" title="${esc(r.name||'')}: Fire ${sw.fire} - ${sw.ice} Ice">
-            <span class="fvi-round-no">R${r.round || '?'}</span>
+        return `<div class="fvi-round ${won}" title="${esc(race.name||'')} (${c}): Fire ${sw.fire} – ${sw.ice} Ice">
+            <span class="fvi-round-no">${c} R${race.round || '?'}</span>
             <span class="fvi-round-score">${sw.fire}–${sw.ice}</span>
           </div>`;
     }).join('');
@@ -951,9 +974,11 @@ function renderFantasy() {
           : leader === null ? 'Dead level.'
           : `<b class="${leader}">${SIDES[leader].label}</b> leads by <b>${lead}</b> point${lead===1?'':'s'}.`
         }</p>
+        <p class="fvi-note">GT3 and GT4 points both count. Whichever side is ahead at
+           the end of the season takes it.</p>
       </div>
 
-      ${scored.length ? `
+      ${rounds.length ? `
       <div class="section-head"><h2>ROUND BY ROUND</h2></div>
       <div class="fvi-rounds">${strip}</div>` : ''}
 
@@ -967,7 +992,7 @@ function renderFantasy() {
       <div class="section-head"><h2>UNASSIGNED</h2></div>
       <div class="fvi-unassigned">
         <p>These teams have no side yet, so their points count for neither:</p>
-        ${s.unassigned.map(t => `<span class="fvi-chip">${esc(t.name)} · ${t.pts}</span>`).join('')}
+        ${s.unassigned.map(t => `<span class="fvi-chip">${clsDot(t.cls)}${esc(t.name)} · ${t.pts}</span>`).join('')}
       </div>` : ''}
     `;
 }

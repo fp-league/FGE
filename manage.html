@@ -154,6 +154,8 @@ textarea { resize:vertical; min-height:80px; }
 .fvi-switch b { color:var(--accent); }
 .fvi-status { font-size:0.78rem; color:var(--grey); margin-bottom:1rem; line-height:1.5; }
 .fvi-status b { color:var(--off); }
+.fvi-tot { display:inline-block; margin-top:0.3rem; color:var(--grey); }
+.fvi-tot b { color:var(--accent); }
 
 .side-badge { font-family:var(--fu); font-size:0.64rem; letter-spacing:0.1em; padding:0.12rem 0.45rem; border-radius:2px; white-space:nowrap; }
 .side-badge.fire { background:rgba(255,87,34,0.18); color:#ff8a5c; border:1px solid rgba(255,87,34,0.45); }
@@ -471,12 +473,13 @@ textarea { resize:vertical; min-height:80px; }
 
         <div class="form-card" style="max-width:560px">
           <h3>FIRE VS ICE</h3>
-          <p class="bk-note">Assign each team a side on the Teams tab, then switch this on
-             when the season starts. While it's off the page is hidden from the site's
-             navigation entirely, so you can set it all up in advance.</p>
+          <p class="bk-note">One battle across both classes — GT3 and GT4 teams on the same
+             two sides. Assign each team a side on the Teams tab (remember to do it for
+             both classes), then switch this on when the season starts. While it's off
+             the page is hidden from the site's navigation entirely.</p>
           <label class="fvi-switch">
             <input type="checkbox" id="fviEnabled">
-            <span>Show Fire Vs Ice on the site for <b id="fviClassLabel">GT3</b></span>
+            <span>Show Fire Vs Ice on the site</span>
           </label>
           <p class="fvi-status" id="fviStatus"></p>
           <button class="btn btn-white" onclick="saveFvi()">SAVE</button>
@@ -1129,33 +1132,42 @@ function saveSeason() {
 
 // ── FIRE VS ICE ───────────────────────────────────────────
 function renderFviPanel() {
-    const cls = d();
-    const on = ((cls.fireVsIce||{}).enabled === true);
+    // Fire and Ice span both classes, so the switch is league-wide.
+    const on = ['gt3','gt4'].some(k =>
+        ((adminData && adminData[k] && adminData[k].fireVsIce) || {}).enabled === true);
     const box = document.getElementById('fviEnabled');
     if (box) box.checked = on;
-    const lbl = document.getElementById('fviClassLabel');
-    if (lbl) lbl.textContent = adminClass;
 
-    // Tell them whether the sides are actually ready, since switching it
-    // on with nothing assigned would publish an empty page.
-    const teams = cls.teams || [];
-    const fire = teams.filter(t => t.side === 'fire').length;
-    const ice  = teams.filter(t => t.side === 'ice').length;
-    const none = teams.length - fire - ice;
     const el = document.getElementById('fviStatus');
     if (!el) return;
-    el.innerHTML = teams.length
-        ? `${adminClass} sides: <b>${fire}</b> Fire · <b>${ice}</b> Ice` +
-          (none ? ` · <b>${none}</b> unassigned` : '') +
-          (fire && ice ? '' : ' — assign teams to both sides before switching this on.')
-        : 'No teams added yet.';
+
+    const rows = ['gt3','gt4'].map(k => {
+        const teams = ((adminData && adminData[k] && adminData[k].teams) || []);
+        const fire = teams.filter(t => t.side === 'fire').length;
+        const ice  = teams.filter(t => t.side === 'ice').length;
+        const none = teams.length - fire - ice;
+        return { label: k.toUpperCase(), fire, ice, none, total: teams.length };
+    });
+    const totFire = rows.reduce((n,r) => n + r.fire, 0);
+    const totIce  = rows.reduce((n,r) => n + r.ice,  0);
+
+    el.innerHTML = rows.map(r => r.total
+        ? `${r.label}: <b>${r.fire}</b> Fire · <b>${r.ice}</b> Ice` +
+          (r.none ? ` · <b>${r.none}</b> unassigned` : '')
+        : `${r.label}: no teams yet`
+      ).join('<br>') +
+      `<br><span class="fvi-tot">League-wide: <b>${totFire}</b> Fire v <b>${totIce}</b> Ice</span>` +
+      (totFire && totIce ? '' : '<br>Assign teams to both sides before switching this on.');
 }
 
 function saveFvi() {
     const on = document.getElementById('fviEnabled').checked;
-    const c = adminClass.toLowerCase();
-    adminData[c].fireVsIce = { ...(adminData[c].fireVsIce||{}), enabled: on };
-    saveData(on ? `Fire Vs Ice is now live for ${adminClass}` : `Fire Vs Ice hidden for ${adminClass}`);
+    // Written to both classes so the flag survives a per-class restore.
+    ['gt3','gt4'].forEach(k => {
+        if (!adminData[k]) return;
+        adminData[k].fireVsIce = { ...(adminData[k].fireVsIce||{}), enabled: on };
+    });
+    saveData(on ? 'Fire Vs Ice is now live' : 'Fire Vs Ice hidden');
     renderFviPanel();
 }
 
