@@ -556,6 +556,9 @@ select:focus { outline: none; border-color: var(--class-color); }
 .results-table tbody tr:hover { background: var(--surface); }
 .results-table td { padding: 0.7rem 0.8rem; }
 .rt-pos { font-family: var(--font-display); color: var(--grey); font-size: 0.82rem; width: 36px; }
+.rt-pos.dnf { font-size: 0.68rem; color: #ef9a9a; letter-spacing: 0.06em; }
+.rt-dnf .rt-winner { color: var(--grey-light); }
+.rt-dnf { opacity: 0.72; }
 .rt-winner { color: var(--white); font-weight: 500; }
 .rt-team { display: flex; align-items: center; gap: 0.3rem; color: var(--white) !important; font-weight: 600; }
 .rt-time { font-family: var(--font-ui); color: var(--grey); font-size: 0.82rem; }

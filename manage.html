@@ -124,8 +124,17 @@ textarea { resize:vertical; min-height:80px; }
 .del-confirm.show { display:flex; }
 
 /* ── RESULTS FORM ── */
-.res-row { display:grid; grid-template-columns:36px 1fr 140px; gap:0.5rem; align-items:center; margin-bottom:0.4rem; }
+.res-row { display:grid; grid-template-columns:46px 1fr 140px 56px; gap:0.5rem; align-items:center; margin-bottom:0.4rem; transition:opacity 0.2s; }
 .res-pos { font-family:var(--fd); font-size:0.9rem; color:var(--grey); text-align:center; }
+.res-pos.dnf { font-size:0.72rem; color:#ef9a9a; letter-spacing:0.06em; }
+.res-row.is-dnf select, .res-row.is-dnf input { opacity:0.55; }
+.dnf-btn {
+  background:transparent; border:1px solid var(--line2); color:var(--grey2);
+  font-family:var(--fd); font-size:0.66rem; letter-spacing:0.08em;
+  padding:0.45rem 0; border-radius:2px; cursor:pointer; transition:all 0.18s;
+}
+.dnf-btn:hover { color:#ef9a9a; border-color:rgba(198,40,40,0.5); }
+.dnf-btn.on { background:rgba(198,40,40,0.2); border-color:rgba(198,40,40,0.6); color:#ff9d9d; }
 .add-row-btn { background:transparent; border:1px dashed var(--line2); color:var(--grey); padding:0.5rem 1rem; border-radius:2px; cursor:pointer; font-family:var(--fu); font-size:0.78rem; letter-spacing:0.08em; transition:all 0.2s; margin-top:0.3rem; }
 .add-row-btn:hover { border-color:var(--white); color:var(--white); }
 
@@ -897,12 +906,15 @@ function loadResultsForm() {
 
     const rows = Array.from({length: rowCount}, (_,i) => {
         const res = existing[i];
-        const sel = typeof res === 'object' ? res.driver : (res||'');
+        const sel  = typeof res === 'object' ? res.driver : (res||'');
         const time = typeof res === 'object' ? res.time : '';
-        return `<div class="res-row" id="rr${i}">
-          <div class="res-pos">P${i+1}</div>
+        const dnf  = typeof res === 'object' &&
+                     String(res.pos||'').toUpperCase() === 'DNF';
+        return `<div class="res-row${dnf?' is-dnf':''}" id="rr${i}" data-dnf="${dnf?1:0}">
+          <div class="res-pos"></div>
           <select>${driverOpts}${drivers.length?'':'<option>No drivers</option>'}<option value="" ${!sel?'selected':''}>— empty —</option></select>
-          <input placeholder="Time / Gap" value="${time||''}">
+          <input placeholder="${dnf?'Reason / lap':'Time / Gap'}" value="${time||''}">
+          <button type="button" class="dnf-btn${dnf?' on':''}" onclick="toggleDnf(this)" title="Mark as did not finish">DNF</button>
         </div>`;
     }).join('');
 
@@ -930,6 +942,38 @@ function loadResultsForm() {
         const s = row.querySelector('select');
         if (s) s.value = val;
     });
+    renumberRows();
+}
+
+/**
+ * Finishing positions are assigned here rather than taken from row order,
+ * so a DNF part-way down the list doesn't shift everyone below it. Only
+ * finishers take a number; DNFs are labelled and score nothing.
+ */
+function renumberRows() {
+    let p = 0;
+    document.querySelectorAll('#resultsRows .res-row').forEach(row => {
+        const dnf = row.dataset.dnf === '1';
+        const label = row.querySelector('.res-pos');
+        if (dnf) {
+            if (label) { label.textContent = 'DNF'; label.classList.add('dnf'); }
+        } else {
+            p += 1;
+            if (label) { label.textContent = 'P' + p; label.classList.remove('dnf'); }
+        }
+    });
+}
+
+function toggleDnf(btn) {
+    const row = btn.closest('.res-row');
+    if (!row) return;
+    const on = row.dataset.dnf === '1';
+    row.dataset.dnf = on ? '0' : '1';
+    row.classList.toggle('is-dnf', !on);
+    btn.classList.toggle('on', !on);
+    const input = row.querySelector('input');
+    if (input) input.placeholder = !on ? 'Reason / lap' : 'Time / Gap';
+    renumberRows();
 }
 
 function addResultRow() {
@@ -940,16 +984,27 @@ function addResultRow() {
     const div = document.createElement('div');
     div.className = 'res-row';
     div.id = `rr${pos-1}`;
-    div.innerHTML = `<div class="res-pos">P${pos}</div><select>${driverOpts}<option value="">— empty —</option></select><input placeholder="Time / Gap">`;
+    div.dataset.dnf = '0';
+    div.innerHTML = `<div class="res-pos"></div><select>${driverOpts}<option value="">— empty —</option></select><input placeholder="Time / Gap"><button type="button" class="dnf-btn" onclick="toggleDnf(this)" title="Mark as did not finish">DNF</button>`;
     wrap.appendChild(div);
+    renumberRows();
 }
 
 function saveResults(idx) {
     const rows = Array.from(document.querySelectorAll('#resultsRows .res-row'));
-    const results = rows.map(row => ({
-        driver: row.querySelector('select').value,
-        time:   row.querySelector('input').value.trim()
-    })).filter(r => r.driver);
+    // Write an explicit pos on every row. Without it, position would be
+    // inferred from array index and a mid-field DNF would silently promote
+    // everyone below it by one place.
+    let p = 0;
+    const results = rows.map(row => {
+        const driver = row.querySelector('select').value;
+        const time   = row.querySelector('input').value.trim();
+        const dnf    = row.dataset.dnf === '1';
+        if (!driver) return null;
+        if (dnf) return { driver, time, pos: 'DNF' };
+        p += 1;
+        return { driver, time, pos: p };
+    }).filter(Boolean);
     const fl = document.getElementById('flDriver').value;
     const c = adminClass.toLowerCase();
     adminData[c].races[idx].results = results;

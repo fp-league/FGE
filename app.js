@@ -517,9 +517,10 @@ function openRaceModal(idx) {
         const pos = typeof res === 'object' && res.pos ? res.pos : i+1;
         const time = typeof res === 'object' ? (res.time || '') : '';
         const col = colourFor(d.drivers?.find(x=>x.name===drvName)?.team, d.teams);
-        return `<tr>
-          <td class="rt-pos">${pos}</td>
-          <td class="rt-winner">${drvName}</td>
+        const isDnf = String(pos).toUpperCase() === 'DNF';
+        return `<tr${isDnf ? ' class="rt-dnf"' : ''}>
+          <td class="rt-pos${isDnf ? ' dnf' : ''}">${pos}</td>
+          <td class="rt-winner">${esc(drvName)}</td>
           <td class="rt-team"><span class="team-dot" style="background:${col}"></span>${d.drivers?.find(x=>x.name===drvName)?.team||'—'}</td>
           <td class="rt-time">${time}</td>
         </tr>`;
