@@ -1182,7 +1182,22 @@ async function init() {
 
     // Register service worker
     if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('./sw.js').catch(()=>{});
+        // updateViaCache:'none' stops the browser serving sw.js itself from
+        // its HTTP cache, which is how a worker gets stuck for days. Combined
+        // with an explicit update() check, a deploy reaches people promptly.
+        navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' })
+            .then(reg => {
+                reg.update().catch(()=>{});
+                // When a new worker takes over, reload once so the page isn't
+                // left running a half-old set of assets.
+                let reloaded = false;
+                navigator.serviceWorker.addEventListener('controllerchange', () => {
+                    if (reloaded) return;
+                    reloaded = true;
+                    window.location.reload();
+                });
+            })
+            .catch(()=>{});
     }
 }
 

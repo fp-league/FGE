@@ -1,4 +1,4 @@
-const CACHE = 'fge-v7';
+const CACHE = 'fge-v8';
 
 // Only pre-cache fonts and images — they never change between deploys
 const IMMUTABLE = [
