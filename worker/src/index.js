@@ -1,0 +1,273 @@
+/**
+ * FGE API — Cloudflare Worker
+ *
+ * Holds the shared state the static site can't: DOTD votes and fantasy
+ * entries. Keys live in Worker secrets and are never sent to the browser.
+ *
+ * What makes the results trustworthy:
+ *  - one vote per person per race is a D1 PRIMARY KEY, not a client check
+ *  - the Worker reads the league data itself and validates every write
+ *    against it, so you can't vote on a race that hasn't run, vote for
+ *    someone who wasn't in it, or submit fantasy picks after the results
+ *    are already published
+ *  - voters are identified by a salted hash of their IP; raw IPs are
+ *    never stored
+ */
+
+const MAX_NAME = 24;
+const MAX_IDENT = 64;
+const MAX_ENTRIES_PER_VOTER = 3;   // stops one person farming fantasy sign-ups
+const LEAGUE_TTL_MS = 30_000;
+
+/* ── helpers ─────────────────────────────────────────────── */
+
+function corsHeaders(request, env) {
+  const origin = request.headers.get('Origin') || '';
+  const allowed = String(env.ALLOWED_ORIGINS || '')
+    .split(',').map(s => s.trim()).filter(Boolean);
+  const allow = allowed.includes('*')
+    ? '*'
+    : (allowed.includes(origin) ? origin : (allowed[0] || ''));
+  return {
+    'Access-Control-Allow-Origin': allow,
+    'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Max-Age': '86400',
+    'Vary': 'Origin',
+  };
+}
+
+function json(body, init, request, env) {
+  return new Response(JSON.stringify(body), {
+    status: (init && init.status) || 200,
+    headers: {
+      'Content-Type': 'application/json',
+      'Cache-Control': 'no-store',
+      ...corsHeaders(request, env),
+    },
+  });
+}
+
+const bad = (msg, request, env, status = 400) =>
+  json({ ok: false, error: msg }, { status }, request, env);
+
+/** Salted hash of the caller's IP. Identifies a voter without storing an IP. */
+async function voterHash(request, env) {
+  const ip = request.headers.get('CF-Connecting-IP') || '0.0.0.0';
+  const salt = env.VOTE_SALT || 'fge-unsalted';
+  const buf = new TextEncoder().encode(`${ip}|${salt}`);
+  const digest = await crypto.subtle.digest('SHA-256', buf);
+  return [...new Uint8Array(digest)].slice(0, 16)
+    .map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+/** League data, read with the read-only key and cached briefly. */
+let leagueCache = { at: 0, data: null };
+async function league(env) {
+  const now = Date.now();
+  if (leagueCache.data && now - leagueCache.at < LEAGUE_TTL_MS) return leagueCache.data;
+  const res = await fetch(`https://api.jsonbin.io/v3/b/${env.BIN_ID}/latest`, {
+    headers: { 'X-Access-Key': env.BIN_READ_KEY },
+  });
+  if (!res.ok) throw new Error('league fetch failed: ' + res.status);
+  const body = await res.json();
+  leagueCache = { at: now, data: body.record || {} };
+  return leagueCache.data;
+}
+
+const normClass = c => (String(c || '').toLowerCase() === 'gt4' ? 'gt4' : 'gt3');
+
+function findRace(data, cls, raceKey) {
+  const races = (data && data[cls] && data[cls].races) || [];
+  const key = String(raceKey);
+  return races.find(r => String(r.round) === key) ||
+         races.find(r => r.name === raceKey) || null;
+}
+
+const finishersOf = race =>
+  ((race && race.results) || [])
+    .map(r => (typeof r === 'string' ? r : r && r.driver))
+    .filter(Boolean);
+
+const driverNames = (data, cls) =>
+  (((data && data[cls] && data[cls].drivers) || []).map(d => d.name).filter(Boolean));
+
+const clean = (v, max) => String(v == null ? '' : v).trim().slice(0, max);
+
+/* ── routes ──────────────────────────────────────────────── */
+
+/** GET /api/dotd?class=gt3 — tallies for every race, plus this caller's own votes */
+async function getDotd(request, env) {
+  const cls = normClass(new URL(request.url).searchParams.get('class'));
+  const me = await voterHash(request, env);
+
+  const tally = await env.DB.prepare(
+    `SELECT race, driver, COUNT(*) AS votes
+       FROM dotd_votes WHERE class = ?
+      GROUP BY race, driver`
+  ).bind(cls).all();
+
+  const mine = await env.DB.prepare(
+    `SELECT race, driver FROM dotd_votes WHERE class = ? AND voter = ?`
+  ).bind(cls, me).all();
+
+  const races = {};
+  for (const row of (tally.results || [])) {
+    (races[row.race] ||= {})[row.driver] = row.votes;
+  }
+  const myVotes = {};
+  for (const row of (mine.results || [])) myVotes[row.race] = row.driver;
+
+  return json({ ok: true, races, myVotes }, null, request, env);
+}
+
+/** POST /api/dotd { class, race, driver } */
+async function postDotd(request, env) {
+  let body;
+  try { body = await request.json(); } catch { return bad('invalid JSON body', request, env); }
+
+  const cls    = normClass(body.class);
+  const race   = clean(body.race, MAX_IDENT);
+  const driver = clean(body.driver, MAX_NAME * 2);
+  if (!race || !driver) return bad('race and driver are required', request, env);
+
+  let data;
+  try { data = await league(env); }
+  catch { return bad('could not reach league data, try again', request, env, 503); }
+
+  // A DOTD vote only makes sense for a race that has actually been run,
+  // and only for someone who was in it.
+  const r = findRace(data, cls, race);
+  if (!r) return bad('unknown race', request, env, 404);
+  const ran = finishersOf(r);
+  if (!ran.length) return bad('that race has no results yet', request, env, 409);
+  if (!ran.includes(driver)) return bad('that driver was not in this race', request, env, 422);
+
+  const me = await voterHash(request, env);
+  const res = await env.DB.prepare(
+    `INSERT INTO dotd_votes (class, race, voter, driver, created_at)
+     VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT (class, race, voter) DO NOTHING`
+  ).bind(cls, String(r.round ?? race), me, driver, Date.now()).run();
+
+  const counted = (res.meta && res.meta.changes) > 0;
+
+  const tally = await env.DB.prepare(
+    `SELECT driver, COUNT(*) AS votes FROM dotd_votes
+      WHERE class = ? AND race = ? GROUP BY driver`
+  ).bind(cls, String(r.round ?? race)).all();
+
+  const existing = await env.DB.prepare(
+    `SELECT driver FROM dotd_votes WHERE class = ? AND race = ? AND voter = ?`
+  ).bind(cls, String(r.round ?? race), me).first();
+
+  const votes = {};
+  for (const row of (tally.results || [])) votes[row.driver] = row.votes;
+
+  return json({
+    ok: true,
+    counted,                                    // false => already voted
+    myVote: existing ? existing.driver : null,
+    votes,
+  }, null, request, env);
+}
+
+/** GET /api/fantasy?class=gt3 — every entry, for scoring the leaderboard */
+async function getFantasy(request, env) {
+  const cls = normClass(new URL(request.url).searchParams.get('class'));
+  const rows = await env.DB.prepare(
+    `SELECT race, user_id, user_name, winner, fastest, updated_at
+       FROM fantasy_entries WHERE class = ?`
+  ).bind(cls).all();
+  return json({ ok: true, entries: rows.results || [] }, null, request, env);
+}
+
+/** POST /api/fantasy { class, race, userId, userName, winner, fastest } */
+async function postFantasy(request, env) {
+  let body;
+  try { body = await request.json(); } catch { return bad('invalid JSON body', request, env); }
+
+  const cls      = normClass(body.class);
+  const race     = clean(body.race, MAX_IDENT);
+  const userId   = clean(body.userId, MAX_IDENT);
+  const userName = clean(body.userName, MAX_NAME);
+  const winner   = clean(body.winner, MAX_NAME * 2);
+  const fastest  = clean(body.fastest, MAX_NAME * 2);
+
+  if (!race || !userId || !userName) {
+    return bad('race, userId and userName are required', request, env);
+  }
+
+  let data;
+  try { data = await league(env); }
+  catch { return bad('could not reach league data, try again', request, env, 503); }
+
+  const r = findRace(data, cls, race);
+  if (!r) return bad('unknown race', request, env, 404);
+
+  // Picks close the moment results exist — otherwise you could "predict"
+  // a race that has already been scored.
+  if (finishersOf(r).length) {
+    return bad('picks are closed, that race already has results', request, env, 409);
+  }
+
+  const roster = driverNames(data, cls);
+  if (winner  && !roster.includes(winner))  return bad('unknown driver for winner', request, env, 422);
+  if (fastest && !roster.includes(fastest)) return bad('unknown driver for fastest lap', request, env, 422);
+
+  const me = await voterHash(request, env);
+  const key = String(r.round ?? race);
+
+  // One person shouldn't be able to mint unlimited fantasy identities.
+  const own = await env.DB.prepare(
+    `SELECT COUNT(DISTINCT user_id) AS n FROM fantasy_entries
+      WHERE class = ? AND race = ? AND voter = ? AND user_id <> ?`
+  ).bind(cls, key, me, userId).first();
+  if ((own && own.n) >= MAX_ENTRIES_PER_VOTER) {
+    return bad('too many fantasy entries from here for this race', request, env, 429);
+  }
+
+  await env.DB.prepare(
+    `INSERT INTO fantasy_entries
+       (class, race, user_id, user_name, voter, winner, fastest, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT (class, race, user_id) DO UPDATE SET
+       user_name  = excluded.user_name,
+       winner     = excluded.winner,
+       fastest    = excluded.fastest,
+       updated_at = excluded.updated_at`
+  ).bind(cls, key, userId, userName, me, winner || null, fastest || null, Date.now()).run();
+
+  return json({ ok: true, race: key, winner: winner || null, fastest: fastest || null },
+    null, request, env);
+}
+
+/* ── entry ───────────────────────────────────────────────── */
+
+export default {
+  async fetch(request, env) {
+    const { pathname } = new URL(request.url);
+
+    if (request.method === 'OPTIONS') {
+      return new Response(null, { status: 204, headers: corsHeaders(request, env) });
+    }
+
+    try {
+      if (pathname === '/api/dotd') {
+        if (request.method === 'GET')  return await getDotd(request, env);
+        if (request.method === 'POST') return await postDotd(request, env);
+      }
+      if (pathname === '/api/fantasy') {
+        if (request.method === 'GET')  return await getFantasy(request, env);
+        if (request.method === 'POST') return await postFantasy(request, env);
+      }
+      if (pathname === '/api/health') {
+        return json({ ok: true, now: Date.now() }, null, request, env);
+      }
+      return bad('not found', request, env, 404);
+    } catch (err) {
+      return json({ ok: false, error: 'server error', detail: String(err && err.message || err) },
+        { status: 500 }, request, env);
+    }
+  },
+};

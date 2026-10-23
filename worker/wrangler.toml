@@ -1,0 +1,20 @@
+name = "fge-api"
+main = "src/index.js"
+compatibility_date = "2025-01-01"
+
+# Where the browser is allowed to call this from.
+# Add a localhost origin here while testing locally.
+[vars]
+ALLOWED_ORIGINS = "https://fp-league.github.io"
+BIN_ID = "6ada83fdac6210605a4a3a74"
+
+# D1 database. database_id is filled in by:
+#   npx wrangler d1 create fge
+[[d1_databases]]
+binding = "DB"
+database_name = "fge"
+database_id = "PASTE_DATABASE_ID_HERE"
+
+# Secrets are NOT set here. Set them once, from the terminal:
+#   npx wrangler secret put BIN_READ_KEY   <- JSONBin read-only key
+#   npx wrangler secret put VOTE_SALT      <- any long random string
