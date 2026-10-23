@@ -161,7 +161,6 @@ body {
 .intro-car {
     position: absolute; bottom: 28%; left: -65%;
     width: min(58vw, 720px);
-    transform: scaleX(-1);
     filter: drop-shadow(0 8px 32px rgba(225,6,0,0.5));
     animation: carDrive 1.1s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.1s forwards;
 }
