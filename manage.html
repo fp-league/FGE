@@ -139,6 +139,19 @@ textarea { resize:vertical; min-height:80px; }
 .color-pair { display:flex; gap:0.5rem; align-items:center; }
 .color-pair input[type=color] { width:40px; height:36px; padding:2px; cursor:pointer; flex-shrink:0; }
 
+/* ── BACKUP / RESTORE ── */
+.bk-note { font-size:0.8rem; color:var(--grey); line-height:1.55; margin-bottom:0.9rem; }
+.bk-note strong { color:var(--off); }
+#restoreFile { padding:0.5rem; font-size:0.82rem; cursor:pointer; }
+.bk-preview { margin-top:1rem; border:1px solid var(--line2); border-left:3px solid var(--accent); border-radius:2px; padding:1rem; background:var(--surface2); }
+.bk-preview h4 { font-family:var(--fd); font-size:0.8rem; letter-spacing:0.1em; color:var(--white); margin-bottom:0.7rem; }
+.bk-table { width:100%; font-size:0.82rem; border-collapse:collapse; margin-bottom:0.9rem; }
+.bk-table th { text-align:left; font-family:var(--fu); font-size:0.66rem; letter-spacing:0.1em; color:var(--grey); padding:0.25rem 0.5rem 0.25rem 0; font-weight:normal; }
+.bk-table td { padding:0.25rem 0.5rem 0.25rem 0; color:var(--off); }
+.bk-table td.chg-up   { color:#7ddf7d; }
+.bk-table td.chg-down { color:#ff9d9d; }
+.bk-warn { font-size:0.78rem; color:#ffc9c9; background:rgba(198,40,40,0.14); border:1px solid rgba(198,40,40,0.35); border-radius:2px; padding:0.6rem 0.8rem; margin-bottom:0.9rem; line-height:1.5; }
+
 /* ── EMPTY ── */
 .empty-row td { padding:2rem; color:var(--grey); text-align:center; font-family:var(--fu); font-size:0.82rem; letter-spacing:0.06em; }
 
@@ -348,6 +361,21 @@ textarea { resize:vertical; min-height:80px; }
         <div class="form-card" style="max-width:400px">
           <div class="form-group" style="margin-bottom:1rem"><label class="fg-label">SEASON NAME</label><input id="seasonName" placeholder="Season 1"></div>
           <button class="btn btn-white" onclick="saveSeason()">SAVE</button>
+        </div>
+
+        <div class="form-card" style="max-width:560px">
+          <h3>BACKUP</h3>
+          <p class="bk-note">Downloads everything — both GT3 and GT4 — as a single JSON file.
+             There is no undo in this panel, so take one before any big edit.</p>
+          <div class="form-actions" style="margin-bottom:1.5rem">
+            <button class="btn btn-white" onclick="exportBackup()">⬇ EXPORT BACKUP</button>
+          </div>
+
+          <h3 style="margin-top:0.5rem">RESTORE</h3>
+          <p class="bk-note">Replaces <strong>all</strong> live data with the contents of a backup file.
+             You'll see what's in the file and have to confirm before anything is written.</p>
+          <input type="file" id="restoreFile" accept="application/json,.json" onchange="previewRestore(this)">
+          <div id="restorePreview"></div>
         </div>
       </div>
 
@@ -865,6 +893,122 @@ function saveSeason() {
     const name = document.getElementById('seasonName').value.trim()||'Season 1';
     adminData[adminClass.toLowerCase()].seasonName = name;
     saveData('Season settings saved');
+}
+
+// ── BACKUP / RESTORE ──────────────────────────────────────
+let pendingRestore = null;
+
+function counts(classData) {
+    const c = classData || {};
+    return {
+        drivers: (c.drivers||[]).length,
+        teams:   (c.teams||[]).length,
+        races:   (c.races||[]).length,
+        news:    (c.news||[]).length,
+        results: (c.races||[]).reduce((n,r) => n + ((r.results||[]).length ? 1 : 0), 0)
+    };
+}
+
+function exportBackup() {
+    if (!adminData) { toast('Nothing loaded yet','err'); return; }
+    const payload = {
+        _fge_backup: 1,
+        exportedAt: new Date().toISOString(),
+        data: adminData
+    };
+    const stamp = new Date().toISOString().slice(0,16).replace(/[:T]/g,'-');
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type:'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `fge-backup-${stamp}.json`;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 0);
+    toast('Backup downloaded','ok');
+}
+
+function previewRestore(input) {
+    const box = document.getElementById('restorePreview');
+    pendingRestore = null;
+    box.innerHTML = '';
+    const file = input.files && input.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+        let parsed;
+        try { parsed = JSON.parse(reader.result); }
+        catch(e) { box.innerHTML = `<div class="bk-warn">That file isn't valid JSON, so it can't be a backup.</div>`; return; }
+
+        // Accept either a wrapped backup or a bare { gt3, gt4 } record
+        const incoming = parsed && parsed._fge_backup ? parsed.data : parsed;
+        if (!incoming || typeof incoming !== 'object' || (!incoming.gt3 && !incoming.gt4)) {
+            box.innerHTML = `<div class="bk-warn">This doesn't look like an FGE backup — it has no GT3 or GT4 data.</div>`;
+            return;
+        }
+
+        const rows = ['drivers','teams','races','news'];
+        const table = ['GT3','GT4'].map(cl => {
+            const key = cl.toLowerCase();
+            const now = counts(adminData && adminData[key]);
+            const next = counts(incoming[key]);
+            return `<tr><td colspan="4" style="padding-top:0.5rem"><strong>${cl}</strong></td></tr>` +
+              rows.map(k => {
+                const diff = next[k] - now[k];
+                const cls2 = diff > 0 ? 'chg-up' : diff < 0 ? 'chg-down' : '';
+                const sign = diff > 0 ? `+${diff}` : diff < 0 ? `${diff}` : 'no change';
+                return `<tr><td style="color:var(--grey)">${k}</td><td>${now[k]}</td>
+                        <td>&rarr; ${next[k]}</td><td class="${cls2}">${sign}</td></tr>`;
+              }).join('');
+        }).join('');
+
+        const losing = ['gt3','gt4'].some(k => {
+            const now = counts(adminData && adminData[k]), next = counts(incoming[k]);
+            return rows.some(r => next[r] < now[r]);
+        });
+
+        pendingRestore = incoming;
+        box.innerHTML = `
+          <div class="bk-preview">
+            <h4>${parsed._fge_backup ? 'BACKUP FROM ' + (parsed.exportedAt||'unknown date').slice(0,10) : 'RAW DATA FILE'}</h4>
+            <table class="bk-table">
+              <thead><tr><th></th><th>NOW</th><th>AFTER</th><th>CHANGE</th></tr></thead>
+              <tbody>${table}</tbody>
+            </table>
+            ${losing ? `<div class="bk-warn">This backup has <strong>fewer</strong> records than what's live in at least one place. Restoring will delete the difference.</div>` : ''}
+            <div class="form-actions">
+              <button class="btn btn-confirm" onclick="confirmRestore()">OVERWRITE EVERYTHING</button>
+              <button class="btn btn-ghost" onclick="cancelRestore()">CANCEL</button>
+            </div>
+          </div>`;
+    };
+    reader.readAsText(file);
+}
+
+function cancelRestore() {
+    pendingRestore = null;
+    document.getElementById('restorePreview').innerHTML = '';
+    document.getElementById('restoreFile').value = '';
+}
+
+async function confirmRestore() {
+    if (!pendingRestore) return;
+    // Keep a copy of what we're about to replace, so a mis-click is recoverable
+    const before = JSON.stringify({ _fge_backup:1, exportedAt:new Date().toISOString(), data:adminData }, null, 2);
+    try {
+        const blob = new Blob([before], { type:'application/json' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `fge-before-restore-${new Date().toISOString().slice(0,16).replace(/[:T]/g,'-')}.json`;
+        document.body.appendChild(a); a.click();
+        setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 0);
+    } catch(e) {}
+
+    adminData.gt3 = pendingRestore.gt3 || emptyClass();
+    adminData.gt4 = pendingRestore.gt4 || emptyClass();
+    cancelRestore();
+    await saveData('Data restored from backup');
+    refreshSec();
 }
 
 // ── COLOR SYNC ────────────────────────────────────────────
