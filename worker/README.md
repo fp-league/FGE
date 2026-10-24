@@ -221,6 +221,23 @@ Neither appears when nothing is running — the nav entry and the home-page
 strip stay hidden until race control opens a session, and the overlay draws
 nothing at all, so it's safe to leave in a scene permanently.
 
+**One-off setup**
+
+The Worker needs a table for this. Don't re-run `schema.sql` — it drops every
+table before rebuilding, which would throw away the votes. Run the migration:
+
+```bash
+npx wrangler d1 execute fge --remote --file=./migrations/001-race-control.sql
+npx wrangler deploy
+```
+
+Then check it took:
+
+```bash
+curl https://fge-api.<your-subdomain>.workers.dev/api/live
+# {"ok":true,"status":"idle","running":[],...}
+```
+
 **Running a race**
 
 1. In **RACE CONTROL**, pick the round and set lights out, then **Load
