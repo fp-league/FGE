@@ -3,89 +3,237 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FGE — Back shortly</title>
-    <meta name="description" content="Fortnite Global Endurance is being updated. Back shortly.">
-    <meta name="theme-color" content="#450A07">
-    <meta name="robots" content="noindex">
+    <title>FGE - Fortnite Global Endurance</title>
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="FGE">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="description" content="Fortnite Global Endurance — the premier GT3 and GT4 racing league. Live standings, results, calendar and driver profiles.">
 
+    <!-- Link previews (Discord, WhatsApp, Twitter, iMessage) -->
     <meta property="og:type" content="website">
     <meta property="og:site_name" content="FGE">
-    <meta property="og:title" content="FGE — Back shortly">
-    <meta property="og:description" content="Fortnite Global Endurance is being updated. Back shortly.">
+    <meta property="og:title" content="FGE — Fortnite Global Endurance">
+    <meta property="og:description" content="The premier GT3 and GT4 racing league. Live standings, results, calendar and driver profiles.">
     <meta property="og:url" content="https://fp-league.github.io/FGE/">
     <meta property="og:image" content="https://fp-league.github.io/FGE/og-image.jpg">
     <meta property="og:image:width" content="1200">
     <meta property="og:image:height" content="630">
-
+    <meta property="og:image:alt" content="FGE — Fortnite Global Endurance">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="FGE — Fortnite Global Endurance">
+    <meta name="twitter:description" content="The premier GT3 and GT4 racing league. Live standings, results, calendar and driver profiles.">
+    <meta name="twitter:image" content="https://fp-league.github.io/FGE/og-image.jpg">
+    <meta name="theme-color" content="#450A07" id="themeColorMeta">
+    <link rel="stylesheet" href="styles.css">
+    <link rel="manifest" href="manifest.json">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Titillium+Web:wght@400;600;700&display=swap" rel="stylesheet">
-<style>
-    :root { --red:#E10600; --bg:#450A07; --deep:#2A0604; }
-    *,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
-    body {
-        min-height:100vh; background:var(--bg); color:#f0f0f0;
-        font-family:'Titillium Web','Segoe UI',Arial,sans-serif;
-        display:flex; align-items:center; justify-content:center;
-        padding:1.5rem; text-align:center; overflow-x:hidden; position:relative;
-    }
-    body::before {
-        content:''; position:absolute; top:-30%; left:50%; transform:translateX(-50%);
-        width:140%; height:150%; pointer-events:none;
-        background:radial-gradient(ellipse at center, var(--red) 0%, transparent 62%);
-        opacity:0.20;
-    }
-    .wrap { position:relative; z-index:1; max-width:520px; }
-    .logo { width:min(62vw,300px); height:auto; display:block; margin:0 auto 1.8rem; }
-    .bar {
-        width:140px; height:3px; background:var(--red); border-radius:2px;
-        margin:0 auto 1.8rem; box-shadow:0 0 18px var(--red);
-        animation:pulse 1.8s ease-in-out infinite;
-    }
-    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.45} }
-    h1 {
-        font-size:clamp(1.3rem,5vw,1.9rem); font-weight:700; color:#fff;
-        letter-spacing:.04em; margin-bottom:.8rem;
-    }
-    p { color:#cbbaba; line-height:1.65; font-size:.95rem; margin-bottom:.6rem; }
-    .soon {
-        display:inline-block; margin-top:1.6rem; font-size:.7rem; font-weight:600;
-        letter-spacing:.18em; color:#ff8a7a; border:1px solid rgba(225,6,0,.45);
-        background:rgba(225,6,0,.12); border-radius:999px; padding:.5rem 1.1rem;
-    }
-    .foot { margin-top:2.2rem; font-size:.78rem; letter-spacing:.1em; }
-    .foot a { color:#cbbaba; text-decoration:none; border-bottom:1px solid rgba(255,255,255,.25); padding-bottom:2px; }
-    .foot a:hover { color:#fff; }
-</style>
+    <link href="https://fonts.googleapis.com/css2?family=Titillium+Web:wght@400;600;700;900&display=swap" rel="stylesheet">
 </head>
 <body>
-    <div class="wrap">
-        <img src="fge-logo.webp" alt="FGE — Fortnite Global Endurance" class="logo" width="841" height="309">
-        <div class="bar"></div>
-        <h1>We're making some upgrades</h1>
-        <p>FGE is down briefly while we roll out the new season update.</p>
-        <p>Standings, results and driver profiles will all be back shortly.</p>
-        <div class="soon">BACK IN A FEW MINUTES</div>
-        <div class="foot">
-            <a href="https://discord.gg/3MCku8pBjK" target="_blank" rel="noopener">JOIN US ON DISCORD</a>
+    <nav class="navbar">
+        <!-- Install banner -->
+        <div class="install-banner" id="installBanner" style="display:none;">
+            <div class="ib-left">
+                <span class="ib-icon">🏎️</span>
+                <div><strong>Install FGE</strong><span>Add to your home screen</span></div>
+            </div>
+            <div class="ib-btns">
+                <button onclick="installApp()" class="ib-yes">INSTALL</button>
+                <button onclick="dismissInstall()" class="ib-no">✕</button>
+            </div>
+        </div>
+        <!-- Notification banner -->
+        <div class="install-banner notif-banner" id="notifBanner" style="display:none;">
+            <div class="ib-left">
+                <span class="ib-icon">🔔</span>
+                <div><strong>Stay in the loop</strong><span>Get race results & news alerts</span></div>
+            </div>
+            <div class="ib-btns">
+                <button onclick="enableNotifs()" class="ib-yes">ENABLE</button>
+                <button onclick="dismissNotif()" class="ib-no">✕</button>
+            </div>
+        </div>
+
+        <div class="nav-container">
+            <a href="#" class="nav-logo" onclick="navigate('home');return false">
+                <img src="fge-logo-sm.webp" alt="FGE" class="logo-img" width="300" height="110">
+                <span class="logo-text">FORTNITE GLOBAL ENDURANCE</span>
+            </a>
+            <button class="nav-toggle" id="navToggle" aria-label="Menu"><span></span><span></span><span></span></button>
+        </div>
+    </nav>
+
+    <!-- Full-screen nav overlay -->
+    <div class="nav-overlay" id="navOverlay">
+        <div class="nav-overlay-line"></div>
+        <ul>
+            <li><a href="#" class="nav-link active" data-page="home"      onclick="navigate('home');closeNav();return false">HOME</a></li>
+            <li><a href="#" class="nav-link" data-page="standings"        onclick="navigate('standings');closeNav();return false">STANDINGS</a></li>
+            <li><a href="#" class="nav-link" data-page="results"          onclick="navigate('results');closeNav();return false">RESULTS</a></li>
+            <li><a href="#" class="nav-link" data-page="calendar"         onclick="navigate('calendar');closeNav();return false">CALENDAR</a></li>
+            <li><a href="#" class="nav-link" data-page="teams"            onclick="navigate('teams');closeNav();return false">TEAMS</a></li>
+            <li><a href="#" class="nav-link" data-page="drivers"          onclick="navigate('drivers');closeNav();return false">DRIVERS</a></li>
+            <li><a href="#" class="nav-link" data-page="fantasy"          onclick="navigate('fantasy');closeNav();return false">FIRE VS ICE</a></li>
+            <li><a href="#" class="nav-link" data-page="dotd"             onclick="navigate('dotd');closeNav();return false">DOTD</a></li>
+            <li><a href="manage.html" class="nav-link">ADMIN</a></li>
+        </ul>
+        <div class="nav-overlay-foot">
+            <a href="https://discord.gg/3MCku8pBjK" target="_blank" rel="noopener">DISCORD</a>
         </div>
     </div>
-<script>
-    // Don't let a cached worker keep serving the old site during the window,
-    // and auto-return visitors once the real site is back.
-    if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.getRegistrations()
-            .then(rs => rs.forEach(r => r.unregister())).catch(() => {});
-    }
-    if (window.caches) {
-        caches.keys().then(ks => ks.forEach(k => caches.delete(k))).catch(() => {});
-    }
-    setInterval(function () {
-        fetch('index.html?ping=' + Date.now(), { cache: 'no-store' })
-            .then(r => r.text())
-            .then(t => { if (t.indexOf('id="raceStrip"') !== -1) location.reload(); })
-            .catch(function () {});
-    }, 20000);
-</script>
+
+    <!-- Porsche intro -->
+    <div class="lights-out" id="lightsOut">
+        <div class="intro-track-line"></div>
+        <img src="porsche.webp" class="intro-car" width="1440" height="810" fetchpriority="high" id="introCar" alt="Porsche GT3">
+        <div class="intro-title">
+            <span class="intro-fge">FGE</span>
+            <span class="intro-sub">FORTNITE GLOBAL ENDURANCE</span>
+        </div>
+    </div>
+    <script>
+        // Failsafe: the intro overlay covers the whole screen and is only ever
+        // removed by JS. If app.js fails to load or throws, this guarantees the
+        // site is still usable. Runs independently of app.js.
+        setTimeout(function () {
+            var el = document.getElementById('lightsOut');
+            if (el && el.style.display !== 'none') {
+                el.classList.add('hidden');
+                el.style.display = 'none';
+            }
+        }, 4000);
+    </script>
+
+    <!-- CLASS SWITCHER -->
+    <div class="class-switcher" id="classSwitcher">
+        <button class="cs-btn active" id="csGT3" onclick="switchClass('GT3')" aria-label="Show GT3">
+            <img src="gt3-logo.webp" alt="GT3" class="cs-logo">
+            <span class="cs-sub">Tier 1</span>
+        </button>
+        <div class="cs-divider"></div>
+        <button class="cs-btn" id="csGT4" onclick="switchClass('GT4')" aria-label="Show GT4">
+            <img src="gt4-logo.webp" alt="GT4" class="cs-logo">
+            <span class="cs-sub">Tier 2</span>
+        </button>
+    </div>
+
+    <main class="container">
+        <!-- ══ HOME ══ -->
+        <section id="home" class="page active">
+            <div class="hero-section">
+                <img src="fge-logo.webp" alt="FGE — Fortnite Global Endurance" class="hero-logo-img" width="841" height="309">
+                <div class="hero-tagline">FORTNITE GLOBAL ENDURANCE</div>
+                <div class="hero-divider"></div>
+            </div>
+
+            <div class="section-head"><h2>NEXT RACE</h2>
+                <a href="#" data-page="calendar">FULL CALENDAR &rarr;</a>
+            </div>
+            <div class="race-strip" id="raceStrip"></div>
+            <div class="countdown-bar" id="countdownBar"></div>
+
+            <div class="section-head"><h2>LATEST NEWS</h2></div>
+            <section class="home-news" id="homeNews"></section>
+
+            <div class="section-head"><h2>CHAMPIONSHIP</h2>
+                <a href="#" data-page="standings">FULL STANDINGS &rarr;</a>
+            </div>
+            <div id="homeStandings"></div>
+        </section>
+
+        <!-- ══ STANDINGS ══ -->
+        <section id="standings" class="page">
+            <h1 class="cal-title">STANDINGS</h1>
+            <div class="standings-controls">
+                <button class="tab-btn active" data-tab="drivers">DRIVERS</button>
+                <button class="tab-btn" data-tab="teams">TEAMS</button>
+            </div>
+            <div id="standingsContent"></div>
+        </section>
+
+        <!-- ══ RESULTS ══ -->
+        <section id="results" class="page">
+            <h1 class="cal-title">RACE RESULTS</h1>
+            <p class="drivers-sub">Every completed round this season.</p>
+            <div id="resultsContent"></div>
+        </section>
+
+        <!-- ══ CALENDAR ══ -->
+        <section id="calendar" class="page">
+            <h1 class="cal-title">RACE CALENDAR</h1>
+            <p class="drivers-sub">The full schedule for this season.</p>
+            <div id="calendarContent"></div>
+        </section>
+
+        <!-- ══ TEAMS ══ -->
+        <section id="teams" class="page">
+            <h1 class="cal-title">FGE TEAMS</h1>
+            <p class="drivers-sub">The teams competing in this season's championship.</p>
+            <div id="teamsContent"></div>
+            <div class="drivers-banner" data-page="drivers">
+                <h2 data-page="drivers">FGE DRIVERS</h2>
+                <p data-page="drivers">Check out this season's line-up of drivers.</p>
+                <span class="db-btn" data-page="drivers">Find out more &rarr;</span>
+            </div>
+        </section>
+
+        <!-- ══ DRIVERS ══ -->
+        <section id="drivers" class="page">
+            <h1 class="cal-title">FGE DRIVERS</h1>
+            <p class="drivers-sub">The drivers competing this season. Tap any driver for their full profile.</p>
+            <div id="driversContent"></div>
+        </section>
+
+        <!-- ══ FIRE VS ICE ══ -->
+        <section id="fantasy" class="page">
+            <h1 class="cal-title">FIRE VS ICE</h1>
+            <p class="drivers-sub">GT3 and GT4 teams split across two sides. Every point they score counts for their faction.</p>
+            <div id="fantasyContent"></div>
+        </section>
+
+        <!-- ══ RACE ══ -->
+        <section id="race" class="page">
+            <div id="raceContent"></div>
+        </section>
+
+        <!-- ══ DRIVER OF THE DAY ══ -->
+        <section id="dotd" class="page">
+            <h1 class="cal-title">DRIVER OF THE DAY</h1>
+            <p class="drivers-sub">Vote for the standout performer from each race.</p>
+            <div id="dotdContent"></div>
+        </section>
+    </main>
+
+    <div id="modal" class="modal hidden">
+        <div class="modal-inner">
+            <button id="modalClose" class="modal-close">&times;</button>
+            <div id="modalContent"></div>
+        </div>
+    </div>
+
+    <footer class="footer">
+        <div class="footer-content">
+            <p>&copy; 2026 Fortnite Global Endurance. Elite GT Racing.</p>
+            <div class="footer-links"><a href="#">Rules</a><a href="#">Privacy</a><a href="#">Contact</a></div>
+        </div>
+    </footer>
+
+    <!-- iOS install banner -->
+    <div id="iosInstallBanner" style="display:none;position:fixed;bottom:0;left:0;right:0;z-index:9999;background:#0D1117;border-top:2px solid var(--accent);padding:1rem 1.5rem;align-items:center;justify-content:space-between;gap:1rem;">
+        <div style="display:flex;align-items:center;gap:0.8rem;">
+            <span style="font-size:1.5rem;">🏎️</span>
+            <div>
+                <div style="color:#fff;font-weight:700;font-size:0.9rem;font-family:var(--font-ui);letter-spacing:0.05em;">INSTALL FGE</div>
+                <div style="color:#999;font-size:0.8rem;">Tap <strong style="color:#fff;">Share</strong> ⬆️ then <strong style="color:#fff;">"Add to Home Screen"</strong></div>
+            </div>
+        </div>
+        <button onclick="dismissIosInstall()" style="background:transparent;color:#999;border:1px solid #333;padding:0.5rem 0.8rem;border-radius:6px;cursor:pointer;font-size:1rem;min-width:44px;min-height:44px;">✕</button>
+    </div>
+
+    <script src="app.js"></script>
 </body>
 </html>
