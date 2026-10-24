@@ -14,6 +14,8 @@
  *    never stored
  */
 
+import { verifyRequest, handleCommand } from './discord.js';
+
 const MAX_NAME = 24;
 const MAX_IDENT = 64;
 const MAX_ENTRIES_PER_VOTER = 3;   // stops one person farming fantasy sign-ups
@@ -391,6 +393,42 @@ export default {
         if (request.method === 'GET')  return await getFantasy(request, env);
         if (request.method === 'POST') return await postFantasy(request, env);
       }
+      // Discord posts slash commands here. The body must be read as text
+      // before parsing, because the signature covers the raw bytes.
+      if (pathname === '/discord/interactions' && request.method === 'POST') {
+        const raw = await request.text();
+        const ok = await verifyRequest(request, raw, env.DISCORD_PUBLIC_KEY);
+        if (!ok) return new Response('bad signature', { status: 401 });
+
+        let interaction;
+        try { interaction = JSON.parse(raw); }
+        catch { return new Response('bad body', { status: 400 }); }
+
+        // Discord pings the endpoint to validate it
+        if (interaction.type === 1) {
+          return new Response(JSON.stringify({ type: 1 }), {
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+
+        if (interaction.type === 2) {
+          let record;
+          try { record = await league(env); }
+          catch {
+            return new Response(JSON.stringify({
+              type: 4,
+              data: { content: "Couldn't reach the league data just now — try again in a moment." },
+            }), { headers: { 'Content-Type': 'application/json' } });
+          }
+          return new Response(JSON.stringify(handleCommand(interaction, record)), {
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+
+        return new Response(JSON.stringify({ type: 4, data: { content: 'Unsupported interaction.' } }),
+          { headers: { 'Content-Type': 'application/json' } });
+      }
+
       if (pathname === '/api/upload' && request.method === 'POST') {
         return await postUpload(request, env);
       }
@@ -402,6 +440,7 @@ export default {
           ok: true,
           now: Date.now(),
           images: imageStore(env) || 'none',
+          discord: Boolean(env.DISCORD_PUBLIC_KEY),
         }, null, request, env);
       }
       return bad('not found', request, env, 404);

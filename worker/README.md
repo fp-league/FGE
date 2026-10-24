@@ -127,6 +127,81 @@ curl https://fge-api.<your-subdomain>.workers.dev/api/health
 # {"ok":true,"now":...}
 ```
 
+## Discord bot
+
+Slash commands that read the same league record the website does, so the
+bot can never disagree with the site. It uses Discord's HTTP interactions,
+meaning Discord POSTs commands to this Worker — there is no gateway
+connection and nothing running 24/7.
+
+| Command | What it shows |
+|---------|---------------|
+| `/standings [type] [class]` | Drivers' or constructors' table with gaps |
+| `/results [round] [class]` | Classification with DNFs, fastest lap, DOTD and points |
+| `/calendar [class]` | Every round, marked completed / next / upcoming |
+| `/nextrace [class]` | Next race with a live countdown |
+| `/lineups [team] [class]` | Team lineups with numbers and points |
+| `/driver <name> [class]` | Points, position, wins, podiums, best finish, form |
+
+Every command defaults to GT3; add `class: GT4` for the other grid.
+
+### Setup
+
+**1. Create the application**
+
+Go to <https://discord.com/developers/applications> and hit *New Application*.
+
+From **General Information** copy the **Application ID** and the **Public Key**.
+From **Bot** press *Reset Token* and copy the token — it is shown once.
+
+**2. Give the Worker the public key**
+
+```bash
+npx wrangler secret put DISCORD_PUBLIC_KEY    # the Public Key, not the token
+npx wrangler deploy
+```
+
+The bot token is only needed to register commands from your own machine, so
+it never has to go near the Worker.
+
+**3. Point Discord at the Worker**
+
+Back in **General Information**, set **Interactions Endpoint URL** to:
+
+```
+https://fge-api.<your-subdomain>.workers.dev/discord/interactions
+```
+
+Discord immediately sends a test request and refuses the URL if the
+signature check fails, so saving successfully means it is wired up
+correctly.
+
+**4. Register the commands**
+
+```powershell
+$env:DISCORD_APP_ID="your application id"
+$env:DISCORD_TOKEN="your bot token"
+node register-commands.mjs YOUR_SERVER_ID
+```
+
+Passing your server id makes the commands appear instantly. Leave it off to
+register globally, which can take up to an hour.
+
+To find your server id: Discord Settings → Advanced → turn on Developer
+Mode, then right-click your server → *Copy Server ID*.
+
+**5. Invite the bot**
+
+**OAuth2 → URL Generator**, tick `bot` and `applications.commands`, then
+open the generated URL and add it to your server. The bot needs no
+permissions beyond posting, since it only replies to commands.
+
+### Checking it works
+
+`/api/health` reports `discord: true` once the public key is set. In
+Discord, type `/standings` — if the commands do not appear, they were
+registered globally and have not propagated yet, or the server id was wrong.
+
 ## Endpoints
 
 | Method | Path           | Purpose |
@@ -136,6 +211,7 @@ curl https://fge-api.<your-subdomain>.workers.dev/api/health
 | `GET`  | `/api/fantasy?class=gt3` | All entries, for scoring the leaderboard |
 | `POST` | `/api/fantasy`           | Submit/update picks. `{class, race, userId, userName, winner, fastest}` |
 | `GET`  | `/api/health`            | Liveness |
+| `POST` | `/discord/interactions`  | Discord slash commands (signature-verified) |
 
 `POST /api/dotd` returns `counted: false` if that person had already voted —
 the vote is not double-counted, and the response still carries the current
