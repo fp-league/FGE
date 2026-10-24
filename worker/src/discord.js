@@ -345,25 +345,52 @@ export async function verifyRequest(request, body, publicKey) {
 
 /* ── interaction router ──────────────────────────────────── */
 
-const opt = (interaction, name) => {
-  const o = ((interaction.data && interaction.data.options) || []).find(x => x.name === name);
+const SUBCOMMAND = 1;   // Discord option type for a subcommand
+
+/**
+ * Commands come in two shapes, both supported:
+ *   /standings type:teams class:GT4      — flat, GT3 unless class is given
+ *   /gt4 standings type:teams            — class baked into the command
+ */
+function route(interaction) {
+  const name = (interaction.data && interaction.data.name) || '';
+  const opts = (interaction.data && interaction.data.options) || [];
+
+  if (name === 'gt3' || name === 'gt4') {
+    const sub = opts.find(o => o.type === SUBCOMMAND) || opts[0];
+    return {
+      cls: name,
+      view: (sub && sub.name) || '',
+      options: (sub && sub.options) || [],
+    };
+  }
+
+  const cls = (opts.find(o => o.name === 'class') || {}).value;
+  return {
+    cls: String(cls || 'gt3').toLowerCase() === 'gt4' ? 'gt4' : 'gt3',
+    view: name,
+    options: opts,
+  };
+}
+
+const pick = (options, name) => {
+  const o = (options || []).find(x => x.name === name);
   return o ? o.value : undefined;
 };
 
 export function handleCommand(interaction, record) {
-  const name = (interaction.data && interaction.data.name) || '';
-  const cls = (opt(interaction, 'class') || 'gt3').toLowerCase() === 'gt4' ? 'gt4' : 'gt3';
+  const { cls, view, options } = route(interaction);
   const cd = (record && record[cls]) || {};
 
   let embed;
-  switch (name) {
-    case 'standings': embed = buildStandings(cd, cls, opt(interaction, 'type') || 'drivers'); break;
-    case 'results':   embed = buildResults(cd, cls, opt(interaction, 'round')); break;
+  switch (view) {
+    case 'standings': embed = buildStandings(cd, cls, pick(options, 'type') || 'drivers'); break;
+    case 'results':   embed = buildResults(cd, cls, pick(options, 'round')); break;
     case 'calendar':  embed = buildCalendar(cd, cls); break;
     case 'nextrace':  embed = buildNextRace(cd, cls); break;
-    case 'lineups':   embed = buildLineups(cd, cls, opt(interaction, 'team')); break;
-    case 'driver':    embed = buildDriver(cd, cls, opt(interaction, 'name')); break;
-    default:          embed = simple('Unknown command', `\`/${name}\` isn't something I know.`, GREY);
+    case 'lineups':   embed = buildLineups(cd, cls, pick(options, 'team')); break;
+    case 'driver':    embed = buildDriver(cd, cls, pick(options, 'name')); break;
+    default:          embed = simple('Unknown command', `\`${view || '?'}\` isn't something I know.`, GREY);
   }
 
   if (!embed.footer) embed.footer = { text: 'FGE' };

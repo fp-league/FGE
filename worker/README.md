@@ -145,6 +145,15 @@ connection and nothing running 24/7.
 
 Every command defaults to GT3; add `class: GT4` for the other grid.
 
+There are also class-prefixed versions so nobody has to pass `class:` every
+time — `/gt4 standings`, `/gt4 results round:8`, `/gt3 calendar` and so on.
+Same six views under each, with the class fixed by the command:
+
+```
+/gt3 standings | results | calendar | nextrace | lineups | driver
+/gt4 standings | results | calendar | nextrace | lineups | driver
+```
+
 ### Setup
 
 **1. Create the application**

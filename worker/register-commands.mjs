@@ -82,6 +82,30 @@ const commands = [
   },
 ];
 
+/* Class-prefixed variants: /gt3 standings, /gt4 results, ... so nobody has
+   to pass `class:` every time. Same views, class fixed by the command. */
+const TYPE_OPTION = {
+  name: 'type', description: 'Drivers or constructors (defaults to drivers)', type: 3, required: false,
+  choices: [{ name: 'Drivers', value: 'drivers' }, { name: 'Teams', value: 'teams' }],
+};
+
+const subcommands = [
+  { name: 'standings', description: 'Championship standings', type: 1, options: [TYPE_OPTION] },
+  { name: 'results',   description: 'Race classification',    type: 1,
+    options: [{ name: 'round', description: 'Round number (defaults to the latest race)', type: 4, required: false }] },
+  { name: 'calendar',  description: 'Full season calendar',   type: 1 },
+  { name: 'nextrace',  description: 'The next race and when it starts', type: 1 },
+  { name: 'lineups',   description: 'Team lineups',           type: 1,
+    options: [{ name: 'team', description: 'Show one team only', type: 3, required: false }] },
+  { name: 'driver',    description: 'A driver’s season so far', type: 1,
+    options: [{ name: 'name', description: 'Driver name', type: 3, required: true }] },
+];
+
+commands.push(
+  { name: 'gt3', description: 'GT3 — standings, results, calendar and lineups', options: subcommands },
+  { name: 'gt4', description: 'GT4 — standings, results, calendar and lineups', options: subcommands },
+);
+
 const url = GUILD
   ? `https://discord.com/api/v10/applications/${APP_ID}/guilds/${GUILD}/commands`
   : `https://discord.com/api/v10/applications/${APP_ID}/commands`;
@@ -100,5 +124,8 @@ if (!res.ok) {
 
 const out = await res.json();
 console.log(`Registered ${out.length} commands ${GUILD ? `to guild ${GUILD}` : 'globally'}:`);
-out.forEach(c => console.log('  /' + c.name));
+out.forEach(c => {
+  const subs = (c.options || []).filter(o => o.type === 1).map(o => o.name);
+  console.log('  /' + c.name + (subs.length ? ' → ' + subs.join(', ') : ''));
+});
 if (!GUILD) console.log('\nGlobal commands can take up to an hour to appear. Pass a guild id to see them straight away.');
