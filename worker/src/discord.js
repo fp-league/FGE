@@ -88,11 +88,14 @@ export function calcStandings(cd) {
 const classColour = cls => (cls === 'gt4' ? BLUE : RED);
 const classLabel  = cls => (cls === 'gt4' ? 'GT4' : 'GT3');
 
+const hasTime = s => Boolean(s) && !/^\d{4}-\d{2}-\d{2}$/.test(String(s).trim());
+
 function fmtDate(s) {
-  if (!s) return 'TBC';
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(s).trim());
-  const d = m ? new Date(+m[1], +m[2] - 1, +m[3]) : new Date(s);
-  if (isNaN(d.getTime())) return 'TBC';
+  const d = raceStart(s);
+  if (!d) return 'TBC';
+  // When a start time is known, hand Discord a timestamp so every reader
+  // sees it in their own timezone rather than ours.
+  if (hasTime(s)) return `<t:${Math.floor(d.getTime() / 1000)}:f>`;
   return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
@@ -212,7 +215,9 @@ export function buildCalendar(cd, cls) {
     const done = (r.results || []).length > 0;
     const isNext = next && r.round === next.round;
     const mark = done ? '✅' : isNext ? '🔴' : '⬜';
-    const when = r.date ? `<t:${Math.floor(raceStart(r.date).getTime() / 1000)}:d>` : 'TBC';
+    const when = r.date
+      ? `<t:${Math.floor(raceStart(r.date).getTime() / 1000)}:${hasTime(r.date) ? 'f' : 'd'}>`
+      : 'TBC';
     return `${mark} **R${r.round || '?'}** ${trim(r.name || '', 34)} — ${when}`;
   });
 

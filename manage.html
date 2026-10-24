@@ -219,6 +219,7 @@ textarea { resize:vertical; min-height:80px; }
 /* ── BACKUP / RESTORE ── */
 .bk-note { font-size:0.8rem; color:var(--grey); line-height:1.55; margin-bottom:0.9rem; }
 .bk-note strong { color:var(--off); }
+.fg-hint { font-family:var(--fu); font-size:0.62rem; letter-spacing:0.05em; color:var(--grey2); margin-top:0.2rem; display:block; }
 #restoreFile { padding:0.5rem; font-size:0.82rem; cursor:pointer; }
 .bk-preview { margin-top:1rem; border:1px solid var(--line2); border-left:3px solid var(--accent); border-radius:2px; padding:1rem; background:var(--surface2); }
 .bk-preview h4 { font-family:var(--fd); font-size:0.8rem; letter-spacing:0.1em; color:var(--white); margin-bottom:0.7rem; }
@@ -447,6 +448,7 @@ textarea { resize:vertical; min-height:80px; }
             <div class="form-group"><label class="fg-label">RACE NAME</label><input id="rName" placeholder="Monaco Grand Prix"></div>
             <div class="form-group"><label class="fg-label">TRACK</label><input id="rTrack" placeholder="Circuit de Monaco"></div>
             <div class="form-group"><label class="fg-label">DATE</label><input id="rDate" type="date"></div>
+            <div class="form-group"><label class="fg-label">START TIME</label><input id="rTime" type="time"><span class="fg-hint" id="rTzHint"></span></div>
             <div class="form-group"><label class="fg-label">DURATION (MINS)</label><input id="rMins" type="number" min="1" placeholder="60"></div>
           </div>
           <div class="form-actions">
@@ -971,7 +973,7 @@ function renderRacesTable() {
           <td style="font-family:var(--fd);color:var(--white)">${r.round||i+1}</td>
           <td style="color:var(--white);font-weight:500">${r.name||''}</td>
           <td style="color:var(--grey)">${r.track||''}</td>
-          <td style="color:var(--grey);white-space:nowrap">${r.date||''}</td>
+          <td style="color:var(--grey);white-space:nowrap">${raceWhen(r)}</td>
           <td style="color:var(--grey)">${raceLength(r)}</td>
           <td>${actionCell(`editRace(${i})`, `deleteRace(${i})`)}</td>
         </tr>`;
@@ -982,7 +984,8 @@ function openRaceForm() {
     editingIdx = null;
     document.getElementById('raceFormTitle').textContent = 'ADD RACE';
     document.getElementById('rRound').value = (d().races||[]).length + 1;
-    ['rName','rTrack','rMins'].forEach(id => document.getElementById(id).value='');
+    ['rName','rTrack','rMins','rTime'].forEach(id => document.getElementById(id).value='');
+    showTzHint();
     document.getElementById('rDate').value = '';
     document.getElementById('raceForm').style.display = 'block';
     document.getElementById('rName').focus();
@@ -995,27 +998,64 @@ function editRace(i) {
     document.getElementById('rRound').value = r.round||'';
     document.getElementById('rName').value  = r.name||'';
     document.getElementById('rTrack').value = r.track||'';
-    document.getElementById('rDate').value  = r.date||'';
+    const dt = splitRaceDate(r.date);
+    document.getElementById('rDate').value  = dt.date;
+    document.getElementById('rTime').value  = dt.time;
     document.getElementById('rMins').value  = r.minutes ?? r.laps ?? '';
+    showTzHint();
     document.getElementById('raceForm').style.display = 'block';
     document.getElementById('raceForm').scrollIntoView({behavior:'smooth', block:'start'});
 }
 
 function closeRaceForm() { document.getElementById('raceForm').style.display='none'; editingIdx=null; }
 
+/**
+ * A date with a time is stored as a full UTC ISO string, so everyone sees
+ * the same moment wherever they are. A date on its own stays YYYY-MM-DD
+ * and keeps meaning "some time that day".
+ */
+function buildRaceDate(dateStr, timeStr) {
+    if (!dateStr) return '';
+    if (!timeStr) return dateStr;
+    const [y, mo, da] = dateStr.split('-').map(Number);
+    const [hh, mi] = timeStr.split(':').map(Number);
+    const dt = new Date(y, (mo || 1) - 1, da || 1, hh || 0, mi || 0, 0, 0);
+    return isNaN(dt.getTime()) ? dateStr : dt.toISOString();
+}
+
+/** Split a stored value back into the two inputs, in local time. */
+function splitRaceDate(value) {
+    const v = String(value || '').trim();
+    if (!v) return { date: '', time: '' };
+    if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return { date: v, time: '' };
+    const dt = new Date(v);
+    if (isNaN(dt.getTime())) return { date: '', time: '' };
+    const p = n => String(n).padStart(2, '0');
+    return {
+        date: `${dt.getFullYear()}-${p(dt.getMonth() + 1)}-${p(dt.getDate())}`,
+        time: `${p(dt.getHours())}:${p(dt.getMinutes())}`,
+    };
+}
+
 function saveRace() {
-    const item = {
+    const fields = {
         round: parseInt(document.getElementById('rRound').value)||1,
         name:  document.getElementById('rName').value.trim(),
         track: document.getElementById('rTrack').value.trim(),
-        date:  document.getElementById('rDate').value,
+        date:  buildRaceDate(document.getElementById('rDate').value,
+                             document.getElementById('rTime').value),
         minutes: parseInt(document.getElementById('rMins').value)||0
     };
-    if (!item.name) { toast('Race name is required','err'); return; }
+    if (!fields.name) { toast('Race name is required','err'); return; }
     const c = adminClass.toLowerCase();
     if (!adminData[c].races) adminData[c].races = [];
-    if (editingIdx !== null) adminData[c].races[editingIdx] = item;
-    else adminData[c].races.push(item);
+    if (editingIdx !== null) {
+        // Merge, never replace: a race carries results, fastestLap and
+        // dotdWinner that this form knows nothing about.
+        adminData[c].races[editingIdx] = { ...adminData[c].races[editingIdx], ...fields };
+    } else {
+        adminData[c].races.push(fields);
+    }
     closeRaceForm();
     saveData(editingIdx !== null ? 'Race updated' : 'Race added');
     renderRacesTable();
@@ -1733,6 +1773,26 @@ function renderStorageMeter() {
 
 // Races are timed, not lap-counted. `laps` is read as a fallback so any
 // race entered before the switch still shows its length.
+/** Make it explicit that a time is entered in the admin's own timezone. */
+function showTzHint() {
+    const el = document.getElementById('rTzHint');
+    if (!el) return;
+    let tz = '';
+    try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch(e) {}
+    el.textContent = tz ? `Your time (${tz}) — shown to everyone in theirs` : 'Your local time';
+}
+
+/** Date, plus the time when one has been set. */
+function raceWhen(r) {
+    const v = String((r && r.date) || '').trim();
+    if (!v) return '—';
+    if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return v;
+    const dt = new Date(v);
+    if (isNaN(dt.getTime())) return v;
+    const p = n => String(n).padStart(2, '0');
+    return `${dt.getFullYear()}-${p(dt.getMonth()+1)}-${p(dt.getDate())} ${p(dt.getHours())}:${p(dt.getMinutes())}`;
+}
+
 function raceLength(r) {
     const m = (r && (r.minutes ?? r.laps)) || 0;
     if (!m) return '—';

@@ -125,10 +125,16 @@ function raceLength(r) {
     return rem ? `${h}h ${rem}m` : `${h}h`;
 }
 
+const hasTime = s => Boolean(s) && !/^\d{4}-\d{2}-\d{2}$/.test(String(s).trim());
+
 function fmtDate(str) {
     if (!str) return '';
-    const d = new Date(str);
-    return d.toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' });
+    const d = raceStart(str);
+    if (!d) return '';
+    const date = d.toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' });
+    // A stored time is a real moment, so show it in each viewer's own zone.
+    if (!hasTime(str)) return date;
+    return `${date}, ${d.toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit' })}`;
 }
 
 function ago(str) {
