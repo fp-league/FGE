@@ -54,6 +54,46 @@ function safeHex(v, fallback) {
     return fallback;
 }
 
+// ── DRIVER IDENTITY ──────────────────────────────────────
+// Results used to reference drivers by name alone, so renaming a driver
+// orphaned every result they had scored and two drivers sharing a name
+// silently merged. Drivers now carry a stable id; everything resolves by
+// id first and falls back to the name so existing data keeps working.
+
+function driverKey(drv) {
+    if (!drv) return '';
+    return drv.id || drv.name || '';
+}
+
+/** The driver record a result entry refers to. */
+function resolveDriver(res, driversArr) {
+    if (!res) return null;
+    const list = driversArr || cls().drivers || [];
+    if (typeof res === 'object' && res.driverId) {
+        const byId = list.find(x => x.id === res.driverId);
+        if (byId) return byId;
+    }
+    const name = (typeof res === 'string') ? res : res.driver;
+    if (!name) return null;
+    // Unknown driver (deleted, or a typo in old data): keep showing the name
+    return list.find(x => x.name === name) || { name };
+}
+
+const resultKey  = (res, arr) => driverKey(resolveDriver(res, arr));
+const resultName = (res, arr) => {
+    const d = resolveDriver(res, arr);
+    if (d && d.name) return d.name;
+    return (typeof res === 'string') ? res : ((res && res.driver) || '');
+};
+
+/** Match a stored fastestLap/dotdWinner (a name, or an id) to a driver key. */
+function nameOrIdKey(v, driversArr) {
+    if (!v) return '';
+    const list = driversArr || cls().drivers || [];
+    const hit = list.find(x => x.id === v) || list.find(x => x.name === v);
+    return hit ? driverKey(hit) : String(v);
+}
+
 function colourFor(name, teamsArr) {
     if (!name) return autoColor('');
     const arr = teamsArr || cls().teams || [];
@@ -142,7 +182,7 @@ function calcStandings(races, drivers, teams, cfg) {
             // { driver, time }. The old guard required .driver, which a
             // string never has, so legacy results silently scored nothing.
             if (!res) return;
-            const p = (typeof res === 'string') ? res : res.driver;
+            const p = resultKey(res, drivers);
             if (!p) return;
             const pos = (typeof res === 'object' && res.pos != null) ? res.pos : (i + 1);
             if (String(pos).toUpperCase() === 'DNF') return;
@@ -150,12 +190,12 @@ function calcStandings(races, drivers, teams, cfg) {
             if (!pts[p]) pts[p] = 0;
             pts[p] += earn;
             // fastest lap bonus
-            if (r.fastestLap && r.fastestLap === p) pts[p] += scoring.fastestLap;
+            if (r.fastestLap && nameOrIdKey(r.fastestLap, drivers) === p) pts[p] += scoring.fastestLap;
         });
         // DOTD bonus
-        if (r.dotdWinner) {
-            if (!pts[r.dotdWinner]) pts[r.dotdWinner] = 0;
-            pts[r.dotdWinner] += scoring.dotd;
+        if (r.dotdWinner && scoring.dotd) {
+            const dk = nameOrIdKey(r.dotdWinner, drivers);
+            if (dk) { if (!pts[dk]) pts[dk] = 0; pts[dk] += scoring.dotd; }
         }
     });
     // Team standings
@@ -163,20 +203,21 @@ function calcStandings(races, drivers, teams, cfg) {
         const tc = d.team;
         if (!tc) return;
         if (!tpts[tc]) tpts[tc] = 0;
-        tpts[tc] += pts[d.name] || 0;
+        tpts[tc] += pts[driverKey(d)] || 0;
     });
     return { pts, tpts };
 }
 
-function formGuide(driverName, races) {
+function formGuide(driver, races, driversArr) {
+    // Accepts a driver record or, for older call sites, a bare name.
+    const target = (driver && typeof driver === 'object')
+        ? driverKey(driver)
+        : nameOrIdKey(driver, driversArr);
     const results = [];
     const racesCopy = [...races].reverse();
     racesCopy.forEach(r => {
         if (!r.results) return;
-        const idx = r.results.findIndex(res => {
-            if (typeof res === 'string') return res === driverName;
-            return res.driver === driverName;
-        });
+        const idx = r.results.findIndex(res => resultKey(res, driversArr) === target);
         if (idx === -1) return;
         const res = r.results[idx];
         const pos = typeof res === 'object' ? (res.pos != null ? res.pos : idx + 1) : idx + 1;
@@ -308,6 +349,7 @@ function renderCurrentPage() {
         case 'teams':      renderTeams(); break;
         case 'drivers':    renderDrivers(); break;
         case 'fantasy':    renderFantasy(); break;
+        case 'race':       renderRace(); break;
         case 'dotd':       renderDOTD(); break;
     }
 }
@@ -426,11 +468,11 @@ function renderHomeStandings(d) {
     const el = document.getElementById('homeStandings');
     if (!el) return;
     const { pts } = calcStandings(d.races||[], d.drivers||[], d.teams||[]);
-    const sorted = [...(d.drivers||[])].sort((a,b) => (pts[b.name]||0) - (pts[a.name]||0)).slice(0,5);
+    const sorted = [...(d.drivers||[])].sort((a,b) => (pts[driverKey(b)]||0) - (pts[driverKey(a)]||0)).slice(0,5);
     if (!sorted.length) { el.innerHTML = '<p style="color:var(--muted)">No standings yet.</p>'; return; }
     el.innerHTML = sorted.map((drv, i) => {
         const col = colourFor(drv.team, d.teams);
-        const p = pts[drv.name] || 0;
+        const p = pts[driverKey(drv)] || 0;
         return `<div style="display:flex;align-items:center;gap:0.8rem;padding:0.6rem 0;border-bottom:1px solid var(--line);cursor:pointer" onclick="navigate('drivers',{driverFocusId:'${drv.id||drv.name}'})">
           <span style="font-family:var(--font-display);font-size:0.9rem;color:var(--muted);width:22px">${i+1}</span>
           <span class="team-dot" style="background:${col}"></span>
@@ -441,6 +483,102 @@ function renderHomeStandings(d) {
 }
 
 // ── STANDINGS PAGE ───────────────────────────────────────
+
+// ── POINTS PROGRESSION CHART ─────────────────────────────
+// Inline SVG so there's no charting library to load. Shows cumulative
+// points per driver across the rounds that have results, top N only -
+// a full grid of lines is unreadable.
+
+function pointsProgression(d, topN) {
+    const cfg = pointsCfg(d);
+    const scored = (d.races||[])
+        .filter(r => (r.results||[]).length)
+        .slice()
+        .sort((a,b) => (a.round||0) - (b.round||0));
+    if (!scored.length) return null;
+
+    const totals = {};
+    const series = {};
+    (d.drivers||[]).forEach(dr => { totals[driverKey(dr)] = 0; series[driverKey(dr)] = [0]; });
+
+    scored.forEach(race => {
+        const flKey   = nameOrIdKey(race.fastestLap, d.drivers);
+        const dotdKey = nameOrIdKey(race.dotdWinner, d.drivers);
+        (race.results||[]).forEach((res, i) => {
+            const key = resultKey(res, d.drivers);
+            if (!key || !(key in totals)) return;
+            const pos = (typeof res === 'object' && res.pos != null) ? res.pos : i + 1;
+            if (String(pos).toUpperCase() === 'DNF') return;
+            let earn = cfg.table[Number(pos) - 1] || 0;
+            if (flKey && key === flKey) earn += cfg.fastestLap;
+            if (dotdKey && key === dotdKey) earn += cfg.dotd;
+            totals[key] += earn;
+        });
+        Object.keys(series).forEach(k => series[k].push(totals[k]));
+    });
+
+    const ranked = (d.drivers||[])
+        .map(dr => ({ drv: dr, key: driverKey(dr), pts: totals[driverKey(dr)] || 0 }))
+        .sort((a,b) => b.pts - a.pts)
+        .filter(x => x.pts > 0)
+        .slice(0, topN || 8);
+
+    if (!ranked.length) return null;
+    return { rounds: scored, series, ranked, max: Math.max(...ranked.map(r => r.pts), 1) };
+}
+
+function renderProgressionChart(d) {
+    const data = pointsProgression(d, 8);
+    if (!data) return '';
+    const { rounds, series, ranked, max } = data;
+
+    const W = 760, H = 300, PL = 38, PR = 12, PT = 14, PB = 30;
+    const iw = W - PL - PR, ih = H - PT - PB;
+    const n = rounds.length;                 // number of scored rounds
+    const x = i => PL + (n === 0 ? iw/2 : (iw * i) / n);
+    const y = v => PT + ih - (ih * v) / max;
+
+    // horizontal gridlines at nice intervals
+    const step = Math.max(1, Math.ceil(max / 4 / 10) * 10);
+    const grid = [];
+    for (let v = 0; v <= max; v += step) {
+        grid.push(`<line x1="${PL}" y1="${y(v).toFixed(1)}" x2="${W-PR}" y2="${y(v).toFixed(1)}" class="pc-grid"/>
+                   <text x="${PL-7}" y="${(y(v)+3.5).toFixed(1)}" class="pc-axis" text-anchor="end">${v}</text>`);
+    }
+
+    const xlabels = rounds.map((r, i) =>
+        `<text x="${x(i+1).toFixed(1)}" y="${H-10}" class="pc-axis" text-anchor="middle">R${r.round || i+1}</text>`
+    ).join('');
+
+    const lines = ranked.map(({ drv, key }) => {
+        const col = colourFor(drv.team, d.teams);
+        const pts = (series[key] || []).map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
+        const last = (series[key] || [])[n] || 0;
+        return `<polyline points="${pts}" class="pc-line" style="stroke:${col}"/>
+                <circle cx="${x(n).toFixed(1)}" cy="${y(last).toFixed(1)}" r="3.5" style="fill:${col}"/>`;
+    }).join('');
+
+    const legend = ranked.map(({ drv, key }) => {
+        const col = colourFor(drv.team, d.teams);
+        return `<button class="pc-key" onclick="navigate('drivers',{driverFocusId:'${esc(key)}'})">
+            <span class="team-dot" style="background:${col}"></span>${esc(drv.name)}
+            <b>${series[key][n] || 0}</b>
+          </button>`;
+    }).join('');
+
+    return `
+      <div class="section-head"><h2>POINTS PROGRESSION</h2></div>
+      <div class="pc-wrap">
+        <svg viewBox="0 0 ${W} ${H}" class="pc-svg" preserveAspectRatio="xMidYMid meet"
+             role="img" aria-label="Cumulative championship points by round">
+          ${grid.join('')}
+          ${xlabels}
+          ${lines}
+        </svg>
+        <div class="pc-legend">${legend}</div>
+      </div>`;
+}
+
 function renderStandings() {
     const d = cls();
     const { pts, tpts } = calcStandings(d.races||[], d.drivers||[], d.teams||[]);
@@ -448,7 +586,7 @@ function renderStandings() {
     if (!el) return;
 
     if (standingsTab === 'drivers') {
-        const sorted = [...(d.drivers||[])].sort((a,b) => (pts[b.name]||0) - (pts[a.name]||0));
+        const sorted = [...(d.drivers||[])].sort((a,b) => (pts[driverKey(b)]||0) - (pts[driverKey(a)]||0));
         if (!sorted.length) { el.innerHTML = '<p style="color:var(--muted);padding:2rem">No driver data yet.</p>'; return; }
         const leader = pts[sorted[0]?.name] || 0;
         el.innerHTML = `
@@ -460,9 +598,9 @@ function renderStandings() {
               <tbody>
                 ${sorted.map((drv, i) => {
                     const col = colourFor(drv.team, d.teams);
-                    const p = pts[drv.name] || 0;
+                    const p = pts[driverKey(drv)] || 0;
                     const gap = i === 0 ? '' : `-${leader - p}`;
-                    const guide = formGuide(drv.name, d.races||[]);
+                    const guide = formGuide(drv, d.races||[], d.drivers);
                     return `<tr onclick="navigate('drivers',{driverFocusId:'${drv.id||drv.name}'})">
                       <td class="pos">${i+1}</td>
                       <td class="driver"><div class="std-driver"><span class="team-dot" style="background:${col}"></span>${drv.name}</div></td>
@@ -474,7 +612,7 @@ function renderStandings() {
                 }).join('')}
               </tbody>
             </table>
-          </div>`;
+          </div>` + renderProgressionChart(d);
     } else {
         const sorted = [...(d.teams||[])].sort((a,b) => (tpts[b.name]||0) - (tpts[a.name]||0));
         if (!sorted.length) { el.innerHTML = '<p style="color:var(--muted);padding:2rem">No team data yet.</p>'; return; }
@@ -505,8 +643,8 @@ function renderResults() {
     if (!races.length) { el.innerHTML = '<p style="color:var(--muted);padding:2rem">No results yet.</p>'; return; }
     el.innerHTML = races.map((race, idx) => {
         const topRes = race.results.slice(0,3).map((res, i) => {
-            const drvName = typeof res === 'string' ? res : res.driver;
-            const col = colourFor(d.drivers?.find(x=>x.name===drvName)?.team, d.teams);
+            const drvName = resultName(res, d.drivers);
+            const col = colourFor(resolveDriver(res, d.drivers)?.team, d.teams);
             const pos = typeof res === 'object' && res.pos ? res.pos : i+1;
             return `<div class="cp-row"><span class="cp-pos">${ordinal(pos)}</span><span class="team-dot" style="background:${col}"></span><span class="cp-name">${drvName}</span></div>`;
         }).join('');
@@ -527,42 +665,98 @@ function renderResults() {
     }).join('');
 }
 
-function openRaceModal(idx) {
+// Races now get a full page rather than a cramped modal.
+function openRaceModal(idx) { navigate('race', { raceFocusIdx: idx }); }
+
+function renderRace() {
+    const el = document.getElementById('raceContent');
+    if (!el) return;
     const d = cls();
-    const race = d.races?.[idx];
-    if (!race) return;
-    const m = document.getElementById('modal');
-    const mc = document.getElementById('modalContent');
-    if (!m || !mc) return;
-    const rows = (race.results||[]).map((res, i) => {
-        const drvName = typeof res === 'string' ? res : res.driver;
-        const pos = typeof res === 'object' && res.pos ? res.pos : i+1;
-        const time = typeof res === 'object' ? (res.time || '') : '';
-        const col = colourFor(d.drivers?.find(x=>x.name===drvName)?.team, d.teams);
-        const isDnf = String(pos).toUpperCase() === 'DNF';
-        return `<tr${isDnf ? ' class="rt-dnf"' : ''}>
-          <td class="rt-pos${isDnf ? ' dnf' : ''}">${pos}</td>
-          <td class="rt-winner">${esc(drvName)}</td>
-          <td class="rt-team"><span class="team-dot" style="background:${col}"></span>${d.drivers?.find(x=>x.name===drvName)?.team||'—'}</td>
-          <td class="rt-time">${time}</td>
-        </tr>`;
+    const idx = raceFocusIdx;
+    const race = (d.races||[])[idx];
+    if (!race) {
+        el.innerHTML = `<p class="dp-empty" style="padding:2rem">Race not found.</p>
+          <button class="btn btn-secondary" onclick="navigate('results')">&larr; ALL RESULTS</button>`;
+        return;
+    }
+
+    const results = race.results || [];
+    const finished = results.filter(r => String((typeof r==='object'&&r.pos)||'').toUpperCase() !== 'DNF');
+    const flKey   = nameOrIdKey(race.fastestLap, d.drivers);
+    const dotdKey = nameOrIdKey(race.dotdWinner, d.drivers);
+    const cfg = pointsCfg(d);
+
+    const podium = results.slice(0, 3).map((res, i) => {
+        const who = resolveDriver(res, d.drivers);
+        const col = colourFor(who?.team, d.teams);
+        const place = ['gold','silver','bronze'][i];
+        return `<div class="rp-step ${place}" style="--tc:${col}">
+            <div class="rp-place">${ordinal(i+1)}</div>
+            <div class="rp-driver">${esc(resultName(res, d.drivers))}</div>
+            <div class="rp-team"><span class="team-dot" style="background:${col}"></span>${esc(who?.team||'—')}</div>
+          </div>`;
     }).join('');
-    mc.innerHTML = `
-      <button class="modal-close" onclick="closeModal()">✕</button>
-      <div class="modal-race-head">
-        <span style="font-family:var(--font-display);font-size:0.7rem;color:var(--accent2);letter-spacing:0.12em">ROUND ${race.round||'?'}</span>
-        <div class="modal-race-num">${race.name||'Race'}</div>
-        <div style="color:var(--muted);font-size:0.82rem;font-family:var(--font-ui)">${fmtDate(race.date)} · ${race.track||''}</div>
+
+    const rows = results.map((res, i) => {
+        const who  = resolveDriver(res, d.drivers);
+        const key  = resultKey(res, d.drivers);
+        const col  = colourFor(who?.team, d.teams);
+        const pos  = (typeof res === 'object' && res.pos != null) ? res.pos : i + 1;
+        const dnf  = String(pos).toUpperCase() === 'DNF';
+        const time = (typeof res === 'object' ? res.time : '') || '';
+        let earned = dnf ? 0 : (cfg.table[Number(pos)-1] || 0);
+        if (!dnf && flKey && key === flKey) earned += cfg.fastestLap;
+        if (!dnf && dotdKey && key === dotdKey) earned += cfg.dotd;
+        const medal = pos === 1 ? 'gold' : pos === 2 ? 'silver' : pos === 3 ? 'bronze' : '';
+        return `<tr class="${dnf?'rt-dnf':''}" onclick="navigate('drivers',{driverFocusId:'${esc(key)}'})">
+            <td class="rp-pos ${medal} ${dnf?'dnf':''}">${dnf ? 'DNF' : pos}</td>
+            <td class="rp-name">
+              ${esc(resultName(res, d.drivers))}
+              ${flKey && key===flKey ? '<span class="rp-badge fl" title="Fastest lap">FL</span>' : ''}
+              ${dotdKey && key===dotdKey ? '<span class="rp-badge dotd" title="Driver of the Day">DOTD</span>' : ''}
+            </td>
+            <td class="rp-teamcell"><span class="team-dot" style="background:${col}"></span>${esc(who?.team||'—')}</td>
+            <td class="rp-time">${esc(time) || '—'}</td>
+            <td class="rp-pts">${earned || '—'}</td>
+          </tr>`;
+    }).join('');
+
+    const flName   = flKey   ? (d.drivers||[]).find(x=>driverKey(x)===flKey)?.name   || race.fastestLap : '';
+    const dotdName = dotdKey ? (d.drivers||[]).find(x=>driverKey(x)===dotdKey)?.name || race.dotdWinner : '';
+
+    el.innerHTML = `
+      <button class="btn btn-secondary dp-back" onclick="navigate('results')">&larr; ALL RESULTS</button>
+
+      <div class="rp-head">
+        <span class="rp-round">ROUND ${race.round || '?'}</span>
+        <h1 class="rp-title">${esc(race.name || 'Race')}</h1>
+        <div class="rp-meta">
+          ${race.track ? `<span>📍 ${esc(race.track)}</span>` : ''}
+          ${race.date ? `<span>${fmtDate(race.date)}</span>` : ''}
+          ${raceLength(race) ? `<span>${raceLength(race)}</span>` : ''}
+          <span>${finished.length} classified${results.length-finished.length ? ` · ${results.length-finished.length} DNF` : ''}</span>
+        </div>
       </div>
-      ${race.fastestLap ? `<div style="margin:0.5rem 0;font-size:0.82rem;color:var(--accent2);font-family:var(--font-ui)">⚡ Fastest Lap: ${race.fastestLap}</div>` : ''}
-      <div class="table-container" style="margin-top:1rem">
-        <table class="results-table">
-          <thead><tr><th>POS</th><th>DRIVER</th><th>TEAM</th><th>TIME</th></tr></thead>
+
+      ${results.length ? `
+      <div class="rp-podium">${podium}</div>
+
+      ${(flName || dotdName) ? `<div class="rp-awards">
+        ${flName ? `<div class="rp-award fl"><span>⚡ FASTEST LAP</span><b>${esc(flName)}</b></div>` : ''}
+        ${dotdName ? `<div class="rp-award dotd"><span>⭐ DRIVER OF THE DAY</span><b>${esc(dotdName)}</b></div>` : ''}
+      </div>` : ''}
+
+      <div class="section-head"><h2>CLASSIFICATION</h2></div>
+      <div class="table-container">
+        <table class="rp-table">
+          <thead><tr><th>POS</th><th>DRIVER</th><th class="rp-hide">TEAM</th><th class="rp-hide">TIME</th><th>PTS</th></tr></thead>
           <tbody>${rows}</tbody>
         </table>
-      </div>`;
-    m.classList.remove('hidden');
+      </div>`
+      : `<p class="dp-empty" style="padding:2rem 0">No results have been entered for this race yet.</p>`}
+    `;
 }
+
 
 // ── CALENDAR PAGE ────────────────────────────────────────
 function renderCalendar() {
@@ -577,8 +771,8 @@ function renderCalendar() {
         const isPast = race.date && new Date(race.date) < now;
         const { pts } = calcStandings(races, d.drivers||[], d.teams||[]);
         const podium = isPast ? (race.results||[]).slice(0,3).map((res,i) => {
-            const n = typeof res === 'string' ? res : res.driver;
-            const col = colourFor(d.drivers?.find(x=>x.name===n)?.team, d.teams);
+            const n = resultName(res, d.drivers);
+            const col = colourFor(resolveDriver(res, d.drivers)?.team, d.teams);
             return `<div class="cp-row"><span class="cp-pos">${ordinal(i+1)}</span><span class="team-dot" style="background:${col}"></span><span class="cp-name">${n}</span></div>`;
         }).join('') : '';
         return `
@@ -662,7 +856,7 @@ function renderDrivers() {
     const { pts } = calcStandings(d.races||[], d.drivers||[], d.teams||[]);
     if (!d.drivers?.length) { el.innerHTML = '<p style="color:var(--muted);padding:2rem">No drivers registered yet.</p>'; return; }
     // Ranked by points so the grid reads as a championship order
-    const ranked = [...d.drivers].sort((a,b) => (pts[b.name]||0) - (pts[a.name]||0));
+    const ranked = [...d.drivers].sort((a,b) => (pts[driverKey(b)]||0) - (pts[driverKey(a)]||0));
     el.innerHTML = `<div class="f1-drivers-grid">` + ranked.map((drv, i) => {
         const col = colourFor(drv.team, d.teams);
         const [r,g,b] = [parseInt(col.slice(1,3),16),parseInt(col.slice(3,5),16),parseInt(col.slice(5,7),16)];
@@ -689,7 +883,7 @@ function renderDrivers() {
             </div>
             <div class="fdc-foot">
               <span class="fdc-nat">${esc(drv.nationality||'—')}</span>
-              <span class="fdc-pts">${pts[drv.name]||0}<small>PTS</small></span>
+              <span class="fdc-pts">${pts[driverKey(drv)]||0}<small>PTS</small></span>
             </div>
           </div>`;
     }).join('') + '</div>';
@@ -697,15 +891,18 @@ function renderDrivers() {
 
 function renderDriverProfile(id) {
     const d = cls();
-    const drv = d.drivers?.find(x => (x.id||x.name) === id) || d.drivers?.[0];
+    const drv = d.drivers?.find(x => x.id === id)
+             || d.drivers?.find(x => x.name === id)
+             || d.drivers?.[0];
     if (!drv) return;
     const el = document.getElementById('driversContent');
     const { pts } = calcStandings(d.races||[], d.drivers||[], d.teams||[]);
     const col = colourFor(drv.team, d.teams);
-    const guide = formGuide(drv.name, d.races||[]);
-    const races = (d.races||[]).filter(r=>r.results?.some(res=>(typeof res==='string'?res:res.driver)===drv.name));
-    const wins = races.filter(r=>{const res=r.results?.[0];return (typeof res==='string'?res:res.driver)===drv.name;}).length;
-    const pods = races.filter(r=>r.results?.slice(0,3).some(res=>(typeof res==='string'?res:res.driver)===drv.name)).length;
+    const guide = formGuide(drv, d.races||[], d.drivers);
+    const key = driverKey(drv);
+    const races = (d.races||[]).filter(r=>r.results?.some(res=>resultKey(res, d.drivers)===key));
+    const wins = races.filter(r=>resultKey(r.results?.[0], d.drivers)===key).length;
+    const pods = races.filter(r=>r.results?.slice(0,3).some(res=>resultKey(res, d.drivers)===key)).length;
     const [r,g,b] = [parseInt(col.slice(1,3),16),parseInt(col.slice(3,5),16),parseInt(col.slice(5,7),16)];
     const names = (drv.name||'').trim().split(/\s+/);
     const first = names.slice(0,-1).join(' ');
@@ -713,10 +910,10 @@ function renderDriverProfile(id) {
     const initials = ((first[0]||'') + (last[0]||'')).toUpperCase();
 
     // Championship position among all drivers
-    const order = [...(d.drivers||[])].sort((a,b) => (pts[b.name]||0) - (pts[a.name]||0));
-    const position = order.findIndex(x => (x.id||x.name) === (drv.id||drv.name)) + 1;
+    const order = [...(d.drivers||[])].sort((a,b) => (pts[driverKey(b)]||0) - (pts[driverKey(a)]||0));
+    const position = order.findIndex(x => driverKey(x) === key) + 1;
     const best = races.reduce((acc, rc) => {
-        const i = (rc.results||[]).findIndex(res => (typeof res==='string'?res:res.driver) === drv.name);
+        const i = (rc.results||[]).findIndex(res => resultKey(res, d.drivers) === key);
         return i >= 0 && (acc === null || i < acc) ? i : acc;
     }, null);
 
@@ -746,7 +943,7 @@ function renderDriverProfile(id) {
         </div>
 
         <div class="dp-stats">
-          <div class="dp-stat hero"><label>POINTS</label><strong>${pts[drv.name]||0}</strong></div>
+          <div class="dp-stat hero"><label>POINTS</label><strong>${pts[driverKey(drv)]||0}</strong></div>
           <div class="dp-stat"><label>WINS</label><strong>${wins}</strong></div>
           <div class="dp-stat"><label>PODIUMS</label><strong>${pods}</strong></div>
           <div class="dp-stat"><label>STARTS</label><strong>${races.length}</strong></div>
@@ -772,7 +969,7 @@ function renderDriverProfile(id) {
           <h3>RACE BY RACE</h3>
           <div class="dp-results">
             ${races.slice().reverse().map(rc => {
-                const i = (rc.results||[]).findIndex(res => (typeof res==='string'?res:res.driver) === drv.name);
+                const i = (rc.results||[]).findIndex(res => resultKey(res, d.drivers) === key);
                 const p = i + 1;
                 const medal = p===1 ? 'gold' : p===2 ? 'silver' : p===3 ? 'bronze' : '';
                 return `<div class="dp-rrow">

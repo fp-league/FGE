@@ -558,6 +558,40 @@ function checkLogin() {
 }
 
 // ── DATA ──────────────────────────────────────────────────
+// Drivers carry a stable id so renaming one doesn't orphan their results.
+function newId() {
+    if (crypto.randomUUID) return 'd_' + crypto.randomUUID().slice(0, 12);
+    return 'd_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+}
+
+/** Give any driver without an id one, and stamp existing results with it. */
+function backfillDriverIds() {
+    let changed = false;
+    ['gt3','gt4'].forEach(c => {
+        const cd = adminData && adminData[c];
+        if (!cd) return;
+        (cd.drivers||[]).forEach(dr => {
+            if (!dr.id) { dr.id = newId(); changed = true; }
+        });
+        const byName = {};
+        (cd.drivers||[]).forEach(dr => { byName[dr.name] = dr.id; });
+        (cd.races||[]).forEach(r => {
+            if (!Array.isArray(r.results)) return;
+            r.results = r.results.map(res => {
+                if (typeof res === 'string') {
+                    changed = true;
+                    return { driver: res, driverId: byName[res] || '', time: '' };
+                }
+                if (res && !res.driverId && byName[res.driver]) {
+                    res.driverId = byName[res.driver]; changed = true;
+                }
+                return res;
+            });
+        });
+    });
+    return changed;
+}
+
 function emptyClass() { return { drivers:[], teams:[], races:[], news:[], fantasy:{}, archive:{}, seasonName:'Season 1' }; }
 function d() { return adminData?.[adminClass.toLowerCase()] || emptyClass(); }
 
@@ -570,6 +604,8 @@ async function loadData() {
         if (!adminData.gt3) adminData.gt3 = emptyClass();
         if (!adminData.gt4) adminData.gt4 = emptyClass();
         setStatus('green','Synced');
+        // Older records have no driver ids; add them so renames are safe.
+        if (backfillDriverIds()) saveData('Driver ids added');
         renderStorageMeter();
         refreshSec();
     } catch(e) { setStatus('red','Error loading'); }
@@ -796,7 +832,9 @@ function editDriver(i) {
 function closeDriverForm() { document.getElementById('driverForm').style.display='none'; editingIdx=null; }
 
 function saveDriver() {
+    const prev = (editingIdx !== null) ? (d().drivers||[])[editingIdx] : null;
     const item = {
+        id:          (prev && prev.id) || newId(),
         name:        document.getElementById('dName').value.trim(),
         number:      document.getElementById('dNumber').value,
         nationality: document.getElementById('dNat').value.trim(),
@@ -969,6 +1007,18 @@ function populateResultsSelect() {
     loadResultsForm();
 }
 
+/** The <option> value that matches a stored result (id preferred). */
+function resSelectValue(res, drivers) {
+    if (!res) return '';
+    if (typeof res === 'string') {
+        const hit = (drivers||[]).find(x => x.name === res);
+        return hit ? (hit.id || hit.name) : res;
+    }
+    if (res.driverId) return res.driverId;
+    const hit = (drivers||[]).find(x => x.name === res.driver);
+    return hit ? (hit.id || hit.name) : (res.driver || '');
+}
+
 function loadResultsForm() {
     const idx = parseInt(document.getElementById('resultsRaceSelect').value);
     const race = d().races?.[idx];
@@ -979,11 +1029,11 @@ function loadResultsForm() {
 
     // Build rows (at least 10, or as many as existing results)
     const rowCount = Math.max(existing.length || drivers.length, 10);
-    const driverOpts = drivers.map(dr => `<option value="${dr.name}">${dr.name}</option>`).join('');
+    const driverOpts = drivers.map(dr => `<option value="${dr.id||dr.name}">${dr.name}</option>`).join('');
 
     const rows = Array.from({length: rowCount}, (_,i) => {
         const res = existing[i];
-        const sel  = typeof res === 'object' ? res.driver : (res||'');
+        const sel  = resSelectValue(res, drivers);
         const time = typeof res === 'object' ? res.time : '';
         const dnf  = typeof res === 'object' &&
                      String(res.pos||'').toUpperCase() === 'DNF';
@@ -997,7 +1047,8 @@ function loadResultsForm() {
 
     // Fastest lap select
     const flVal = race.fastestLap||'';
-    const flOpts = `<option value="">— None —</option>` + drivers.map(dr => `<option value="${dr.name}" ${dr.name===flVal?'selected':''}>${dr.name}</option>`).join('');
+    const flKey = flVal ? ((drivers.find(x=>x.id===flVal)||drivers.find(x=>x.name===flVal)||{}).id || flVal) : '';
+    const flOpts = `<option value="">— None —</option>` + drivers.map(dr => `<option value="${dr.id||dr.name}" ${(dr.id||dr.name)===flKey?'selected':''}>${dr.name}</option>`).join('');
 
     wrap.innerHTML = `
       <div class="form-card">
@@ -1015,9 +1066,8 @@ function loadResultsForm() {
     rowEls.forEach((row, i) => {
         const res = existing[i];
         if (!res) return;
-        const val = typeof res === 'object' ? res.driver : res;
         const s = row.querySelector('select');
-        if (s) s.value = val;
+        if (s) s.value = resSelectValue(res, d().drivers||[]);
     });
     renumberRows();
 }
@@ -1073,14 +1123,18 @@ function saveResults(idx) {
     // inferred from array index and a mid-field DNF would silently promote
     // everyone below it by one place.
     let p = 0;
+    const roster = d().drivers || [];
     const results = rows.map(row => {
-        const driver = row.querySelector('select').value;
-        const time   = row.querySelector('input').value.trim();
-        const dnf    = row.dataset.dnf === '1';
-        if (!driver) return null;
-        if (dnf) return { driver, time, pos: 'DNF' };
+        const val  = row.querySelector('select').value;
+        const time = row.querySelector('input').value.trim();
+        const dnf  = row.dataset.dnf === '1';
+        if (!val) return null;
+        const who = roster.find(x => x.id === val) || roster.find(x => x.name === val);
+        // Store the id for identity and the name for readability
+        const base = { driver: who ? who.name : val, driverId: who ? who.id : '', time };
+        if (dnf) return { ...base, pos: 'DNF' };
         p += 1;
-        return { driver, time, pos: p };
+        return { ...base, pos: p };
     }).filter(Boolean);
     const fl = document.getElementById('flDriver').value;
     const c = adminClass.toLowerCase();
