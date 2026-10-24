@@ -7,6 +7,8 @@ const BIN_ID      = '6ada83fdac6210605a4a3a74';
 // key must never appear in this file — it was here unused and is now gone.
 const ACCESS_KEY  = '$2a$10$G0A4V5Q7TOSTCAm/D4oskenfMyJjU.5SXbAVK5kdCNIkmelTS/.be';
 const BIN_URL     = `https://api.jsonbin.io/v3/b/${BIN_ID}`;
+// Worker that holds the state a static site can't: race control / live timing.
+const API_BASE    = 'https://fge-api.benjaminjameswestley.workers.dev';
 
 // ── STATE ────────────────────────────────────────────────
 let rawData       = null;           // full JSONBin record { gt3:{…}, gt4:{…} }
@@ -20,6 +22,12 @@ let raceFocusIdx  = null;
 // User identity (DOTD / Fantasy / Predictions)
 let userId = localStorage.getItem('fge_userId') || null;
 let userName = localStorage.getItem('fge_userName') || null;
+
+// Live timing, pushed from race control in the admin panel
+let liveState     = { status: 'idle', running: [] };
+let liveSkew      = 0;      // server clock minus ours, so clocks agree
+let livePollTimer = null;
+let liveSig       = null;   // so the tower only repaints when it changes
 
 // ── HELPERS: DATA ───────────────────────────────────────
 function cls() { return rawData?.[currentClass.toLowerCase()] || emptyClass(); }
@@ -356,6 +364,7 @@ function renderCurrentPage() {
         case 'drivers':    renderDrivers(); break;
         case 'fantasy':    renderFantasy(); break;
         case 'race':       renderRace(); break;
+        case 'live':       renderLive(); break;
         case 'dotd':       renderDOTD(); break;
     }
 }
@@ -363,6 +372,7 @@ function renderCurrentPage() {
 // ── HOME PAGE ────────────────────────────────────────────
 function renderHome() {
     const d = cls();
+    renderLiveBanner();
     renderRaceStrip(d);
     renderCountdown(d);
     renderHomeNews(d);
@@ -1253,6 +1263,192 @@ function voteDOTD(name, key) {
     renderDOTD();
 }
 
+// ── LIVE TIMING ───────────────────────────────────────────
+// Race control (admin) pushes the session to the Worker; this reads it back.
+// The nav entry and the home banner only appear while a session is open, so
+// the page is invisible the rest of the season.
+
+const LIVE_LABELS = {
+    formation: 'FORMATION LAP',
+    green:     'GREEN FLAG',
+    sc:        'SAFETY CAR',
+    vsc:       'VIRTUAL SAFETY CAR',
+    red:       'RED FLAG',
+    chequered: 'CHEQUERED FLAG',
+    finished:  'RACE FINISHED',
+};
+
+function liveNow() { return Date.now() + liveSkew; }
+
+function liveIsOn() {
+    return Boolean(liveState && liveState.status && liveState.status !== 'idle');
+}
+
+/** Hide the nav entry unless a session is actually running. */
+function syncLiveNav() {
+    const link = document.querySelector('.nav-link[data-page="live"]');
+    if (!link) return;
+    const li = link.closest('li') || link;
+    li.style.display = liveIsOn() ? '' : 'none';
+}
+
+function liveClock(ms) {
+    if (ms == null || isNaN(ms)) return '';
+    const neg = ms < 0;
+    const t = Math.floor(Math.abs(ms) / 1000);
+    const h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), s = t % 60;
+    const p = n => String(n).padStart(2, '0');
+    return (neg ? '-' : '') + (h ? `${h}:${p(m)}:${p(s)}` : `${p(m)}:${p(s)}`);
+}
+
+/** Time left in the race, or the full duration before lights out. */
+function liveRaceClock() {
+    const s = liveState;
+    if (!s.durationMin || !s.lightsOut) return '';
+    if (liveNow() < s.lightsOut) return liveClock(s.durationMin * 60000);
+    return liveClock(Math.max(0, s.lightsOut + s.durationMin * 60000 - liveNow()));
+}
+
+/** A strip on the home page that doubles as the way in to the live page. */
+function renderLiveBanner() {
+    const el = document.getElementById('liveBanner');
+    if (!el) return;
+    if (!liveIsOn()) { el.innerHTML = ''; return; }
+    const s = liveState;
+    const label = LIVE_LABELS[s.status] || '';
+    el.innerHTML = `
+      <div class="lv-banner lv-${esc(s.status)}" data-page="live">
+        <span class="lv-dot" data-page="live"></span>
+        <span class="lv-bl" data-page="live">LIVE NOW</span>
+        <span class="lv-bn" data-page="live">${esc(s.raceName || 'Race in progress')}</span>
+        <span class="lv-bs" data-page="live">${esc(label)}</span>
+        <span class="lv-bgo" data-page="live">WATCH TIMING &rarr;</span>
+      </div>`;
+}
+
+function renderLive() {
+    const el = document.getElementById('liveContent');
+    if (!el) return;
+
+    // The clock ticks every second. Rewriting the whole page that often made
+    // the tower flicker and killed text selection, so everything except the
+    // clock is rebuilt only when the session state has actually changed.
+    const sig = liveIsOn()
+        ? JSON.stringify([liveState.status, liveState.round, liveState.raceName,
+                          liveState.track, liveState.message, liveState.running])
+        : 'idle';
+    if (sig === liveSig) { updateLiveClock(); return; }
+    liveSig = sig;
+
+    if (!liveIsOn()) {
+        el.innerHTML = `
+          <div class="news-empty">
+            <div class="news-empty-icon">🏁</div>
+            <p>No session running right now.</p>
+            <p class="lv-note">This page comes alive on race day, the moment race
+               control opens the session.</p>
+          </div>`;
+        return;
+    }
+
+    const s     = liveState;
+    const label = LIVE_LABELS[s.status] || '';
+    const pre   = Boolean(s.lightsOut) && liveNow() < s.lightsOut;
+    const rows  = Array.isArray(s.running) ? s.running : [];
+
+    let pos = 0;
+    const tower = rows.map(r => {
+        if (!r.out) pos++;
+        const cls = r.out ? 'out' : (pos <= 3 ? 'p' + pos : '');
+        const num = String(r.number || '').trim();
+        return `
+          <div class="lv-row ${cls}">
+            <span class="lv-pos">${r.out ? 'OUT' : pos}</span>
+            <span class="lv-bar" style="background:${esc(safeHex(r.colour, '#888888'))}"></span>
+            <span class="lv-num">${num ? '#' + esc(num) : ''}</span>
+            <span class="lv-name">${esc(r.name || '')}</span>
+            <span class="lv-team">${esc(r.team || '')}</span>
+            <span class="lv-gap">${esc(r.gap || '')}</span>
+          </div>`;
+    }).join('');
+
+    const head = `
+      <div class="lv-head lv-${esc(s.status)}">
+        <div class="lv-hl">
+          <span class="lv-dot"></span>
+          <span class="lv-round">ROUND ${esc(String(s.round ?? '?'))}</span>
+          <span class="lv-race">${esc(s.raceName || '')}</span>
+          ${s.track ? `<span class="lv-track">📍 ${esc(s.track)}</span>` : ''}
+        </div>
+        <div class="lv-hr">
+          ${label ? `<span class="lv-flag">${esc(label)}</span>` : ''}
+          ${pre
+            ? `<span class="lv-clock">LIGHTS OUT IN ${liveClock(s.lightsOut - liveNow())}</span>`
+            : (liveRaceClock() ? `<span class="lv-clock">${liveRaceClock()}</span>` : '')}
+        </div>
+      </div>`;
+
+    const msg = (s.message || '').trim()
+        ? `<div class="lv-msg"><span>RACE CONTROL</span>${esc(s.message.trim())}</div>`
+        : '';
+
+    el.innerHTML = head + msg + (rows.length
+        ? `<div class="lv-tower">
+             <div class="lv-row lv-thead">
+               <span class="lv-pos">POS</span><span class="lv-bar"></span>
+               <span class="lv-num">NO</span><span class="lv-name">DRIVER</span>
+               <span class="lv-team">TEAM</span><span class="lv-gap">GAP</span>
+             </div>
+             ${tower}
+           </div>`
+        : `<p class="lv-note">Race control hasn't published a running order yet.</p>`);
+}
+
+/** The one bit that really does change every second. */
+function updateLiveClock() {
+    const el = document.querySelector('#liveContent .lv-clock');
+    if (!el) return;
+    const s = liveState;
+    const pre = Boolean(s.lightsOut) && liveNow() < s.lightsOut;
+    el.textContent = pre
+        ? `LIGHTS OUT IN ${liveClock(s.lightsOut - liveNow())}`
+        : liveRaceClock();
+}
+
+/** Repaints the live clocks without touching the rest of the page. */
+function tickLive() {
+    if (!liveIsOn()) return;
+    if (currentPage === 'live') renderLive();
+}
+
+async function pollLive() {
+    const wasOn = liveIsOn();
+    try {
+        const r = await fetch(`${API_BASE}/api/live`, { cache: 'no-store' });
+        const body = await r.json();
+        if (body && body.ok) {
+            if (body.now) liveSkew = body.now - Date.now();
+            liveState = body;
+        }
+    } catch (e) {
+        // Keep the last good state rather than blanking a live page.
+    }
+
+    try {
+        syncLiveNav();
+        renderLiveBanner();
+        if (currentPage === 'live') renderLive();
+        // Someone sitting on the live page when the session ends shouldn't be
+        // stranded on a page that has just left the nav.
+        if (wasOn && !liveIsOn() && currentPage === 'live') navigate('home');
+    } catch (e) { console.error('live render failed', e); }
+
+    // Hard while a session is open, barely at all otherwise — a tab left
+    // open for days would otherwise eat the Worker's request budget.
+    clearTimeout(livePollTimer);
+    livePollTimer = setTimeout(pollLive, liveIsOn() ? 3000 : 60000);
+}
+
 // ── MODAL ─────────────────────────────────────────────────
 function closeModal() {
     document.getElementById('modal')?.classList.add('hidden');
@@ -1315,6 +1511,7 @@ function dismissInstall() {
 // ── COUNTDOWN TICK ────────────────────────────────────────
 function startCountdownTick() {
     setInterval(() => {
+        try { tickLive(); } catch(e) {}
         if (currentPage !== 'home') return;
         // Re-render through renderCountdown so the tick and the initial paint
         // can never drift apart in markup or race selection.
@@ -1371,17 +1568,22 @@ async function init() {
         }
     } catch(e) {}
 
-    // Check PWA already installed
-    if (window.matchMedia('(display-mode: standalone)').matches) {
-        const b = document.getElementById('installBanner');
-        if (b) b.style.display = 'none';
-    }
+    // Check PWA already installed. Guarded: everything below depends on init
+    // getting this far, and this is the sort of line that throws in an
+    // embedded or stripped-down webview.
+    try {
+        if (window.matchMedia?.('(display-mode: standalone)')?.matches) {
+            const b = document.getElementById('installBanner');
+            if (b) b.style.display = 'none';
+        }
+    } catch(e) {}
 
     // A failed fetch must not stop the page from rendering
     try { await fetchData(); } catch(e) { console.error('fetchData failed', e); }
     try { syncFviNav(); } catch(e) {}
     try { navigate('home'); } catch(e) { console.error('navigate failed', e); }
     try { startCountdownTick(); } catch(e) {}
+    try { pollLive(); } catch(e) {}
 
     // Register service worker
     if ('serviceWorker' in navigator) {

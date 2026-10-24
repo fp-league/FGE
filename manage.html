@@ -162,6 +162,50 @@ textarea { resize:vertical; min-height:80px; }
 .side-badge.none { color:var(--grey2); }
 
 
+
+/* ── RACE CONTROL ── */
+.rc-live { font-family:var(--fd); font-size:0.72rem; letter-spacing:0.12em; padding:0.25rem 0.7rem; border-radius:999px; border:1px solid var(--line2); color:var(--grey2); }
+.rc-live.formation { background:rgba(255,179,0,0.18); color:#ffd27d; border-color:rgba(255,179,0,0.5); }
+.rc-live.green     { background:rgba(76,175,80,0.2);  color:#9fdfa2; border-color:rgba(76,175,80,0.55); }
+.rc-live.sc        { background:rgba(255,193,7,0.22); color:#ffd84a; border-color:rgba(255,193,7,0.6); }
+.rc-live.vsc       { background:rgba(255,235,59,0.18); color:#fff176; border-color:rgba(255,235,59,0.5); }
+.rc-live.red       { background:rgba(229,57,53,0.25); color:#ff9d9d; border-color:rgba(229,57,53,0.65); animation:rcPulse 1s infinite; }
+.rc-live.chequered, .rc-live.finished { background:rgba(255,255,255,0.14); color:#fff; border-color:rgba(255,255,255,0.4); }
+@keyframes rcPulse { 0%,100%{opacity:1} 50%{opacity:.5} }
+
+.rc-flags { display:grid; grid-template-columns:repeat(auto-fit,minmax(118px,1fr)); gap:0.5rem; }
+.rc-btn {
+  border:1px solid var(--line2); background:var(--page-deep); color:var(--grey);
+  font-family:var(--fd); font-size:0.78rem; letter-spacing:0.08em;
+  padding:0.85rem 0.4rem; border-radius:3px; cursor:pointer; transition:all 0.15s;
+}
+.rc-btn:hover { color:var(--white); border-color:var(--line-strong); }
+.rc-btn.formation.active { background:#B58100; color:#fff; border-color:#B58100; }
+.rc-btn.green.active     { background:#2e7d32; color:#fff; border-color:#2e7d32; }
+.rc-btn.sc.active        { background:#F9A825; color:#111; border-color:#F9A825; }
+.rc-btn.vsc.active       { background:#FDD835; color:#111; border-color:#FDD835; }
+.rc-btn.red.active       { background:#c62828; color:#fff; border-color:#c62828; animation:rcPulse 1s infinite; }
+.rc-btn.chequered.active { background:#fff; color:#111; border-color:#fff; }
+
+.rc-msg-row { display:flex; gap:0.5rem; align-items:center; }
+.rc-msg-row input { flex:1; }
+
+.rc-order { display:flex; flex-direction:column; gap:3px; margin-bottom:1rem; max-height:480px; overflow-y:auto; }
+.rc-row {
+  display:grid; grid-template-columns:42px 12px 1fr 78px 30px 30px 44px;
+  gap:0.5rem; align-items:center; padding:0.4rem 0.6rem;
+  background:var(--surface2); border:1px solid var(--line); border-radius:2px; cursor:grab;
+}
+.rc-row.is-out { opacity:0.45; }
+.rc-pos { font-family:var(--fd); font-size:0.95rem; color:var(--white); text-align:center; }
+.rc-row.is-out .rc-pos { font-size:0.62rem; color:#ef9a9a; }
+.rc-dot { width:10px; height:10px; border-radius:50%; }
+.rc-name { color:var(--white); font-size:0.88rem; font-weight:600; }
+.rc-gap { padding:0.25rem 0.4rem; font-size:0.78rem; text-align:center; }
+.rc-mini { background:transparent; border:1px solid var(--line2); color:var(--grey); border-radius:2px; cursor:pointer; padding:0.25rem 0; font-size:0.7rem; }
+.rc-mini:hover { color:var(--white); border-color:var(--white); }
+.rc-mini.out { font-family:var(--fu); font-size:0.6rem; letter-spacing:0.06em; }
+
 /* ── DRIVER THUMBS + DISCORD SYNC ── */
 .drv-thumb { width:30px; height:30px; border-radius:50%; object-fit:cover; display:block; border:1px solid var(--line2); background:var(--page-deep); }
 .drv-thumb.empty { opacity:0.35; }
@@ -274,6 +318,7 @@ textarea { resize:vertical; min-height:80px; }
       <button class="snav-item"       onclick="showSec('races')"><span class="snav-icon">🗓</span>Races</button>
       <button class="snav-item"       onclick="showSec('results')"><span class="snav-icon">🏁</span>Results</button>
       <button class="snav-item"       onclick="showSec('dotd')"><span class="snav-icon">⭐</span>DOTD</button>
+      <button class="snav-item"       onclick="showSec('control')"><span class="snav-icon">🏁</span>Race Control</button>
       <button class="snav-item"       onclick="showSec('season')"><span class="snav-icon">⚙️</span>Season</button>
     </aside>
 
@@ -490,6 +535,64 @@ textarea { resize:vertical; min-height:80px; }
         </div>
         <div id="dotdCurrent" style="color:var(--grey);font-size:0.82rem;margin-bottom:1rem;font-family:var(--fu);letter-spacing:0.04em"></div>
         <button class="btn btn-white" onclick="saveDOTD()">SAVE DOTD</button>
+      </div>
+
+      <!-- RACE CONTROL -->
+      <div class="adm-section" id="sec-control">
+        <div class="sec-head">
+          <h2>RACE CONTROL</h2>
+          <span class="rc-live" id="rcLive">OFFLINE</span>
+        </div>
+
+        <div class="form-card">
+          <h3>SESSION</h3>
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="fg-label">RACE</label>
+              <select id="rcRace"></select>
+            </div>
+            <div class="form-group">
+              <label class="fg-label">LIGHTS OUT</label>
+              <input id="rcLightsOut" type="datetime-local">
+              <span class="fg-hint">Leave blank and press GREEN when you're ready</span>
+            </div>
+          </div>
+          <div class="form-actions">
+            <button class="btn btn-white" onclick="rcLoadSession()">LOAD SESSION</button>
+            <button class="btn btn-ghost" onclick="rcEnd()">END SESSION</button>
+          </div>
+        </div>
+
+        <div class="form-card">
+          <h3>FLAGS</h3>
+          <div class="rc-flags">
+            <button class="rc-btn formation" onclick="rcStatus('formation')">FORMATION</button>
+            <button class="rc-btn green"     onclick="rcStatus('green')">GREEN</button>
+            <button class="rc-btn sc"        onclick="rcStatus('sc')">SAFETY CAR</button>
+            <button class="rc-btn vsc"       onclick="rcStatus('vsc')">VSC</button>
+            <button class="rc-btn red"       onclick="rcStatus('red')">RED FLAG</button>
+            <button class="rc-btn chequered" onclick="rcStatus('chequered')">CHEQUERED</button>
+          </div>
+          <div class="form-group" style="margin-top:1rem">
+            <label class="fg-label">RACE CONTROL MESSAGE</label>
+            <div class="rc-msg-row">
+              <input id="rcMessage" placeholder="Track limits — car 12, 5s penalty" onkeydown="if(event.key==='Enter')rcSendMessage()">
+              <button class="btn btn-white btn-sm" onclick="rcSendMessage()">SEND</button>
+              <button class="btn btn-ghost btn-sm" onclick="rcClearMessage()">CLEAR</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-card">
+          <h3>RUNNING ORDER</h3>
+          <p class="bk-note">Drag a driver, or use the arrows. Changes go live immediately.
+             Mark a retirement with OUT.</p>
+          <div id="rcOrder" class="rc-order"></div>
+          <div class="form-actions">
+            <button class="btn btn-ghost btn-sm" onclick="rcResetOrder()">RESET TO ENTRY LIST</button>
+            <span class="img-size" id="rcSaveState"></span>
+          </div>
+        </div>
       </div>
 
       <!-- SEASON -->
@@ -726,6 +829,7 @@ function refreshSec() {
         case 'races':   renderRacesTable(); break;
         case 'results': populateResultsSelect(); break;
         case 'dotd':    populateDotdSelects(); break;
+        case 'control': rcPopulateRaces(); rcRefresh(); break;
         case 'season':  document.getElementById('seasonName').value = d().seasonName||'Season 1'; renderFviPanel(); renderPointsEditor(); renderStorageMeter(); break;
     }
 }
@@ -1399,6 +1503,197 @@ function esc(v) {
     return String(v == null ? '' : v)
         .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
         .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+
+// ── RACE CONTROL ──────────────────────────────────────────
+// Writes the live session to the Worker, which the public live-timing
+// page and the OBS overlay both read. Every change is pushed immediately;
+// there is no "save" because during a race you want it instant.
+
+let rcState = { status:'idle', running:[] };
+let rcPushTimer = null;
+
+const rcApi = (path, opts) => fetch(`${API_BASE.replace(/\/+$/,'')}${path}`, {
+    ...opts,
+    headers: { 'Content-Type':'application/json',
+               ...(ADMIN_TOKEN ? {'X-Admin-Token': ADMIN_TOKEN} : {}),
+               ...((opts && opts.headers) || {}) },
+});
+
+async function rcPush(patch, quiet) {
+    if (!API_BASE) { toast('Worker URL not configured','err'); return; }
+    const el = document.getElementById('rcSaveState');
+    if (el && !quiet) el.textContent = 'sending…';
+    try {
+        const res = await rcApi('/api/live', { method:'POST', body: JSON.stringify(patch) });
+        const body = await res.json();
+        if (!res.ok || !body.ok) throw new Error(body.error || `HTTP ${res.status}`);
+        rcState = body;
+        rcRenderState();
+        if (el) el.textContent = 'live · ' + new Date().toLocaleTimeString();
+    } catch (e) {
+        if (el) el.textContent = '';
+        toast('Race control: ' + (e.message || 'failed'), 'err');
+    }
+}
+
+function rcPopulateRaces() {
+    const sel = document.getElementById('rcRace');
+    if (!sel) return;
+    const races = d().races || [];
+    sel.innerHTML = races.length
+        ? races.map((r,i) => `<option value="${i}">R${r.round||i+1} — ${esc(r.name||'')}</option>`).join('')
+        : '<option value="">No races in this class</option>';
+}
+
+function rcLoadSession() {
+    const idx = parseInt(document.getElementById('rcRace').value);
+    const race = (d().races || [])[idx];
+    if (!race) { toast('Pick a race first','err'); return; }
+
+    const lo = document.getElementById('rcLightsOut').value;
+    const entry = (d().drivers || []).map(drv => ({
+        driverId: drv.id || drv.name,
+        name: drv.name,
+        team: drv.team || '',
+        colour: teamColour(drv.team),
+        number: String(drv.number ?? ''),
+        gap: '',
+        out: false,
+    }));
+
+    rcPush({
+        class: adminClass.toLowerCase(),
+        round: race.round || idx + 1,
+        raceName: race.name || '',
+        track: race.track || '',
+        durationMin: race.minutes ?? race.laps ?? 0,
+        lightsOut: lo ? new Date(lo).getTime() : null,
+        status: 'formation',
+        message: '',
+        running: entry,
+    });
+    toast('Session loaded — ' + entry.length + ' drivers', 'ok');
+}
+
+function teamColour(name) {
+    const t = (d().teams || []).find(x => x.name === name);
+    const v = t && t.color;
+    return /^#[0-9a-f]{6}$/i.test(v || '') ? v : '#888888';
+}
+
+const rcStatus       = st => rcPush({ status: st });
+const rcSendMessage  = () => rcPush({ message: document.getElementById('rcMessage').value.trim() });
+const rcClearMessage = () => { document.getElementById('rcMessage').value = ''; rcPush({ message: '' }); };
+
+async function rcEnd() {
+    if (!API_BASE) return;
+    try {
+        const res = await rcApi('/api/live/reset', { method:'POST' });
+        rcState = await res.json();
+        rcRenderState();
+        toast('Session ended','ok');
+    } catch (e) { toast('Could not end session','err'); }
+}
+
+function rcResetOrder() {
+    rcState.running = (d().drivers || []).map(drv => ({
+        driverId: drv.id || drv.name, name: drv.name, team: drv.team || '',
+        colour: teamColour(drv.team), number: String(drv.number ?? ''), gap:'', out:false,
+    }));
+    rcRenderOrder();
+    rcQueuePush();
+}
+
+/** Reordering fires fast, so coalesce pushes into one per 400ms. */
+function rcQueuePush() {
+    clearTimeout(rcPushTimer);
+    rcPushTimer = setTimeout(() => rcPush({ running: rcState.running }, true), 400);
+}
+
+function rcMove(i, delta) {
+    const list = rcState.running;
+    const j = i + delta;
+    if (j < 0 || j >= list.length) return;
+    [list[i], list[j]] = [list[j], list[i]];
+    rcRenderOrder();
+    rcQueuePush();
+}
+
+function rcToggleOut(i) {
+    rcState.running[i].out = !rcState.running[i].out;
+    rcRenderOrder();
+    rcQueuePush();
+}
+
+function rcSetGap(i, v) {
+    rcState.running[i].gap = String(v || '').slice(0, 16);
+    rcQueuePush();
+}
+
+function rcRenderOrder() {
+    const box = document.getElementById('rcOrder');
+    if (!box) return;
+    const list = rcState.running || [];
+    if (!list.length) { box.innerHTML = '<p class="bk-note">No session loaded.</p>'; return; }
+    let pos = 0;
+    box.innerHTML = list.map((r, i) => {
+        if (!r.out) pos++;
+        return `<div class="rc-row${r.out ? ' is-out' : ''}" draggable="true"
+                     ondragstart="rcDragStart(event,${i})" ondragover="event.preventDefault()"
+                     ondrop="rcDrop(event,${i})">
+            <span class="rc-pos">${r.out ? 'OUT' : pos}</span>
+            <span class="rc-dot" style="background:${esc(r.colour || '#888')}"></span>
+            <span class="rc-name">${esc(r.name)}</span>
+            <input class="rc-gap" value="${esc(r.gap || '')}" placeholder="+0.0"
+                   oninput="rcSetGap(${i}, this.value)">
+            <button class="rc-mini" onclick="rcMove(${i},-1)" title="Up">▲</button>
+            <button class="rc-mini" onclick="rcMove(${i},1)" title="Down">▼</button>
+            <button class="rc-mini out" onclick="rcToggleOut(${i})" title="Retire">OUT</button>
+          </div>`;
+    }).join('');
+}
+
+let rcDragIdx = null;
+function rcDragStart(e, i) { rcDragIdx = i; e.dataTransfer.effectAllowed = 'move'; }
+function rcDrop(e, i) {
+    e.preventDefault();
+    if (rcDragIdx == null || rcDragIdx === i) return;
+    const list = rcState.running;
+    const [moved] = list.splice(rcDragIdx, 1);
+    list.splice(i, 0, moved);
+    rcDragIdx = null;
+    rcRenderOrder();
+    rcQueuePush();
+}
+
+function rcRenderState() {
+    const live = document.getElementById('rcLive');
+    if (live) {
+        const st = rcState.status || 'idle';
+        live.textContent = st === 'idle' ? 'OFFLINE' : st.toUpperCase();
+        live.className = 'rc-live ' + st;
+    }
+    document.querySelectorAll('.rc-btn').forEach(b => {
+        b.classList.toggle('active', b.classList.contains(rcState.status));
+    });
+    if (document.getElementById('rcMessage') && document.activeElement?.id !== 'rcMessage') {
+        document.getElementById('rcMessage').value = rcState.message || '';
+    }
+}
+
+async function rcRefresh() {
+    if (!API_BASE) return;
+    try {
+        const res = await fetch(`${API_BASE.replace(/\/+$/,'')}/api/live`);
+        const body = await res.json();
+        if (body && body.ok) {
+            rcState = body;
+            rcRenderState();
+            rcRenderOrder();
+        }
+    } catch (e) {}
 }
 
 // ── DISCORD AVATAR SYNC ───────────────────────────────────

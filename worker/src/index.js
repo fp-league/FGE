@@ -376,6 +376,113 @@ async function getImage(request, env, pathname) {
   return res;
 }
 
+/* ── live race control ───────────────────────────────────── */
+
+const LIVE_STATUSES = ['idle','formation','green','sc','vsc','red','chequered','finished'];
+
+/** GET /api/live — public. The overlay and the site both read this. */
+async function getLive(request, env) {
+  let row;
+  try {
+    row = await env.DB.prepare(
+      `SELECT class, round, race_name, track, status, message,
+              lights_out, duration_min, running, updated_at
+         FROM race_control WHERE id = 'live'`
+    ).first();
+  } catch {
+    return bad('race control is not set up on this Worker yet', request, env, 503);
+  }
+  if (!row) return json({ ok: true, status: 'idle', running: [] }, null, request, env);
+
+  let running = [];
+  try { running = JSON.parse(row.running || '[]'); } catch {}
+
+  return json({
+    ok: true,
+    status: row.status || 'idle',
+    class: row.class || null,
+    round: row.round ?? null,
+    raceName: row.race_name || null,
+    track: row.track || null,
+    message: row.message || '',
+    lightsOut: row.lights_out || null,
+    durationMin: row.duration_min || null,
+    running,
+    updatedAt: row.updated_at || 0,
+    now: Date.now(),                 // lets clients correct for clock drift
+  }, null, request, env);
+}
+
+/** POST /api/live — admin only. Partial updates: send only what changed. */
+async function postLive(request, env) {
+  if (env.ADMIN_TOKEN && request.headers.get('X-Admin-Token') !== env.ADMIN_TOKEN) {
+    return bad('not authorised', request, env, 401);
+  }
+  let body;
+  try { body = await request.json(); } catch { return bad('invalid JSON body', request, env); }
+
+  if (body.status != null && !LIVE_STATUSES.includes(String(body.status))) {
+    return bad(`status must be one of: ${LIVE_STATUSES.join(', ')}`, request, env, 422);
+  }
+
+  // Cap the running order so a malformed post can't bloat the row
+  let running = null;
+  if (body.running != null) {
+    if (!Array.isArray(body.running)) return bad('running must be an array', request, env, 422);
+    running = JSON.stringify(body.running.slice(0, 60).map(r => ({
+      driverId: String(r.driverId || '').slice(0, 64),
+      name:     String(r.name || '').slice(0, 48),
+      team:     String(r.team || '').slice(0, 48),
+      colour:   String(r.colour || '').slice(0, 9),
+      number:   String(r.number ?? '').slice(0, 4),
+      gap:      String(r.gap || '').slice(0, 16),
+      out:      Boolean(r.out),
+    })));
+  }
+
+  // COALESCE keeps any field the caller didn't send
+  await env.DB.prepare(
+    `UPDATE race_control SET
+       class        = COALESCE(?, class),
+       round        = COALESCE(?, round),
+       race_name    = COALESCE(?, race_name),
+       track        = COALESCE(?, track),
+       status       = COALESCE(?, status),
+       message      = COALESCE(?, message),
+       lights_out   = COALESCE(?, lights_out),
+       duration_min = COALESCE(?, duration_min),
+       running      = COALESCE(?, running),
+       updated_at   = ?
+     WHERE id = 'live'`
+  ).bind(
+    body.class ?? null,
+    body.round ?? null,
+    body.raceName ?? null,
+    body.track ?? null,
+    body.status ?? null,
+    body.message ?? null,
+    body.lightsOut ?? null,
+    body.durationMin ?? null,
+    running,
+    Date.now()
+  ).run();
+
+  return await getLive(request, env);
+}
+
+/** POST /api/live/reset — clears the session back to idle. */
+async function resetLive(request, env) {
+  if (env.ADMIN_TOKEN && request.headers.get('X-Admin-Token') !== env.ADMIN_TOKEN) {
+    return bad('not authorised', request, env, 401);
+  }
+  await env.DB.prepare(
+    `UPDATE race_control SET class=NULL, round=NULL, race_name=NULL, track=NULL,
+       status='idle', message='', lights_out=NULL, duration_min=NULL,
+       running='[]', updated_at=? WHERE id='live'`
+  ).bind(Date.now()).run();
+  return await getLive(request, env);
+}
+
 /* ── discord members (for avatar sync) ───────────────────── */
 
 /**
@@ -498,6 +605,14 @@ export default {
 
         return new Response(JSON.stringify({ type: 4, data: { content: 'Unsupported interaction.' } }),
           { headers: { 'Content-Type': 'application/json' } });
+      }
+
+      if (pathname === '/api/live') {
+        if (request.method === 'GET')  return await getLive(request, env);
+        if (request.method === 'POST') return await postLive(request, env);
+      }
+      if (pathname === '/api/live/reset' && request.method === 'POST') {
+        return await resetLive(request, env);
       }
 
       if (pathname === '/api/discord/members' && request.method === 'GET') {

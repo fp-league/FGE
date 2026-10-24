@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>FGE Overlay</title>
+<meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Titillium+Web:wght@400;600;700;900&display=swap" rel="stylesheet">
+<style>
+/* Transparent so OBS composites it straight over the game feed.
+   Designed at 1920x1080; set the browser source to that size. */
+*,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
+html,body { width:1920px; height:1080px; background:transparent; overflow:hidden;
+  font-family:'Titillium Web','Segoe UI',Arial,sans-serif; -webkit-font-smoothing:antialiased; }
+
+.hidden { display:none !important; }
+
+/* ── timing tower ── */
+#tower { position:absolute; top:46px; left:46px; width:410px; }
+.tw-head {
+  display:flex; align-items:center; gap:10px;
+  background:linear-gradient(90deg,#150302 0%, rgba(21,3,2,.82) 100%);
+  border-left:5px solid var(--cls,#E10600);
+  padding:11px 14px; border-radius:3px 3px 0 0;
+}
+.tw-round { font-weight:700; font-size:13px; letter-spacing:.16em; color:var(--cls,#E10600); }
+.tw-name  { font-weight:600; font-size:14px; color:#fff; flex:1; overflow:hidden;
+  white-space:nowrap; text-overflow:ellipsis; letter-spacing:.02em; }
+.tw-clock { font-weight:700; font-size:17px; color:#fff; font-variant-numeric:tabular-nums; }
+
+#rows { background:rgba(10,2,1,.80); border-radius:0 0 3px 3px; overflow:hidden; }
+.row {
+  display:grid; grid-template-columns:38px 5px 34px 1fr auto; align-items:center;
+  gap:10px; padding:8px 14px 8px 10px;
+  border-bottom:1px solid rgba(255,255,255,.06);
+}
+.row:last-child { border-bottom:none; }
+.row.out { opacity:.38; }
+.pos  { font-weight:700; font-size:17px; color:#fff; text-align:center; font-variant-numeric:tabular-nums; }
+.row.out .pos { font-size:10px; letter-spacing:.08em; color:#ff9d9d; }
+.bar  { width:5px; height:21px; border-radius:1px; }
+.num  { font-weight:700; font-size:13px; color:#9f8f8f; font-variant-numeric:tabular-nums; }
+.name { font-weight:600; font-size:16px; color:#fff; letter-spacing:.01em;
+  overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+.gap  { font-weight:600; font-size:14px; color:#c9b8b8; font-variant-numeric:tabular-nums; }
+.row.p1 .pos { color:#FFD24A; }
+.row.p2 .pos { color:#DFDFDF; }
+.row.p3 .pos { color:#E09A52; }
+
+/* ── flag band ── */
+#flag {
+  position:absolute; top:0; left:0; right:0; height:7px;
+  transition:background .25s, opacity .25s; opacity:0;
+}
+#flag.on { opacity:1; }
+#flag.green { background:#2e7d32; }
+#flag.sc    { background:repeating-linear-gradient(90deg,#F9A825 0 44px,#111 44px 88px); }
+#flag.vsc   { background:repeating-linear-gradient(90deg,#FDD835 0 22px,#111 22px 44px); }
+#flag.red   { background:#c62828; animation:flagPulse 1s infinite; }
+#flag.chequered, #flag.finished {
+  background:repeating-conic-gradient(#fff 0 25%, #111 0 50%) 0 0/22px 22px;
+}
+@keyframes flagPulse { 0%,100%{opacity:1} 50%{opacity:.35} }
+
+/* ── status pill ── */
+#status {
+  position:absolute; top:46px; left:50%; transform:translateX(-50%);
+  font-weight:700; font-size:16px; letter-spacing:.2em;
+  padding:9px 26px; border-radius:999px; color:#fff;
+  background:rgba(10,2,1,.84); border:1px solid rgba(255,255,255,.2);
+  transition:opacity .25s; opacity:0;
+}
+#status.on { opacity:1; }
+#status.sc    { background:#F9A825; color:#111; border-color:#F9A825; }
+#status.vsc   { background:#FDD835; color:#111; border-color:#FDD835; }
+#status.red   { background:#c62828; border-color:#c62828; animation:flagPulse 1s infinite; }
+#status.formation { background:#B58100; border-color:#B58100; }
+#status.chequered, #status.finished { background:#fff; color:#111; border-color:#fff; }
+
+/* ── race control message ── */
+#msg {
+  position:absolute; left:46px; bottom:46px; max-width:900px;
+  background:rgba(10,2,1,.88); border-left:5px solid var(--cls,#E10600);
+  padding:13px 20px; border-radius:3px;
+  opacity:0; transform:translateY(10px); transition:opacity .3s, transform .3s;
+}
+#msg.on { opacity:1; transform:none; }
+#msg .lbl { font-size:10px; font-weight:700; letter-spacing:.2em; color:var(--cls,#E10600); display:block; margin-bottom:3px; }
+#msg .txt { font-size:17px; font-weight:600; color:#fff; }
+
+/* ── pre-race countdown ── */
+#pre {
+  position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+  text-align:center; background:rgba(10,2,1,.86); padding:30px 56px;
+  border-radius:4px; border-top:4px solid var(--cls,#E10600); opacity:0; transition:opacity .3s;
+}
+#pre.on { opacity:1; }
+#pre .lbl  { font-size:12px; font-weight:700; letter-spacing:.26em; color:#c9b8b8; }
+#pre .race { font-size:28px; font-weight:700; color:#fff; margin:6px 0 10px; }
+#pre .cd   { font-size:60px; font-weight:900; color:var(--cls,#E10600); font-variant-numeric:tabular-nums; line-height:1; }
+</style>
+</head>
+<body>
+  <div id="flag"></div>
+  <div id="status"></div>
+
+  <div id="tower" class="hidden">
+    <div class="tw-head">
+      <span class="tw-round" id="twRound">R?</span>
+      <span class="tw-name"  id="twName"></span>
+      <span class="tw-clock" id="twClock"></span>
+    </div>
+    <div id="rows"></div>
+  </div>
+
+  <div id="pre">
+    <span class="lbl">LIGHTS OUT IN</span>
+    <div class="race" id="preRace"></div>
+    <div class="cd" id="preCd">--:--</div>
+  </div>
+
+  <div id="msg"><span class="lbl">RACE CONTROL</span><span class="txt" id="msgTxt"></span></div>
+
+<script>
+// Set by the site when it serves this page; override with ?api=... if needed.
+const API = new URLSearchParams(location.search).get('api')
+         || 'https://fge-api.benjaminjameswestley.workers.dev';
+const MAX_ROWS = Number(new URLSearchParams(location.search).get('rows') || 12);
+
+let state = { status:'idle', running:[] };
+let skew  = 0;                 // server clock minus ours
+let lastRowSig = null;         // so the tower only repaints when it changes
+const now = () => Date.now() + skew;
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? '' : s)
+  .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+  .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+
+// Team colours are free text in the admin panel. Anything that isn't a clean
+// hex is dropped rather than written into a style attribute.
+const hex = v => /^#[0-9a-fA-F]{6}$/.test(String(v || '').trim())
+  ? String(v).trim().toUpperCase() : '#888888';
+
+function clock(ms) {
+  if (ms == null || isNaN(ms)) return '';
+  const neg = ms < 0; ms = Math.abs(ms);
+  const t = Math.floor(ms / 1000);
+  const h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), s = t % 60;
+  const p = n => String(n).padStart(2, '0');
+  return (neg ? '-' : '') + (h ? `${h}:${p(m)}:${p(s)}` : `${p(m)}:${p(s)}`);
+}
+
+function render() {
+  const st = state.status || 'idle';
+  const live = st !== 'idle';
+  document.documentElement.style.setProperty('--cls', state.class === 'gt4' ? '#5599FF' : '#E10600');
+
+  // flag band
+  $('flag').className = live && st !== 'formation' ? `on ${st}` : '';
+
+  // status pill — green racing needs no pill, everything else does
+  const pill = { formation:'FORMATION LAP', sc:'SAFETY CAR', vsc:'VIRTUAL SAFETY CAR',
+                 red:'RED FLAG', chequered:'CHEQUERED FLAG', finished:'RACE FINISHED' }[st];
+  $('status').textContent = pill || '';
+  $('status').className = pill ? `on ${st}` : '';
+
+  // pre-race countdown, only before lights out
+  const pre = live && state.lightsOut && now() < state.lightsOut && st === 'formation';
+  $('pre').className = pre ? 'on' : '';
+  if (pre) {
+    $('preRace').textContent = state.raceName || '';
+    $('preCd').textContent = clock(state.lightsOut - now());
+  }
+
+  // race control message
+  const m = (state.message || '').trim();
+  $('msgTxt').textContent = m;
+  $('msg').className = m ? 'on' : '';
+
+  // tower
+  const rows = state.running || [];
+  $('tower').classList.toggle('hidden', !live || !rows.length || pre);
+  if (live && rows.length) {
+    $('twRound').textContent = 'R' + (state.round ?? '?');
+    $('twName').textContent = state.raceName || '';
+    $('twClock').textContent = raceClock();
+
+    // render() runs four times a second to keep the clock smooth. Rewriting
+    // the tower each time made every row flicker on stream, so the rows are
+    // only rebuilt when the order, gaps or colours have actually changed.
+    const sig = JSON.stringify(rows.slice(0, MAX_ROWS));
+    if (sig === lastRowSig) return;
+    lastRowSig = sig;
+
+    let pos = 0;
+    $('rows').innerHTML = rows.slice(0, MAX_ROWS).map(r => {
+      if (!r.out) pos++;
+      const cls = r.out ? 'out' : (pos <= 3 ? 'p' + pos : '');
+      const num = String(r.number || '').trim();
+      return `<div class="row ${cls}">
+          <span class="pos">${r.out ? 'OUT' : pos}</span>
+          <span class="bar" style="background:${hex(r.colour)}"></span>
+          <span class="num">${num ? '#' + esc(num) : ''}</span>
+          <span class="name">${esc(r.name)}</span>
+          <span class="gap">${esc(r.gap || '')}</span>
+        </div>`;
+    }).join('');
+  }
+}
+
+function raceClock() {
+  if (!state.durationMin || !state.lightsOut) return '';
+  const end = state.lightsOut + state.durationMin * 60000;
+  if (now() < state.lightsOut) return clock(state.durationMin * 60000);
+  return clock(Math.max(0, end - now()));
+}
+
+async function poll() {
+  try {
+    const res = await fetch(API.replace(/\/+$/,'') + '/api/live', { cache:'no-store' });
+    const body = await res.json();
+    if (body && body.ok) {
+      if (body.now) skew = body.now - Date.now();
+      state = body;
+    }
+  } catch (e) { /* keep showing the last good state */ }
+  render();
+  // Poll hard while a session is live, barely at all when idle — an
+  // overlay left open for days would otherwise burn the request budget.
+  setTimeout(poll, (state.status && state.status !== 'idle') ? 1000 : 15000);
+}
+
+poll();
+setInterval(render, 250);   // keeps the clocks smooth between polls
+</script>
+</body>
+</html>

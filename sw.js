@@ -1,4 +1,4 @@
-const CACHE = 'fge-v9';
+const CACHE = 'fge-v10';
 
 // Only pre-cache fonts and images — they never change between deploys
 const IMMUTABLE = [
@@ -25,6 +25,9 @@ self.addEventListener('activate', e => {
 self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
   if (e.request.url.includes('jsonbin.io')) return;
+  // Live timing polls every 3s. Caching those would bloat the cache and risk
+  // serving a stale race state, so the API is left to the network entirely.
+  if (e.request.url.includes('workers.dev') || e.request.url.includes('/api/')) return;
 
   const url = new URL(e.request.url);
   const ext = url.pathname.split('.').pop().toLowerCase();

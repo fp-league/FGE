@@ -211,6 +211,53 @@ permissions beyond posting, since it only replies to commands.
 Discord, type `/standings` — if the commands do not appear, they were
 registered globally and have not propagated yet, or the server id was wrong.
 
+## Race control and live timing
+
+One person (the FIA) drives a race from the admin panel's **RACE CONTROL**
+tab. What they push appears in two places within a few seconds: a **LIVE
+TIMING** page on the site, and an overlay you can drop straight into OBS.
+
+Neither appears when nothing is running — the nav entry and the home-page
+strip stay hidden until race control opens a session, and the overlay draws
+nothing at all, so it's safe to leave in a scene permanently.
+
+**Running a race**
+
+1. In **RACE CONTROL**, pick the round and set lights out, then **Load
+   session**. That pulls in the grid for the class you're on.
+2. Use the flag buttons as the race goes: formation, green, SC, VSC, red,
+   chequered. Type into the message box for anything race control wants on
+   screen ("Car 44 under investigation").
+3. Drag drivers to reorder them, type gaps into each row, and hit OUT when
+   somebody retires. Reordering is debounced, so a quick shuffle is one write.
+4. **End session** when you're done. That clears everything back to idle and
+   the live pages disappear again.
+
+**The OBS overlay**
+
+Add a **Browser** source pointing at:
+
+```
+https://fp-league.github.io/FGE/overlay.html
+```
+
+Width 1920, height 1080, and leave "Shutdown source when not visible" off so
+it keeps polling. The background is transparent, so it composites straight
+over the game feed. Two optional parameters:
+
+| Parameter | Default | What it does |
+|-----------|---------|--------------|
+| `?rows=16` | 12 | How many cars the tower shows |
+| `?api=...` | this Worker | Point it at a different Worker |
+
+**Polling cost**
+
+Both the site and the overlay poll `GET /api/live` — about every 3s on the
+site and every 1s on the overlay while a session is open, dropping to 60s and
+15s when idle. A race with the overlay plus 30 people watching is roughly
+20,000 requests across a 90-minute race, well inside the 100,000/day free
+tier. An overlay left open overnight on idle costs about 5,800.
+
 ## Endpoints
 
 | Method | Path           | Purpose |
@@ -219,6 +266,9 @@ registered globally and have not propagated yet, or the server id was wrong.
 | `POST` | `/api/dotd`              | Cast a vote. `{class, race, driver}` |
 | `GET`  | `/api/fantasy?class=gt3` | All entries, for scoring the leaderboard |
 | `POST` | `/api/fantasy`           | Submit/update picks. `{class, race, userId, userName, winner, fastest}` |
+| `GET`  | `/api/live`              | Current race-control state — the overlay and the site both read this |
+| `POST` | `/api/live`              | Admin only. Partial update: send only the fields that changed |
+| `POST` | `/api/live/reset`        | Admin only. Ends the session and clears it back to idle |
 | `GET`  | `/api/health`            | Liveness |
 | `POST` | `/discord/interactions`  | Discord slash commands (signature-verified) |
 

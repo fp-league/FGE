@@ -72,6 +72,7 @@
         <div class="nav-overlay-line"></div>
         <ul>
             <li><a href="#" class="nav-link active" data-page="home"      onclick="navigate('home');closeNav();return false">HOME</a></li>
+            <li style="display:none"><a href="#" class="nav-link nav-live" data-page="live" onclick="navigate('live');closeNav();return false"><span class="nl-dot"></span>LIVE TIMING</a></li>
             <li><a href="#" class="nav-link" data-page="standings"        onclick="navigate('standings');closeNav();return false">STANDINGS</a></li>
             <li><a href="#" class="nav-link" data-page="results"          onclick="navigate('results');closeNav();return false">RESULTS</a></li>
             <li><a href="#" class="nav-link" data-page="calendar"         onclick="navigate('calendar');closeNav();return false">CALENDAR</a></li>
@@ -129,6 +130,9 @@
                 <div class="hero-tagline">FORTNITE GLOBAL ENDURANCE</div>
                 <div class="hero-divider"></div>
             </div>
+
+            <!-- Shown only while race control has a session open -->
+            <div id="liveBanner"></div>
 
             <div class="section-head"><h2>NEXT RACE</h2>
                 <a href="#" data-page="calendar">FULL CALENDAR &rarr;</a>
@@ -193,6 +197,12 @@
             <h1 class="cal-title">FIRE VS ICE</h1>
             <p class="drivers-sub">GT3 and GT4 teams split across two sides. Every point they score counts for their faction.</p>
             <div id="fantasyContent"></div>
+        </section>
+
+        <!-- ══ LIVE TIMING ══ -->
+        <section id="live" class="page">
+            <h1 class="cal-title">LIVE TIMING</h1>
+            <div id="liveContent"></div>
         </section>
 
         <!-- ══ RACE ══ -->

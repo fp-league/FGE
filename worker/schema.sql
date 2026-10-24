@@ -40,3 +40,22 @@ CREATE TABLE uploads (
   created_at INTEGER NOT NULL
 );
 CREATE INDEX idx_uploads_voter ON uploads (voter, created_at);
+
+-- Live race control. One row, id 'live', holding the current session.
+-- Kept as a single row rather than a log because the overlay and the site
+-- only ever need "what is happening right now".
+DROP TABLE IF EXISTS race_control;
+CREATE TABLE race_control (
+  id           TEXT    PRIMARY KEY,     -- always 'live'
+  class        TEXT,                    -- gt3 | gt4
+  round        INTEGER,
+  race_name    TEXT,
+  track        TEXT,
+  status       TEXT    NOT NULL,        -- idle|formation|green|sc|vsc|red|chequered|finished
+  message      TEXT,
+  lights_out   INTEGER,                 -- unix ms, when the race starts
+  duration_min INTEGER,
+  running      TEXT,                    -- JSON array of the running order
+  updated_at   INTEGER NOT NULL
+);
+INSERT INTO race_control (id, status, updated_at) VALUES ('live', 'idle', 0);
