@@ -1412,6 +1412,25 @@ let discordMembers = [];
 /** Loose comparison: ignores case, spaces, underscores and punctuation. */
 const normName = s => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
+/**
+ * Server nicknames are decorated — "#1 | Maxi | flag | trophies" — so the
+ * raw nickname rarely equals the driver's name. Build every plausible name
+ * from a member and match against all of them.
+ */
+function memberNames(m) {
+    const out = [];
+    const push = v => { const n = normName(v); if (n && !out.includes(n)) out.push(n); };
+    const raw = String(m.displayName || '');
+    push(raw);
+    // "#1 | Maxi | 🇮🇹" -> each piece, ignoring car numbers and bare symbols
+    raw.split(/[|/·•\-–—]/).forEach(part => {
+        const cleaned = part.replace(/#\s*[-\d]+/g, '').trim();
+        if (cleaned && !/^\d+$/.test(cleaned)) push(cleaned);
+    });
+    push(m.username);
+    return out;
+}
+
 function matchMember(driver, members) {
     // An id saved from a previous sync always wins
     if (driver.discordId) {
@@ -1421,15 +1440,17 @@ function matchMember(driver, members) {
     const n = normName(driver.name);
     if (!n) return { member: null, how: 'none' };
 
-    let hit = members.find(m => normName(m.displayName) === n)
-           || members.find(m => normName(m.username) === n);
-    if (hit) return { member: hit, how: 'exact' };
+    const exact = members.filter(m => memberNames(m).includes(n));
+    if (exact.length === 1) return { member: exact[0], how: 'exact' };
+    if (exact.length > 1)   return { member: null, how: 'ambiguous' };
 
-    // Only accept a partial match when exactly one member contains the name,
-    // otherwise a short name like "Ben" would grab the wrong person.
-    const near = members.filter(m =>
-        normName(m.displayName).includes(n) || normName(m.username).includes(n) ||
-        (n.length >= 4 && (n.includes(normName(m.displayName)) || n.includes(normName(m.username)))));
+    // Only accept a looser match when exactly one member could be meant,
+    // otherwise a short name like "Ben" would grab Benji or Benny. Very
+    // short names are exact-only: "11" would otherwise match the car
+    // number sitting inside "#11 | Kieran".
+    if (n.length < 3) return { member: null, how: 'none' };
+    const near = members.filter(m => memberNames(m).some(c =>
+        c.includes(n) || (n.length >= 4 && n.includes(c) && c.length >= 3)));
     if (near.length === 1) return { member: near[0], how: 'partial' };
     return { member: null, how: near.length > 1 ? 'ambiguous' : 'none' };
 }
