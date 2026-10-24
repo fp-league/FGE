@@ -161,6 +161,23 @@ textarea { resize:vertical; min-height:80px; }
 .side-badge.ice  { background:rgba(41,182,246,0.16); color:#7fd4f7; border:1px solid rgba(41,182,246,0.45); }
 .side-badge.none { color:var(--grey2); }
 
+
+/* ── DRIVER THUMBS + DISCORD SYNC ── */
+.drv-thumb { width:30px; height:30px; border-radius:50%; object-fit:cover; display:block; border:1px solid var(--line2); background:var(--page-deep); }
+.drv-thumb.empty { opacity:0.35; }
+.sync-table td { vertical-align:middle; }
+.sync-drv { color:var(--white); font-weight:600; }
+.sync-has { font-family:var(--fu); font-size:0.6rem; letter-spacing:0.08em; color:var(--grey2); margin-left:0.4rem; }
+.sync-badge { font-family:var(--fu); font-size:0.62rem; letter-spacing:0.08em; padding:0.1rem 0.4rem; border-radius:2px; white-space:nowrap; }
+.sync-badge.exact, .sync-badge.saved { background:rgba(76,175,80,0.16); color:#9fdfa2; border:1px solid rgba(76,175,80,0.4); }
+.sync-badge.partial { background:rgba(255,179,0,0.16); color:#ffd27d; border:1px solid rgba(255,179,0,0.4); }
+.sync-badge.ambiguous, .sync-badge.none { background:rgba(255,255,255,0.06); color:var(--grey2); border:1px solid var(--line2); }
+.sync-prev { text-align:center; }
+.sync-prev img { width:36px; height:36px; border-radius:50%; object-fit:cover; border:1px solid var(--line2); }
+.sync-def { display:block; font-family:var(--fu); font-size:0.54rem; color:var(--grey2); letter-spacing:0.06em; }
+#syncResults .sync-pick { font-size:0.8rem; padding:0.35rem 0.5rem; }
+#syncResults input[type=checkbox] { width:auto; cursor:pointer; }
+
 /* ── POINTS EDITOR ── */
 .pts-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(68px,1fr)); gap:0.5rem; margin-bottom:0.9rem; }
 .pts-cell { display:flex; flex-direction:column; gap:0.2rem; }
@@ -341,9 +358,20 @@ textarea { resize:vertical; min-height:80px; }
           </div>
         </div>
 
+        <div class="form-card" id="syncCard">
+          <h3>DISCORD AVATARS</h3>
+          <p class="bk-note">Pulls your server's members and matches them to drivers by name.
+             Nothing is saved until you press Apply, and you can change any match first.</p>
+          <div class="form-actions">
+            <button class="btn btn-white" onclick="loadDiscordMembers()">SCAN DISCORD</button>
+            <span class="img-size" id="syncStatusLine"></span>
+          </div>
+          <div id="syncResults"></div>
+        </div>
+
         <div class="tbl-wrap">
           <table class="adm-table">
-            <thead><tr><th>#</th><th>NAME</th><th>TEAM</th><th>NAT</th><th style="width:110px"></th></tr></thead>
+            <thead><tr><th>#</th><th>NAME</th><th>TEAM</th><th>PFP</th><th style="width:110px"></th></tr></thead>
             <tbody id="driversTbody"></tbody>
           </table>
         </div>
@@ -793,7 +821,9 @@ function renderDriversTable() {
       <td style="font-family:var(--fd);color:var(--white);font-size:1rem">${drv.number||'—'}</td>
       <td style="color:var(--white);font-weight:500">${drv.name||''}</td>
       <td style="color:var(--grey)">${drv.team||'—'}</td>
-      <td style="color:var(--grey)">${drv.nationality||'—'}</td>
+      <td>${drv.photo
+            ? `<img src="${drv.photo}" class="drv-thumb" alt="" loading="lazy">`
+            : '<span class="drv-thumb empty"></span>'}</td>
       <td>${actionCell(`editDriver(${i})`, `deleteDriver(${i})`)}</td>
     </tr>`).join('');
 }
@@ -1320,6 +1350,159 @@ function savePoints() {
     if (!cfg.table.length) { toast('Add at least one scoring position','err'); return; }
     adminData[adminClass.toLowerCase()].points = cfg;
     saveData(`${adminClass} points system saved`);
+}
+
+
+// Discord display names and usernames are other people's text going into
+// our HTML, so they must be escaped.
+function esc(v) {
+    return String(v == null ? '' : v)
+        .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+        .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+// ── DISCORD AVATAR SYNC ───────────────────────────────────
+// Matches server members to drivers by name, shows both avatars side by
+// side, and only writes what the admin confirms. Stores the Discord user
+// id as well as the photo, so a later re-sync can refresh an avatar that
+// changed without having to match names all over again.
+
+let discordMembers = [];
+
+/** Loose comparison: ignores case, spaces, underscores and punctuation. */
+const normName = s => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+function matchMember(driver, members) {
+    // An id saved from a previous sync always wins
+    if (driver.discordId) {
+        const prev = members.find(m => m.id === driver.discordId);
+        if (prev) return { member: prev, how: 'saved' };
+    }
+    const n = normName(driver.name);
+    if (!n) return { member: null, how: 'none' };
+
+    let hit = members.find(m => normName(m.displayName) === n)
+           || members.find(m => normName(m.username) === n);
+    if (hit) return { member: hit, how: 'exact' };
+
+    // Only accept a partial match when exactly one member contains the name,
+    // otherwise a short name like "Ben" would grab the wrong person.
+    const near = members.filter(m =>
+        normName(m.displayName).includes(n) || normName(m.username).includes(n) ||
+        (n.length >= 4 && (n.includes(normName(m.displayName)) || n.includes(normName(m.username)))));
+    if (near.length === 1) return { member: near[0], how: 'partial' };
+    return { member: null, how: near.length > 1 ? 'ambiguous' : 'none' };
+}
+
+async function loadDiscordMembers() {
+    const line = document.getElementById('syncStatusLine');
+    const box  = document.getElementById('syncResults');
+    if (!API_BASE) { toast('Worker URL not configured','err'); return; }
+    line.textContent = 'scanning…';
+    box.innerHTML = '';
+    try {
+        const res = await fetch(`${API_BASE.replace(/\/+$/,'')}/api/discord/members`, {
+            headers: ADMIN_TOKEN ? { 'X-Admin-Token': ADMIN_TOKEN } : {},
+        });
+        const body = await res.json();
+        if (!res.ok || !body.ok) throw new Error(body.error || `HTTP ${res.status}`);
+        discordMembers = body.members || [];
+        line.textContent = `${discordMembers.length} members found`;
+        if (!discordMembers.length) {
+            box.innerHTML = `<div class="bk-warn">Discord returned no members. The
+              <b>Server Members Intent</b> is probably still off — turn it on under
+              Bot → Privileged Gateway Intents, then scan again.</div>`;
+            return;
+        }
+        renderSyncTable();
+    } catch (e) {
+        line.textContent = '';
+        box.innerHTML = `<div class="bk-warn">${esc(e.message || 'Scan failed')}</div>`;
+    }
+}
+
+function renderSyncTable() {
+    const drivers = d().drivers || [];
+    const box = document.getElementById('syncResults');
+    if (!drivers.length) { box.innerHTML = '<p class="bk-note">No drivers in this class yet.</p>'; return; }
+
+    const opts = m => discordMembers.map(x =>
+        `<option value="${esc(x.id)}" ${m && x.id === m.id ? 'selected' : ''}>${esc(x.displayName)} (@${esc(x.username)})</option>`
+    ).join('');
+
+    let matched = 0;
+    const rows = drivers.map((drv, i) => {
+        const { member, how } = matchMember(drv, discordMembers);
+        if (member) matched++;
+        const badge = { saved:'saved', exact:'matched', partial:'close match', ambiguous:'several possible', none:'no match' }[how];
+        return `<tr data-i="${i}">
+            <td><input type="checkbox" class="sync-on" ${member && !member.isDefault ? 'checked' : ''}></td>
+            <td class="sync-drv">${esc(drv.name)}
+              ${drv.photo ? '<span class="sync-has">has photo</span>' : ''}</td>
+            <td><span class="sync-badge ${how}">${badge}</span></td>
+            <td>
+              <select class="sync-pick" onchange="syncPreview(this)">
+                <option value="">— none —</option>${opts(member)}
+              </select>
+            </td>
+            <td class="sync-prev">${member
+              ? `<img src="${esc(member.avatar)}" alt="" loading="lazy">${member.isDefault ? '<span class="sync-def">default</span>' : ''}`
+              : ''}</td>
+          </tr>`;
+    }).join('');
+
+    box.innerHTML = `
+      <p class="bk-note" style="margin-top:0.9rem">
+        <b>${matched}</b> of <b>${drivers.length}</b> ${adminClass} drivers matched.
+        Rows whose Discord account has no custom avatar are left unticked.
+      </p>
+      <div class="tbl-wrap">
+        <table class="adm-table sync-table">
+          <thead><tr>
+            <th style="width:34px"><input type="checkbox" onchange="syncToggleAll(this)"></th>
+            <th>DRIVER</th><th>MATCH</th><th>DISCORD ACCOUNT</th><th style="width:64px">PFP</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+      <div class="form-actions" style="margin-top:1rem">
+        <button class="btn btn-white" onclick="applyDiscordAvatars()">APPLY TICKED</button>
+        <button class="btn btn-ghost" onclick="document.getElementById('syncResults').innerHTML=''">CANCEL</button>
+      </div>`;
+}
+
+function syncPreview(sel) {
+    const row = sel.closest('tr');
+    const m = discordMembers.find(x => x.id === sel.value);
+    const cell = row.querySelector('.sync-prev');
+    cell.innerHTML = m ? `<img src="${m.avatar}" alt="">${m.isDefault ? '<span class="sync-def">default</span>' : ''}` : '';
+    row.querySelector('.sync-on').checked = Boolean(m && !m.isDefault);
+}
+
+function syncToggleAll(box) {
+    document.querySelectorAll('#syncResults .sync-on').forEach(c => { c.checked = box.checked; });
+}
+
+function applyDiscordAvatars() {
+    const rows = [...document.querySelectorAll('#syncResults tbody tr')];
+    const list = adminData[adminClass.toLowerCase()].drivers || [];
+    let n = 0;
+    rows.forEach(row => {
+        if (!row.querySelector('.sync-on').checked) return;
+        const id = row.querySelector('.sync-pick').value;
+        const m = discordMembers.find(x => x.id === id);
+        const drv = list[Number(row.dataset.i)];
+        if (!m || !drv) return;
+        drv.photo = m.avatar;
+        drv.discordId = m.id;
+        drv.discordName = m.username;
+        n++;
+    });
+    if (!n) { toast('Nothing ticked','err'); return; }
+    document.getElementById('syncResults').innerHTML = '';
+    document.getElementById('syncStatusLine').textContent = '';
+    saveData(`${n} avatar${n === 1 ? '' : 's'} applied`);
+    renderDriversTable();
 }
 
 // ── IMAGE UPLOAD ──────────────────────────────────────────

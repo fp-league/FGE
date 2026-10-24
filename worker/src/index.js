@@ -374,6 +374,75 @@ async function getImage(request, env, pathname) {
   return res;
 }
 
+/* ── discord members (for avatar sync) ───────────────────── */
+
+/**
+ * GET /api/discord/members
+ *
+ * Lists the server's members so the admin can match them to drivers and
+ * pull their avatars. Admin-token gated: this exposes display names and
+ * avatars, so it is not public.
+ *
+ * Needs DISCORD_TOKEN and DISCORD_GUILD_ID secrets, and the "Server
+ * Members Intent" enabled on the application — without the intent Discord
+ * returns an empty list rather than an error.
+ */
+async function getDiscordMembers(request, env) {
+  if (env.ADMIN_TOKEN && request.headers.get('X-Admin-Token') !== env.ADMIN_TOKEN) {
+    return bad('not authorised', request, env, 401);
+  }
+  if (!env.DISCORD_TOKEN || !env.DISCORD_GUILD_ID) {
+    return bad('discord token or guild id not configured on this Worker', request, env, 501);
+  }
+
+  const members = [];
+  let after = '0';
+  // Discord pages at 1000; ten pages is far more than this league needs.
+  for (let page = 0; page < 10; page++) {
+    const res = await fetch(
+      `https://discord.com/api/v10/guilds/${env.DISCORD_GUILD_ID}/members?limit=1000&after=${after}`,
+      { headers: { Authorization: `Bot ${env.DISCORD_TOKEN}` } }
+    );
+    if (!res.ok) {
+      const detail = await res.text().catch(() => '');
+      return bad(`discord returned ${res.status}. ${
+        res.status === 403 ? 'Enable the Server Members Intent on the application.' :
+        res.status === 401 ? 'The bot token looks wrong.' :
+        detail.slice(0, 160)}`, request, env, 502);
+    }
+    const batch = await res.json();
+    if (!Array.isArray(batch) || !batch.length) break;
+    members.push(...batch);
+    after = batch[batch.length - 1].user.id;
+    if (batch.length < 1000) break;
+  }
+
+  const out = members
+    .filter(m => m.user && !m.user.bot)
+    .map(m => {
+      const u = m.user;
+      let avatar;
+      if (m.avatar) {
+        // server-specific avatar wins, since that's what people see here
+        avatar = `https://cdn.discordapp.com/guilds/${env.DISCORD_GUILD_ID}/users/${u.id}/avatars/${m.avatar}.png?size=256`;
+      } else if (u.avatar) {
+        avatar = `https://cdn.discordapp.com/avatars/${u.id}/${u.avatar}.png?size=256`;
+      } else {
+        avatar = `https://cdn.discordapp.com/embed/avatars/${(BigInt(u.id) >> 22n) % 6n}.png`;
+      }
+      return {
+        id: u.id,
+        username: u.username,
+        displayName: m.nick || u.global_name || u.username,
+        avatar,
+        isDefault: !m.avatar && !u.avatar,
+      };
+    })
+    .sort((a, b) => a.displayName.localeCompare(b.displayName));
+
+  return json({ ok: true, count: out.length, members: out }, null, request, env);
+}
+
 /* ── entry ───────────────────────────────────────────────── */
 
 export default {
@@ -429,6 +498,10 @@ export default {
           { headers: { 'Content-Type': 'application/json' } });
       }
 
+      if (pathname === '/api/discord/members' && request.method === 'GET') {
+        return await getDiscordMembers(request, env);
+      }
+
       if (pathname === '/api/upload' && request.method === 'POST') {
         return await postUpload(request, env);
       }
@@ -441,6 +514,7 @@ export default {
           now: Date.now(),
           images: imageStore(env) || 'none',
           discord: Boolean(env.DISCORD_PUBLIC_KEY),
+          members: Boolean(env.DISCORD_TOKEN && env.DISCORD_GUILD_ID),
         }, null, request, env);
       }
       return bad('not found', request, env, 404);
