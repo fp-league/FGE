@@ -17,9 +17,11 @@
     --surface: rgba(255,255,255,0.055);
     --surface2: rgba(255,255,255,0.1);
     --input-bg: rgba(0,0,0,0.35);
-    --font-display: '911PorscheTitle', '911PorscheCond', '911Porsche', 'Impact', sans-serif;
-    --font-ui: '911PorscheCond', '911Porsche', 'Arial Narrow', sans-serif;
-    --font-body: 'Segoe UI', Arial, sans-serif;
+    /* Titillium Web: the motorsport standard, and far more legible than the
+       old Porsche faces, which were so wide they kept overflowing phones. */
+    --font-display: 'Titillium Web', 'Segoe UI', Arial, sans-serif;
+    --font-ui: 'Titillium Web', 'Segoe UI', Arial, sans-serif;
+    --font-body: 'Titillium Web', 'Segoe UI', Arial, sans-serif;
     --radius: 3px;
     --nav-h: 60px;
     --gt4-bright: #5599FF;
@@ -48,6 +50,12 @@ html { scroll-behavior: smooth; }
 /* A single over-wide element used to scale the whole page up on phones.
    Clamp it at the root so one long string can never do that again. */
 html, body { max-width: 100%; overflow-x: hidden; }
+
+h1, h2, h3, h4,
+.hero-fge, .cal-title, .section-head h2, .nav-overlay .nav-link,
+.cb-unit span, .fvi-score-val, .dp-last, .fdc-last {
+    font-weight: 700;
+}
 
 body {
     background: var(--page-bg);
@@ -79,6 +87,13 @@ body {
     display: flex; align-items: center; gap: 0.75rem;
     text-decoration: none; flex: 1;
 }
+.logo-img { height: 26px; width: auto; display: block; flex-shrink: 0; }
+.hero-logo-img {
+    width: min(70vw, 420px); height: auto; display: block;
+    filter: drop-shadow(0 4px 28px rgba(0,0,0,0.5));
+}
+@media (max-width: 520px) { .logo-img { height: 20px; } }
+
 .logo-fge {
     font-family: var(--font-display);
     font-size: 1.5rem;
@@ -89,7 +104,7 @@ body {
 .logo-text {
     font-family: var(--font-ui);
     font-size: 0.65rem;
-    letter-spacing: 0.18em;
+    letter-spacing: 0.081em;
     color: var(--grey);
     text-transform: uppercase;
     display: none;
@@ -209,7 +224,7 @@ body {
 .intro-sub {
     font-family: var(--font-ui);
     font-size: clamp(0.5rem, 1.8vw, 0.9rem);
-    color: var(--grey); letter-spacing: 0.35em;
+    color: var(--grey); letter-spacing: 0.158em;
 }
 @keyframes introFadeIn {
     from { opacity: 0; transform: translateY(-50%) translateX(16px); }
@@ -248,7 +263,7 @@ body {
 
 .cs-sub {
     font-family: var(--font-ui); font-size: 0.58rem;
-    letter-spacing: 0.18em; text-transform: uppercase;
+    letter-spacing: 0.081em; text-transform: uppercase;
     color: var(--grey-mid); transition: color 0.3s;
 }
 .cs-btn.active .cs-sub { color: var(--grey-light); }
@@ -292,7 +307,7 @@ body {
 .hero-tagline {
     font-family: var(--font-ui);
     font-size: clamp(0.6rem, 2vw, 0.85rem);
-    letter-spacing: 0.35em;
+    letter-spacing: 0.158em;
     color: var(--grey);
     text-transform: uppercase;
 }
@@ -313,7 +328,7 @@ body {
 }
 .section-head h2 {
     font-family: var(--font-display); font-size: 1.1rem;
-    letter-spacing: 0.15em; color: var(--white);
+    letter-spacing: 0.0675em; color: var(--white);
     display: flex; align-items: center; gap: 0.6rem;
 }
 /* Class-coloured marker before each section title */
@@ -340,7 +355,7 @@ body {
     margin-bottom: 1.5rem; flex-wrap: wrap;
     transition: border-left-color 0.3s;
 }
-.cb-label { font-family: var(--font-display); font-size: 0.75rem; letter-spacing: 0.18em; color: var(--grey); min-width: 0; overflow-wrap: anywhere; }
+.cb-label { font-family: var(--font-display); font-size: 0.75rem; letter-spacing: 0.081em; color: var(--grey); min-width: 0; overflow-wrap: anywhere; }
 .cb-units { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; min-width: 0; }
 .cb-unit { text-align: center; }
 .cb-unit span { display: block; font-family: var(--font-display); font-size: 1.8rem; color: var(--white); line-height: 1; }
@@ -395,7 +410,7 @@ body {
 .nh-content { position: absolute; inset: auto 0 0 0; z-index: 2; padding: 1.6rem; }
 .nh-meta { display: flex; align-items: center; gap: 0.7rem; margin-bottom: 0.7rem; flex-wrap: wrap; }
 .nh-tag {
-    font-family: var(--font-display); font-size: 0.6rem; letter-spacing: 0.2em;
+    font-family: var(--font-display); font-size: 0.6rem; letter-spacing: 0.09em;
     background: var(--class-color); color: #fff;
     padding: 0.18rem 0.55rem; border-radius: 2px;
     display: inline-block; transition: background 0.3s; text-transform: uppercase;
@@ -415,7 +430,7 @@ body {
 }
 .nh-read {
     font-family: var(--font-display); font-size: 0.66rem;
-    letter-spacing: 0.18em; color: var(--white);
+    letter-spacing: 0.081em; color: var(--white);
     border-bottom: 2px solid var(--class-color); padding-bottom: 2px;
     transition: color 0.2s, gap 0.2s;
 }
@@ -451,7 +466,7 @@ body {
 .nm-body { padding: 0.85rem 1rem 0.85rem 0; display: flex; flex-direction: column; justify-content: center; gap: 0.4rem; min-width: 0; }
 .nm-meta { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
 .nm-tag {
-    font-family: var(--font-display); font-size: 0.54rem; letter-spacing: 0.16em;
+    font-family: var(--font-display); font-size: 0.54rem; letter-spacing: 0.072em;
     color: var(--class-color); text-transform: uppercase;
     border: 1px solid var(--class-color); border-radius: 2px;
     padding: 0.06rem 0.35rem; transition: color 0.3s, border-color 0.3s;
@@ -610,7 +625,7 @@ select:focus { outline: none; border-color: var(--class-color); }
 .feat-card.next { background: var(--surface2); }
 .feat-overlay { display: none; }
 .feat-body { position: relative; z-index: 1; }
-.feat-label { font-family: var(--font-ui); font-size: 0.62rem; letter-spacing: 0.18em; color: var(--grey); display: block; margin-bottom: 0.25rem; }
+.feat-label { font-family: var(--font-ui); font-size: 0.62rem; letter-spacing: 0.081em; color: var(--grey); display: block; margin-bottom: 0.25rem; }
 .feat-card.next .feat-label { color: var(--class-color); }
 .feat-round { font-family: var(--font-display); font-size: 0.8rem; color: var(--grey-light); letter-spacing: 0.1em; }
 .feat-name { font-family: var(--font-display); font-size: 1rem; color: var(--white); margin-top: 0.15rem; letter-spacing: 0.05em; }
@@ -625,7 +640,7 @@ select:focus { outline: none; border-color: var(--class-color); }
 .cal-card.next { border-left: 2px solid var(--class-color); }
 .cal-card-bg { position: absolute; inset: 0; background-size: cover; background-position: center; opacity: 0.06; }
 .cal-card-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem; position: relative; }
-.cal-round { font-family: var(--font-display); font-size: 0.68rem; letter-spacing: 0.14em; color: var(--grey); }
+.cal-round { font-family: var(--font-display); font-size: 0.68rem; letter-spacing: 0.063em; color: var(--grey); }
 .cal-next-badge { font-family: var(--font-display); font-size: 0.58rem; letter-spacing: 0.12em; background: var(--class-color); color: #fff; padding: 0.08rem 0.4rem; border-radius: 2px; }
 .cal-date { font-size: 0.72rem; color: var(--grey); font-family: var(--font-ui); }
 .cal-name { font-family: var(--font-display); font-size: 0.9rem; color: var(--white); letter-spacing: 0.06em; position: relative; }
@@ -802,13 +817,13 @@ select:focus { outline: none; border-color: var(--class-color); }
 }
 .dp-pos small {
     font-family: var(--font-ui); font-size: 0.58rem;
-    letter-spacing: 0.16em; color: var(--grey);
+    letter-spacing: 0.072em; color: var(--grey);
 }
 .dp-name { margin-bottom: 0.55rem; }
 .dp-first {
     display: block; font-family: var(--font-ui);
     font-size: clamp(0.85rem, 2.4vw, 1.05rem); color: var(--grey-light);
-    letter-spacing: 0.14em; text-transform: uppercase;
+    letter-spacing: 0.063em; text-transform: uppercase;
 }
 .dp-last {
     display: block; font-family: var(--font-display);
@@ -843,7 +858,7 @@ select:focus { outline: none; border-color: var(--class-color); }
 .dp-stat:last-child { border-right: none; }
 .dp-stat label {
     display: block; font-family: var(--font-ui); font-size: 0.6rem;
-    letter-spacing: 0.14em; color: var(--grey);
+    letter-spacing: 0.063em; color: var(--grey);
     text-transform: uppercase; margin-bottom: 0.3rem;
 }
 .dp-stat strong {
@@ -858,7 +873,7 @@ select:focus { outline: none; border-color: var(--class-color); }
 .dp-panel:last-child { border-right: none; }
 .dp-panel h3 {
     font-family: var(--font-display); font-size: 0.74rem;
-    letter-spacing: 0.16em; color: var(--grey);
+    letter-spacing: 0.072em; color: var(--grey);
     text-transform: uppercase; margin-bottom: 0.8rem;
     display: flex; align-items: center; gap: 0.5rem;
 }
@@ -964,7 +979,7 @@ select:focus { outline: none; border-color: var(--class-color); }
 .fmp-item span { display: block; color: var(--white); }
 .fmp-item small { color: var(--grey); font-size: 0.7rem; }
 .fmp-pts { font-family: var(--font-display); font-size: 0.95rem; color: var(--white); }
-.fantasy-leaderboard h2 { font-family: var(--font-display); font-size: 0.95rem; letter-spacing: 0.14em; color: var(--white); margin-bottom: 0.8rem; }
+.fantasy-leaderboard h2 { font-family: var(--font-display); font-size: 0.95rem; letter-spacing: 0.063em; color: var(--white); margin-bottom: 0.8rem; }
 
 /* ── PREDICTIONS ── */
 .pred-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 1.1rem; margin-bottom: 1rem; }
@@ -1052,8 +1067,8 @@ select:focus { outline: none; border-color: var(--class-color); }
 .fvi-score-val { font-family: var(--font-display); font-size: clamp(2.6rem, 10vw, 4.4rem); line-height: 1; color: var(--white); }
 .fvi-score-side.fire .fvi-score-val { color: #FF7043; text-shadow: 0 0 26px rgba(255,87,34,0.5); }
 .fvi-score-side.ice  .fvi-score-val { color: #4FC3F7; text-shadow: 0 0 26px rgba(41,182,246,0.5); }
-.fvi-score-label { font-family: var(--font-ui); font-size: 0.72rem; letter-spacing: 0.26em; color: var(--grey-light); }
-.fvi-vs { font-family: var(--font-display); font-size: 0.85rem; letter-spacing: 0.14em; color: var(--grey); }
+.fvi-score-label { font-family: var(--font-ui); font-size: 0.72rem; letter-spacing: 0.117em; color: var(--grey-light); }
+.fvi-vs { font-family: var(--font-display); font-size: 0.85rem; letter-spacing: 0.063em; color: var(--grey); }
 
 .fvi-bar { display: flex; height: 10px; border-radius: 5px; overflow: hidden; margin: 1.5rem 0 0.9rem; background: var(--surface2); border: 1px solid var(--line); }
 .fvi-bar-fire { background: linear-gradient(90deg, #E64A19, #FF7043); transition: width 0.6s cubic-bezier(.2,.6,.2,1); }
@@ -1078,7 +1093,7 @@ select:focus { outline: none; border-color: var(--class-color); }
 .fvi-col.ice  { border-top: 3px solid #29B6F6; }
 .fvi-col-head { display: flex; align-items: center; gap: 0.5rem; padding: 0.9rem 1rem; border-bottom: 1px solid var(--line); }
 .fvi-col-head .fvi-icon { font-size: 1rem; }
-.fvi-name { font-family: var(--font-display); font-size: 0.92rem; letter-spacing: 0.14em; color: var(--white); flex: 1; }
+.fvi-name { font-family: var(--font-display); font-size: 0.92rem; letter-spacing: 0.063em; color: var(--white); flex: 1; }
 .fvi-col-pts { font-family: var(--font-display); font-size: 1.15rem; color: var(--white); }
 .fvi-col.fire .fvi-col-pts { color: #FF7043; }
 .fvi-col.ice  .fvi-col-pts { color: #4FC3F7; }
@@ -1098,7 +1113,7 @@ select:focus { outline: none; border-color: var(--class-color); }
 .fvi-cls.gt4 { background: var(--gt4-bright); }
 .fvi-split { display: flex; gap: 1rem; padding: 0.55rem 1rem; border-bottom: 1px solid var(--line); font-family: var(--font-ui); font-size: 0.72rem; letter-spacing: 0.08em; color: var(--grey); }
 .fvi-split b { color: var(--off-white); font-family: var(--font-display); font-size: 0.85rem; margin-left: 0.2rem; }
-.fvi-group { display: flex; align-items: center; justify-content: space-between; padding: 0.5rem 1rem 0.3rem; font-family: var(--font-ui); font-size: 0.62rem; letter-spacing: 0.14em; color: var(--grey2); }
+.fvi-group { display: flex; align-items: center; justify-content: space-between; padding: 0.5rem 1rem 0.3rem; font-family: var(--font-ui); font-size: 0.62rem; letter-spacing: 0.063em; color: var(--grey2); }
 .fvi-group span { color: var(--grey2); }
 .fvi-note { text-align: center; font-size: 0.78rem; color: var(--grey); margin-top: 0.5rem; line-height: 1.5; }
 .fvi-chip .fvi-cls { margin-right: 0.35rem; vertical-align: middle; }
@@ -1133,7 +1148,7 @@ select:focus { outline: none; border-color: var(--class-color); }
 
     /* Hero */
     .hero-section { padding: 2.5rem 1rem 2rem; }
-    .hero-tagline { letter-spacing: 0.2em; font-size: 0.55rem; }
+    .hero-tagline { letter-spacing: 0.09em; font-size: 0.55rem; }
 
     /* Menu: the links were 440px wide on a 375px screen */
     .nav-overlay { padding: 1.5rem 1.25rem; }

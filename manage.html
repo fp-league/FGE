@@ -4,12 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>FGE Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Titillium+Web:wght@400;600;700&display=swap" rel="stylesheet">
 <style>
-@font-face { font-family:'911Porsche';      src:url('911porschav3.ttf')      format('truetype'); font-weight:normal;  font-display:swap; }
-@font-face { font-family:'911Porsche';      src:url('911porschav3bold.ttf')  format('truetype'); font-weight:bold;    font-display:swap; }
-@font-face { font-family:'911PorscheCond';  src:url('911porschav3cond.ttf')  format('truetype'); font-weight:normal;  font-display:swap; }
-@font-face { font-family:'911PorscheTitle'; src:url('911porschav3title.ttf') format('truetype'); font-weight:normal;  font-display:swap; }
-
 :root {
   --bg:      #000;
   /* Translucent so panels tint against whichever class background is active */
@@ -26,8 +24,8 @@
   --gt4b:    #5599ff;
   --danger:  #c62828;
   --success: #2e7d32;
-  --fd: '911PorscheTitle','911PorscheCond','911Porsche',Impact,sans-serif;
-  --fu: '911PorscheCond','911Porsche','Arial Narrow',sans-serif;
+  --fd: 'Titillium Web','Segoe UI',Arial,sans-serif;
+  --fu: 'Titillium Web','Segoe UI',Arial,sans-serif;
   /* Active class accent — red for GT3 (default), blue for GT4 */
   --accent:      #E10600;
   --accent-bg:   rgba(225,6,0,0.08);
@@ -37,6 +35,7 @@
   --page-deep: #2A0604;
 }
 *, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
+h2, h3, h4 { font-weight:700; }
 body { background:var(--page-bg); color:var(--off); font-family:'Segoe UI',Arial,sans-serif; min-height:100vh; font-size:0.9rem; transition:background-color 0.45s ease; }
 
 /* ── LOGIN ── */

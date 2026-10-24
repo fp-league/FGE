@@ -14,12 +14,9 @@
     <link rel="stylesheet" href="styles.css">
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#450A07" id="themeColorMeta">
-    <style>
-        @font-face { font-family: '911Porsche'; src: url('911porschav3.ttf') format('truetype'); font-weight: normal; font-display: swap; }
-        @font-face { font-family: '911Porsche'; src: url('911porschav3bold.ttf') format('truetype'); font-weight: bold; font-display: swap; }
-        @font-face { font-family: '911PorscheCond'; src: url('911porschav3cond.ttf') format('truetype'); font-weight: normal; font-display: swap; }
-        @font-face { font-family: '911PorscheTitle'; src: url('911porschav3title.ttf') format('truetype'); font-weight: normal; font-display: swap; }
-    </style>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Titillium+Web:wght@400;600;700;900&display=swap" rel="stylesheet">
 </head>
 <body>
     <nav class="navbar">
@@ -48,8 +45,7 @@
 
         <div class="nav-container">
             <a href="#" class="nav-logo" onclick="navigate('home');return false">
-                <span class="logo-fge">FGE</span>
-                <span class="logo-sep">·</span>
+                <img src="fge-logo-sm.webp" alt="FGE" class="logo-img" width="300" height="110">
                 <span class="logo-text">FORTNITE GLOBAL ENDURANCE</span>
             </a>
             <button class="nav-toggle" id="navToggle" aria-label="Menu"><span></span><span></span><span></span></button>
@@ -71,7 +67,7 @@
             <li><a href="manage.html" class="nav-link">ADMIN</a></li>
         </ul>
         <div class="nav-overlay-foot">
-            <a href="https://discord.gg/PLACEHOLDER" target="_blank" rel="noopener">DISCORD</a>
+            <a href="https://discord.gg/3MCku8pBjK" target="_blank" rel="noopener">DISCORD</a>
         </div>
     </div>
 
@@ -114,7 +110,7 @@
         <!-- ══ HOME ══ -->
         <section id="home" class="page active">
             <div class="hero-section">
-                <div class="hero-fge">FGE</div>
+                <img src="fge-logo.webp" alt="FGE — Fortnite Global Endurance" class="hero-logo-img" width="841" height="309">
                 <div class="hero-tagline">FORTNITE GLOBAL ENDURANCE</div>
                 <div class="hero-divider"></div>
             </div>
@@ -211,7 +207,7 @@
         <div style="display:flex;align-items:center;gap:0.8rem;">
             <span style="font-size:1.5rem;">🏎️</span>
             <div>
-                <div style="color:#fff;font-weight:700;font-size:0.9rem;font-family:'911PorscheCond',sans-serif;letter-spacing:0.05em;">INSTALL FGE</div>
+                <div style="color:#fff;font-weight:700;font-size:0.9rem;font-family:var(--font-ui);letter-spacing:0.05em;">INSTALL FGE</div>
                 <div style="color:#999;font-size:0.8rem;">Tap <strong style="color:#fff;">Share</strong> ⬆️ then <strong style="color:#fff;">"Add to Home Screen"</strong></div>
             </div>
         </div>
