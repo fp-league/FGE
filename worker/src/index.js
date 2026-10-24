@@ -43,7 +43,9 @@ function corsHeaders(request, env) {
   return {
     'Access-Control-Allow-Origin': allow,
     'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
+    // X-Admin-Token must be listed, or the browser's preflight blocks any
+    // admin request from the site with an opaque "Failed to fetch".
+    'Access-Control-Allow-Headers': 'Content-Type, X-Admin-Token',
     'Access-Control-Max-Age': '86400',
     'Vary': 'Origin',
   };
