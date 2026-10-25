@@ -221,6 +221,27 @@ Neither appears when nothing is running — the nav entry and the home-page
 strip stay hidden until race control opens a session, and the overlay draws
 nothing at all, so it's safe to leave in a scene permanently.
 
+**Deploying without wrangler on your machine**
+
+If `wrangler login` fails ("The Cloudflare OAuth provider returned an error",
+"fetch failed"), that's your machine not reaching Cloudflare, not a problem
+with the code. You don't have to fix it — GitHub can do the deploy instead.
+
+Add two repository secrets on github.com (Settings → Secrets and variables →
+Actions):
+
+| Secret | Where to get it |
+|--------|-----------------|
+| `CLOUDFLARE_API_TOKEN` | dash.cloudflare.com → My Profile → API Tokens → Create Custom Token. Account-level: Workers Scripts **Edit**, D1 **Edit**, Workers KV Storage **Edit** |
+| `CLOUDFLARE_ACCOUNT_ID` | dash.cloudflare.com → Workers & Pages, Account ID in the right-hand column |
+
+From then on every push that touches `worker/` deploys itself. To run a
+database migration, go to the **Actions** tab → **Worker** → **Run workflow**
+and tick the migration box.
+
+The D1 console in the Cloudflare dashboard (Storage & Databases → D1 → fge →
+Console) will also run the migration SQL if you'd rather paste it in by hand.
+
 **One-off setup**
 
 The Worker needs a table for this. Don't re-run `schema.sql` — it drops every

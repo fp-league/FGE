@@ -1,0 +1,62 @@
+# Deploys the FGE Worker from GitHub instead of your own machine.
+#
+# Why: `wrangler login` opens a browser OAuth flow that can fail outright
+# (VPN, firewall, DNS). This runs the same deploy on GitHub's machines using
+# an API token, so nothing has to work locally.
+#
+# One-time setup, in this repo on github.com:
+#   Settings → Secrets and variables → Actions → New repository secret
+#     CLOUDFLARE_API_TOKEN   — a custom token with, at Account level:
+#                              Workers Scripts: Edit, D1: Edit,
+#                              Workers KV Storage: Edit
+#     CLOUDFLARE_ACCOUNT_ID  — Cloudflare dashboard → Workers & Pages,
+#                              the Account ID in the right-hand column
+#
+# After that: every push that touches worker/ deploys automatically.
+# To run the database migration, go to the Actions tab → "Worker" →
+# "Run workflow" → tick "run the race_control migration".
+
+name: Worker
+
+on:
+  push:
+    branches: [main]
+    paths: ['worker/**', '.github/workflows/worker.yml']
+  workflow_dispatch:
+    inputs:
+      migrate:
+        description: 'Also run the race_control migration (drops and recreates that one table)'
+        type: boolean
+        default: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Only on a manual run with the box ticked, so an ordinary push can
+      # never drop a table by accident.
+      - name: Run the race_control migration
+        if: inputs.migrate
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: worker
+          command: d1 execute fge --remote --file=./migrations/001-race-control.sql
+
+      - name: Deploy
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: worker
+          command: deploy
+
+      - name: Check it answers
+        run: |
+          sleep 5
+          echo "GET /api/live:"
+          curl -sS https://fge-api.benjaminjameswestley.workers.dev/api/live || true
+          echo
