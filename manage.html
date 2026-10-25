@@ -206,6 +206,23 @@ textarea { resize:vertical; min-height:80px; }
 .rc-mini:hover { color:var(--white); border-color:var(--white); }
 .rc-mini.out { font-family:var(--fu); font-size:0.6rem; letter-spacing:0.06em; }
 
+.rc-mini.del { color: #ef9a9a; font-size: 1rem; line-height: 1; }
+.rc-mini.del:hover { background: rgba(198,40,40,0.25); border-color: #c62828; }
+.rc-delta { font-family: var(--font-ui,inherit); font-size: 0.74rem; color: #9fb8d0;
+            min-width: 62px; text-align: right; font-variant-numeric: tabular-nums; }
+.rc-entry { display: grid; grid-template-columns: repeat(auto-fill,minmax(190px,1fr));
+            gap: 0.35rem; max-height: 260px; overflow-y: auto; padding: 0.6rem;
+            background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 6px; }
+.rc-chk { display: flex; align-items: center; gap: 0.5rem; padding: 0.3rem 0.4rem;
+          border-radius: 4px; cursor: pointer; font-size: 0.85rem; color: #e8e8e8; }
+.rc-chk:hover { background: rgba(255,255,255,0.06); }
+.rc-chk input { width: 16px; height: 16px; accent-color: #E10600; cursor: pointer; flex-shrink: 0; }
+.rc-chk em { margin-left: auto; font-style: normal; font-size: 0.74rem; color: #8a8a8a; }
+.rc-entry-acts { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.6rem; }
+.rc-add-row { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.8rem; }
+.rc-add-row select { flex: 1; max-width: 280px; }
+
 /* ── DRIVER THUMBS + DISCORD SYNC ── */
 .drv-thumb { width:30px; height:30px; border-radius:50%; object-fit:cover; display:block; border:1px solid var(--line2); background:var(--page-deep); }
 .drv-thumb.empty { opacity:0.35; }
@@ -552,11 +569,37 @@ textarea { resize:vertical; min-height:80px; }
               <select id="rcRace"></select>
             </div>
             <div class="form-group">
+              <label class="fg-label">SESSION TYPE</label>
+              <select id="rcMode" onchange="rcSetMode(this.value)">
+                <option value="race">RACE</option>
+                <option value="quali">QUALIFYING</option>
+              </select>
+              <span class="fg-hint">Quali shows lap times and the gap to pole</span>
+            </div>
+            <div class="form-group">
               <label class="fg-label">LIGHTS OUT</label>
               <input id="rcLightsOut" type="datetime-local">
               <span class="fg-hint">Leave blank and press GREEN when you're ready</span>
             </div>
+            <div class="form-group">
+              <label class="fg-label">LENGTH (MINUTES)</label>
+              <input id="rcMinutes" type="number" min="0" placeholder="from the race">
+              <span class="fg-hint">Quali is usually shorter than the race</span>
+            </div>
           </div>
+
+          <div class="form-group" style="margin-top:0.4rem">
+            <label class="fg-label">WHO'S RACING</label>
+            <p class="bk-note" style="margin:0 0 0.5rem">Tick only the drivers actually taking
+               part. Anyone left unticked stays off the timing screen.</p>
+            <div class="rc-entry" id="rcEntry"></div>
+            <div class="rc-entry-acts">
+              <button class="btn btn-ghost btn-sm" onclick="rcEntryAll(true)">SELECT ALL</button>
+              <button class="btn btn-ghost btn-sm" onclick="rcEntryAll(false)">CLEAR</button>
+              <span class="img-size" id="rcEntryCount"></span>
+            </div>
+          </div>
+
           <div class="form-actions">
             <button class="btn btn-white" onclick="rcLoadSession()">LOAD SESSION</button>
             <button class="btn btn-ghost" onclick="rcEnd()">END SESSION</button>
@@ -566,10 +609,10 @@ textarea { resize:vertical; min-height:80px; }
         <div class="form-card">
           <h3>FLAGS</h3>
           <div class="rc-flags">
-            <button class="rc-btn formation" onclick="rcStatus('formation')">FORMATION</button>
-            <button class="rc-btn green"     onclick="rcStatus('green')">GREEN</button>
-            <button class="rc-btn sc"        onclick="rcStatus('sc')">SAFETY CAR</button>
-            <button class="rc-btn vsc"       onclick="rcStatus('vsc')">VSC</button>
+            <button class="rc-btn formation" data-race-only onclick="rcStatus('formation')">FORMATION</button>
+            <button class="rc-btn green"     onclick="rcStatus('green')"><span id="rcGreenLbl">GREEN</span></button>
+            <button class="rc-btn sc"        data-race-only onclick="rcStatus('sc')">SAFETY CAR</button>
+            <button class="rc-btn vsc"       data-race-only onclick="rcStatus('vsc')">VSC</button>
             <button class="rc-btn red"       onclick="rcStatus('red')">RED FLAG</button>
             <button class="rc-btn chequered" onclick="rcStatus('chequered')">CHEQUERED</button>
           </div>
@@ -588,7 +631,13 @@ textarea { resize:vertical; min-height:80px; }
           <p class="bk-note">Drag a driver, or use the arrows. Changes go live immediately.
              Mark a retirement with OUT.</p>
           <div id="rcOrder" class="rc-order"></div>
+          <div class="rc-add-row">
+            <select id="rcAddDriver"></select>
+            <button class="btn btn-ghost btn-sm" onclick="rcAddDriver()">ADD DRIVER</button>
+          </div>
           <div class="form-actions">
+            <button class="btn btn-ghost btn-sm" id="rcSortLap"
+                    onclick="rcSortByLap()" style="display:none">SORT BY LAP</button>
             <button class="btn btn-ghost btn-sm" onclick="rcResetOrder()">RESET TO ENTRY LIST</button>
             <span class="img-size" id="rcSaveState"></span>
           </div>
@@ -829,7 +878,7 @@ function refreshSec() {
         case 'races':   renderRacesTable(); break;
         case 'results': populateResultsSelect(); break;
         case 'dotd':    populateDotdSelects(); break;
-        case 'control': rcPopulateRaces(); rcRefresh(); break;
+        case 'control': rcPopulateRaces(); rcPopulateEntry(); rcRefresh(); break;
         case 'season':  document.getElementById('seasonName').value = d().seasonName||'Season 1'; renderFviPanel(); renderPointsEditor(); renderStorageMeter(); break;
     }
 }
@@ -1511,7 +1560,7 @@ function esc(v) {
 // page and the OBS overlay both read. Every change is pushed immediately;
 // there is no "save" because during a race you want it instant.
 
-let rcState = { status:'idle', running:[] };
+let rcState = { status:'idle', mode:'race', running:[] };
 let rcPushTimer = null;
 
 const rcApi = (path, opts) => fetch(`${API_BASE.replace(/\/+$/,'')}${path}`, {
@@ -1547,34 +1596,185 @@ function rcPopulateRaces() {
         : '<option value="">No races in this class</option>';
 }
 
-function rcLoadSession() {
-    const idx = parseInt(document.getElementById('rcRace').value);
-    const race = (d().races || [])[idx];
-    if (!race) { toast('Pick a race first','err'); return; }
+/** Entry list: who is actually taking part. Ticked by default. */
+function rcPopulateEntry() {
+    const box = document.getElementById('rcEntry');
+    if (!box) return;
+    const drivers = d().drivers || [];
+    if (!drivers.length) { box.innerHTML = '<p class="bk-note">No drivers in this class.</p>'; return; }
+    box.innerHTML = drivers.map((drv, i) => `
+        <label class="rc-chk">
+          <input type="checkbox" data-entry="${i}" checked onchange="rcEntryCount()">
+          <span class="rc-dot" style="background:${esc(teamColour(drv.team))}"></span>
+          <span>${esc(drv.name)}</span>
+          ${drv.number ? `<em>#${esc(String(drv.number))}</em>` : ''}
+        </label>`).join('');
+    rcEntryCount();
+}
 
-    const lo = document.getElementById('rcLightsOut').value;
-    const entry = (d().drivers || []).map(drv => ({
+function rcEntryAll(on) {
+    document.querySelectorAll('#rcEntry input[data-entry]').forEach(c => { c.checked = on; });
+    rcEntryCount();
+}
+
+function rcEntryCount() {
+    const all = [...document.querySelectorAll('#rcEntry input[data-entry]')];
+    const n = all.filter(c => c.checked).length;
+    const el = document.getElementById('rcEntryCount');
+    if (el) el.textContent = `${n} of ${all.length} racing`;
+}
+
+/** The drivers currently ticked, as running-order entries. */
+function rcEntryList() {
+    const drivers = d().drivers || [];
+    const boxes = [...document.querySelectorAll('#rcEntry input[data-entry]')];
+    const picked = boxes.length
+        ? boxes.filter(c => c.checked).map(c => drivers[+c.dataset.entry]).filter(Boolean)
+        : drivers;
+    return picked.map(drv => rcEntryFor(drv));
+}
+
+function rcEntryFor(drv) {
+    return {
         driverId: drv.id || drv.name,
         name: drv.name,
         team: drv.team || '',
         colour: teamColour(drv.team),
         number: String(drv.number ?? ''),
-        gap: '',
-        out: false,
-    }));
+        gap: '', lap: '', out: false,
+    };
+}
+
+function rcMode() { return rcState.mode === 'quali' ? 'quali' : 'race'; }
+
+function rcSetMode(m) {
+    rcState.mode = m === 'quali' ? 'quali' : 'race';
+    rcApplyMode();
+    rcRenderOrder();
+    // Only push once a session exists; otherwise LOAD SESSION carries it.
+    if (rcState.status && rcState.status !== 'idle') rcPush({ mode: rcState.mode });
+}
+
+/** Hides the flags that make no sense in quali and relabels GREEN. */
+function rcApplyMode() {
+    const quali = rcMode() === 'quali';
+    const sel = document.getElementById('rcMode');
+    if (sel && sel.value !== rcMode()) sel.value = rcMode();
+    document.querySelectorAll('.rc-btn[data-race-only]').forEach(b => {
+        b.style.display = quali ? 'none' : '';
+    });
+    const g = document.getElementById('rcGreenLbl');
+    if (g) g.textContent = quali ? 'TRACK OPEN' : 'GREEN';
+    const sortBtn = document.getElementById('rcSortLap');
+    if (sortBtn) sortBtn.style.display = quali ? '' : 'none';
+}
+
+function rcLoadSession() {
+    const idx = parseInt(document.getElementById('rcRace').value);
+    const race = (d().races || [])[idx];
+    if (!race) { toast('Pick a race first','err'); return; }
+
+    const entry = rcEntryList();
+    if (!entry.length) { toast('Tick at least one driver','err'); return; }
+
+    const lo = document.getElementById('rcLightsOut').value;
+    const mode = document.getElementById('rcMode')?.value === 'quali' ? 'quali' : 'race';
+    const mins = parseInt(document.getElementById('rcMinutes')?.value, 10);
 
     rcPush({
         class: adminClass.toLowerCase(),
+        mode,
         round: race.round || idx + 1,
         raceName: race.name || '',
         track: race.track || '',
-        durationMin: race.minutes ?? race.laps ?? 0,
+        durationMin: Number.isFinite(mins) && mins > 0 ? mins : (race.minutes ?? race.laps ?? 0),
         lightsOut: lo ? new Date(lo).getTime() : null,
-        status: 'formation',
+        // Quali has no formation lap — the track just opens.
+        status: mode === 'quali' ? 'green' : 'formation',
         message: '',
         running: entry,
     });
-    toast('Session loaded — ' + entry.length + ' drivers', 'ok');
+    toast(`${mode === 'quali' ? 'Qualifying' : 'Session'} loaded — ${entry.length} drivers`, 'ok');
+}
+
+/** Drivers in this class who aren't already in the running order. */
+function rcPopulateAddDriver() {
+    const sel = document.getElementById('rcAddDriver');
+    if (!sel) return;
+    const inOrder = new Set((rcState.running || []).map(r => r.driverId));
+    const spare = (d().drivers || []).filter(drv => !inOrder.has(drv.id || drv.name));
+    sel.innerHTML = spare.length
+        ? spare.map(drv => `<option value="${esc(drv.id || drv.name)}">${esc(drv.name)}</option>`).join('')
+        : '<option value="">Everyone is already in</option>';
+    sel.disabled = !spare.length;
+}
+
+/** For someone who turns up late — drops them in at the back. */
+function rcAddDriver() {
+    const sel = document.getElementById('rcAddDriver');
+    const id = sel && sel.value;
+    if (!id) return;
+    const drv = (d().drivers || []).find(x => (x.id || x.name) === id);
+    if (!drv) return;
+    rcState.running = rcState.running || [];
+    rcState.running.push(rcEntryFor(drv));
+    rcRenderOrder();
+    rcQueuePush();
+    toast(drv.name + ' added', 'ok');
+}
+
+function rcRemoveDriver(i) {
+    const r = (rcState.running || [])[i];
+    if (!r) return;
+    rcState.running.splice(i, 1);
+    rcRenderOrder();
+    rcQueuePush();
+    toast(r.name + ' removed', 'ok');
+}
+
+// ── Lap times (quali) ────────────────────────────────────────
+/** "1:42.391", "42.391" or "1:42" → ms. Anything else → null. */
+function lapMs(v) {
+    const m = /^(?:(\d+):)?(\d{1,2})(?:[.,](\d{1,3}))?$/.exec(String(v || '').trim());
+    if (!m) return null;
+    return (+(m[1] || 0)) * 60000 + (+m[2]) * 1000 + (+((m[3] || '0').padEnd(3, '0')));
+}
+
+function rcSetLap(i, v) {
+    rcState.running[i].lap = String(v || '').slice(0, 16);
+    rcRenderLapDeltas();
+    rcQueuePush();
+}
+
+/** Repaints just the delta labels, so typing doesn't rebuild the list. */
+function rcRenderLapDeltas() {
+    const list = rcState.running || [];
+    const times = list.map(r => lapMs(r.lap)).filter(v => v != null);
+    const best = times.length ? Math.min(...times) : null;
+    list.forEach((r, i) => {
+        const el = document.querySelector(`#rcOrder [data-delta="${i}"]`);
+        if (!el) return;
+        const t = lapMs(r.lap);
+        el.textContent = (t == null || best == null) ? ''
+            : (t === best ? 'POLE' : '+' + ((t - best) / 1000).toFixed(3));
+    });
+}
+
+/** Quali only: reorder by lap time, no lap at the back, OUT last. */
+function rcSortByLap() {
+    const rank = r => {
+        if (r.out) return 3;
+        return lapMs(r.lap) == null ? 2 : 1;
+    };
+    rcState.running = (rcState.running || []).slice().sort((a, b) => {
+        const ra = rank(a), rb = rank(b);
+        if (ra !== rb) return ra - rb;
+        if (ra !== 1) return 0;
+        return lapMs(a.lap) - lapMs(b.lap);
+    });
+    rcRenderOrder();
+    rcQueuePush();
+    toast('Sorted by lap time', 'ok');
 }
 
 function teamColour(name) {
@@ -1598,10 +1798,7 @@ async function rcEnd() {
 }
 
 function rcResetOrder() {
-    rcState.running = (d().drivers || []).map(drv => ({
-        driverId: drv.id || drv.name, name: drv.name, team: drv.team || '',
-        colour: teamColour(drv.team), number: String(drv.number ?? ''), gap:'', out:false,
-    }));
+    rcState.running = rcEntryList();
     rcRenderOrder();
     rcQueuePush();
 }
@@ -1636,23 +1833,38 @@ function rcRenderOrder() {
     const box = document.getElementById('rcOrder');
     if (!box) return;
     const list = rcState.running || [];
+    rcApplyMode();
+    rcPopulateAddDriver();
     if (!list.length) { box.innerHTML = '<p class="bk-note">No session loaded.</p>'; return; }
+    const quali = rcMode() === 'quali';
     let pos = 0;
     box.innerHTML = list.map((r, i) => {
         if (!r.out) pos++;
-        return `<div class="rc-row${r.out ? ' is-out' : ''}" draggable="true"
+        const timeField = quali
+            ? `<input class="rc-gap" value="${esc(r.lap || '')}" placeholder="1:42.391"
+                      oninput="rcSetLap(${i}, this.value)">
+               <span class="rc-delta" data-delta="${i}"></span>`
+            : `<input class="rc-gap" value="${esc(r.gap || '')}" placeholder="+0.0"
+                      oninput="rcSetGap(${i}, this.value)">`;
+        return `<div class="rc-row${r.out ? ' is-out' : ''}${quali ? ' is-quali' : ''}" draggable="true"
                      ondragstart="rcDragStart(event,${i})" ondragover="event.preventDefault()"
                      ondrop="rcDrop(event,${i})">
             <span class="rc-pos">${r.out ? 'OUT' : pos}</span>
-            <span class="rc-dot" style="background:${esc(r.colour || '#888')}"></span>
+            <span class="rc-dot" style="background:${esc(safeColour(r.colour))}"></span>
             <span class="rc-name">${esc(r.name)}</span>
-            <input class="rc-gap" value="${esc(r.gap || '')}" placeholder="+0.0"
-                   oninput="rcSetGap(${i}, this.value)">
+            ${timeField}
             <button class="rc-mini" onclick="rcMove(${i},-1)" title="Up">▲</button>
             <button class="rc-mini" onclick="rcMove(${i},1)" title="Down">▼</button>
-            <button class="rc-mini out" onclick="rcToggleOut(${i})" title="Retire">OUT</button>
+            <button class="rc-mini out" onclick="rcToggleOut(${i})" title="${r.out ? 'Back in' : 'Retire'}">OUT</button>
+            <button class="rc-mini del" onclick="rcRemoveDriver(${i})" title="Not racing">&times;</button>
           </div>`;
     }).join('');
+    if (quali) rcRenderLapDeltas();
+}
+
+/** Team colours are free text in the admin; only clean hex reaches a style. */
+function safeColour(v) {
+    return /^#[0-9a-fA-F]{6}$/.test(String(v || '').trim()) ? String(v).trim() : '#888888';
 }
 
 let rcDragIdx = null;
@@ -1675,6 +1887,7 @@ function rcRenderState() {
         live.textContent = st === 'idle' ? 'OFFLINE' : st.toUpperCase();
         live.className = 'rc-live ' + st;
     }
+    rcApplyMode();
     document.querySelectorAll('.rc-btn').forEach(b => {
         b.classList.toggle('active', b.classList.contains(rcState.status));
     });

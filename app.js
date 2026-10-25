@@ -1278,6 +1278,34 @@ const LIVE_LABELS = {
     finished:  'RACE FINISHED',
 };
 
+// Quali has no formation lap and no safety car; the track is simply open,
+// then it isn't.
+const QUALI_LABELS = {
+    green:     'TRACK OPEN',
+    red:       'SESSION STOPPED',
+    chequered: 'SESSION OVER',
+    finished:  'QUALIFYING COMPLETE',
+};
+
+function liveIsQuali() { return liveState && liveState.mode === 'quali'; }
+
+function liveLabel(status) {
+    return (liveIsQuali() ? QUALI_LABELS[status] : LIVE_LABELS[status]) || '';
+}
+
+/** "1:42.391", "42.391" or "1:42" → ms. Anything else → null. */
+function lapMs(v) {
+    const m = /^(?:(\d+):)?(\d{1,2})(?:[.,](\d{1,3}))?$/.exec(String(v || '').trim());
+    if (!m) return null;
+    return (+(m[1] || 0)) * 60000 + (+m[2]) * 1000 + (+((m[3] || '0').padEnd(3, '0')));
+}
+
+/** Fastest lap set so far, for the gap-to-pole column. */
+function poleMs(rows) {
+    const t = (rows || []).map(r => lapMs(r.lap)).filter(v => v != null);
+    return t.length ? Math.min(...t) : null;
+}
+
 function liveNow() { return Date.now() + liveSkew; }
 
 function liveIsOn() {
@@ -1315,11 +1343,11 @@ function renderLiveBanner() {
     if (!el) return;
     if (!liveIsOn()) { el.innerHTML = ''; return; }
     const s = liveState;
-    const label = LIVE_LABELS[s.status] || '';
+    const label = liveLabel(s.status);
     el.innerHTML = `
       <div class="lv-banner lv-${esc(s.status)}" data-page="live">
         <span class="lv-dot" data-page="live"></span>
-        <span class="lv-bl" data-page="live">LIVE NOW</span>
+        <span class="lv-bl" data-page="live">${liveIsQuali() ? 'QUALIFYING' : 'LIVE NOW'}</span>
         <span class="lv-bn" data-page="live">${esc(s.raceName || 'Race in progress')}</span>
         <span class="lv-bs" data-page="live">${esc(label)}</span>
         <span class="lv-bgo" data-page="live">WATCH TIMING &rarr;</span>
@@ -1334,7 +1362,7 @@ function renderLive() {
     // the tower flicker and killed text selection, so everything except the
     // clock is rebuilt only when the session state has actually changed.
     const sig = liveIsOn()
-        ? JSON.stringify([liveState.status, liveState.round, liveState.raceName,
+        ? JSON.stringify([liveState.status, liveState.mode, liveState.round, liveState.raceName,
                           liveState.track, liveState.message, liveState.running])
         : 'idle';
     if (sig === liveSig) { updateLiveClock(); return; }
@@ -1352,15 +1380,27 @@ function renderLive() {
     }
 
     const s     = liveState;
-    const label = LIVE_LABELS[s.status] || '';
+    const quali = liveIsQuali();
+    const label = liveLabel(s.status);
     const pre   = Boolean(s.lightsOut) && liveNow() < s.lightsOut;
     const rows  = Array.isArray(s.running) ? s.running : [];
+    const pole  = quali ? poleMs(rows) : null;
 
     let pos = 0;
     const tower = rows.map(r => {
         if (!r.out) pos++;
         const cls = r.out ? 'out' : (pos <= 3 ? 'p' + pos : '');
         const num = String(r.number || '').trim();
+        let timeCells;
+        if (quali) {
+            const t = lapMs(r.lap);
+            const delta = (t == null || pole == null) ? ''
+                : (t === pole ? 'POLE' : '+' + ((t - pole) / 1000).toFixed(3));
+            timeCells = `<span class="lv-lap">${esc(r.lap || '')}</span>
+                         <span class="lv-gap${t === pole && t != null ? ' pole' : ''}">${esc(delta)}</span>`;
+        } else {
+            timeCells = `<span class="lv-gap">${esc(r.gap || '')}</span>`;
+        }
         return `
           <div class="lv-row ${cls}">
             <span class="lv-pos">${r.out ? 'OUT' : pos}</span>
@@ -1368,7 +1408,7 @@ function renderLive() {
             <span class="lv-num">${num ? '#' + esc(num) : ''}</span>
             <span class="lv-name">${esc(r.name || '')}</span>
             <span class="lv-team">${esc(r.team || '')}</span>
-            <span class="lv-gap">${esc(r.gap || '')}</span>
+            ${timeCells}
           </div>`;
     }).join('');
 
@@ -1377,13 +1417,14 @@ function renderLive() {
         <div class="lv-hl">
           <span class="lv-dot"></span>
           <span class="lv-round">ROUND ${esc(String(s.round ?? '?'))}</span>
+          ${quali ? '<span class="lv-sess">QUALIFYING</span>' : ''}
           <span class="lv-race">${esc(s.raceName || '')}</span>
           ${s.track ? `<span class="lv-track">📍 ${esc(s.track)}</span>` : ''}
         </div>
         <div class="lv-hr">
           ${label ? `<span class="lv-flag">${esc(label)}</span>` : ''}
           ${pre
-            ? `<span class="lv-clock">LIGHTS OUT IN ${liveClock(s.lightsOut - liveNow())}</span>`
+            ? `<span class="lv-clock">${quali ? 'STARTS IN' : 'LIGHTS OUT IN'} ${liveClock(s.lightsOut - liveNow())}</span>`
             : (liveRaceClock() ? `<span class="lv-clock">${liveRaceClock()}</span>` : '')}
         </div>
       </div>`;
@@ -1393,11 +1434,13 @@ function renderLive() {
         : '';
 
     el.innerHTML = head + msg + (rows.length
-        ? `<div class="lv-tower">
+        ? `<div class="lv-tower${quali ? ' is-quali' : ''}">
              <div class="lv-row lv-thead">
                <span class="lv-pos">POS</span><span class="lv-bar"></span>
                <span class="lv-num">NO</span><span class="lv-name">DRIVER</span>
-               <span class="lv-team">TEAM</span><span class="lv-gap">GAP</span>
+               <span class="lv-team">TEAM</span>
+               ${quali ? '<span class="lv-lap">LAP</span><span class="lv-gap">GAP TO POLE</span>'
+                       : '<span class="lv-gap">GAP</span>'}
              </div>
              ${tower}
            </div>`
@@ -1411,7 +1454,7 @@ function updateLiveClock() {
     const s = liveState;
     const pre = Boolean(s.lightsOut) && liveNow() < s.lightsOut;
     el.textContent = pre
-        ? `LIGHTS OUT IN ${liveClock(s.lightsOut - liveNow())}`
+        ? `${liveIsQuali() ? 'STARTS IN' : 'LIGHTS OUT IN'} ${liveClock(s.lightsOut - liveNow())}`
         : liveRaceClock();
 }
 

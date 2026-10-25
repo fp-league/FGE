@@ -44,6 +44,12 @@ html,body { width:1920px; height:1080px; background:transparent; overflow:hidden
 .name { font-weight:600; font-size:16px; color:#fff; letter-spacing:.01em;
   overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
 .gap  { font-weight:600; font-size:14px; color:#c9b8b8; font-variant-numeric:tabular-nums; }
+#tower.quali { width:470px; }
+#tower.quali .row { grid-template-columns:38px 5px 34px 1fr 84px 76px; }
+.lap  { font-weight:600; font-size:14px; color:#fff; text-align:right; font-variant-numeric:tabular-nums; }
+.gap.pole { color:#FFD24A; font-weight:700; }
+.tw-sess { font-weight:700; font-size:11px; letter-spacing:.16em; color:#fff;
+  background:var(--cls,#E10600); padding:2px 7px; border-radius:2px; }
 .row.p1 .pos { color:#FFD24A; }
 .row.p2 .pos { color:#DFDFDF; }
 .row.p3 .pos { color:#E09A52; }
@@ -108,6 +114,7 @@ html,body { width:1920px; height:1080px; background:transparent; overflow:hidden
   <div id="tower" class="hidden">
     <div class="tw-head">
       <span class="tw-round" id="twRound">R?</span>
+      <span class="tw-sess" id="twSess" style="display:none">QUALI</span>
       <span class="tw-name"  id="twName"></span>
       <span class="tw-clock" id="twClock"></span>
     </div>
@@ -115,7 +122,7 @@ html,body { width:1920px; height:1080px; background:transparent; overflow:hidden
   </div>
 
   <div id="pre">
-    <span class="lbl">LIGHTS OUT IN</span>
+    <span class="lbl" id="preLbl">LIGHTS OUT IN</span>
     <div class="race" id="preRace"></div>
     <div class="cd" id="preCd">--:--</div>
   </div>
@@ -143,6 +150,16 @@ const esc = s => String(s == null ? '' : s)
 const hex = v => /^#[0-9a-fA-F]{6}$/.test(String(v || '').trim())
   ? String(v).trim().toUpperCase() : '#888888';
 
+/** "1:42.391", "42.391" or "1:42" → ms. Anything else → null. */
+const lapMs = v => {
+  const m = /^(?:(\d+):)?(\d{1,2})(?:[.,](\d{1,3}))?$/.exec(String(v || '').trim());
+  return m ? (+(m[1] || 0)) * 60000 + (+m[2]) * 1000 + (+((m[3] || '0').padEnd(3, '0'))) : null;
+};
+const poleMs = rows => {
+  const t = (rows || []).map(r => lapMs(r.lap)).filter(v => v != null);
+  return t.length ? Math.min(...t) : null;
+};
+
 function clock(ms) {
   if (ms == null || isNaN(ms)) return '';
   const neg = ms < 0; ms = Math.abs(ms);
@@ -161,8 +178,11 @@ function render() {
   $('flag').className = live && st !== 'formation' ? `on ${st}` : '';
 
   // status pill — green racing needs no pill, everything else does
-  const pill = { formation:'FORMATION LAP', sc:'SAFETY CAR', vsc:'VIRTUAL SAFETY CAR',
-                 red:'RED FLAG', chequered:'CHEQUERED FLAG', finished:'RACE FINISHED' }[st];
+  const quali = state.mode === 'quali';
+  const pill = (quali
+    ? { red:'SESSION STOPPED', chequered:'SESSION OVER', finished:'QUALIFYING COMPLETE' }
+    : { formation:'FORMATION LAP', sc:'SAFETY CAR', vsc:'VIRTUAL SAFETY CAR',
+        red:'RED FLAG', chequered:'CHEQUERED FLAG', finished:'RACE FINISHED' })[st];
   $('status').textContent = pill || '';
   $('status').className = pill ? `on ${st}` : '';
 
@@ -170,6 +190,7 @@ function render() {
   const pre = live && state.lightsOut && now() < state.lightsOut && st === 'formation';
   $('pre').className = pre ? 'on' : '';
   if (pre) {
+    $('preLbl').textContent = quali ? 'SESSION STARTS IN' : 'LIGHTS OUT IN';
     $('preRace').textContent = state.raceName || '';
     $('preCd').textContent = clock(state.lightsOut - now());
   }
@@ -190,21 +211,36 @@ function render() {
     // render() runs four times a second to keep the clock smooth. Rewriting
     // the tower each time made every row flicker on stream, so the rows are
     // only rebuilt when the order, gaps or colours have actually changed.
-    const sig = JSON.stringify(rows.slice(0, MAX_ROWS));
+    $('tower').classList.toggle('quali', quali);
+    $('twSess').style.display = quali ? '' : 'none';
+
+    const sig = JSON.stringify([quali, rows.slice(0, MAX_ROWS)]);
     if (sig === lastRowSig) return;
     lastRowSig = sig;
 
+    const pole = quali ? poleMs(rows) : null;
     let pos = 0;
     $('rows').innerHTML = rows.slice(0, MAX_ROWS).map(r => {
       if (!r.out) pos++;
       const cls = r.out ? 'out' : (pos <= 3 ? 'p' + pos : '');
       const num = String(r.number || '').trim();
+      let cells;
+      if (quali) {
+        const t = lapMs(r.lap);
+        const isPole = t != null && t === pole;
+        const delta = (t == null || pole == null) ? ''
+          : (isPole ? 'POLE' : '+' + ((t - pole) / 1000).toFixed(3));
+        cells = `<span class="lap">${esc(r.lap || '')}</span>
+                 <span class="gap${isPole ? ' pole' : ''}">${esc(delta)}</span>`;
+      } else {
+        cells = `<span class="gap">${esc(r.gap || '')}</span>`;
+      }
       return `<div class="row ${cls}">
           <span class="pos">${r.out ? 'OUT' : pos}</span>
           <span class="bar" style="background:${hex(r.colour)}"></span>
           <span class="num">${num ? '#' + esc(num) : ''}</span>
           <span class="name">${esc(r.name)}</span>
-          <span class="gap">${esc(r.gap || '')}</span>
+          ${cells}
         </div>`;
     }).join('');
   }

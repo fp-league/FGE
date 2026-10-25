@@ -385,7 +385,7 @@ async function getLive(request, env) {
   let row;
   try {
     row = await env.DB.prepare(
-      `SELECT class, round, race_name, track, status, message,
+      `SELECT class, mode, round, race_name, track, status, message,
               lights_out, duration_min, running, updated_at
          FROM race_control WHERE id = 'live'`
     ).first();
@@ -400,6 +400,7 @@ async function getLive(request, env) {
   return json({
     ok: true,
     status: row.status || 'idle',
+    mode: row.mode || 'race',          // 'race' | 'quali'
     class: row.class || null,
     round: row.round ?? null,
     raceName: row.race_name || null,
@@ -421,6 +422,9 @@ async function postLive(request, env) {
   let body;
   try { body = await request.json(); } catch { return bad('invalid JSON body', request, env); }
 
+  if (body.mode != null && !['race', 'quali'].includes(String(body.mode))) {
+    return bad('mode must be race or quali', request, env, 422);
+  }
   if (body.status != null && !LIVE_STATUSES.includes(String(body.status))) {
     return bad(`status must be one of: ${LIVE_STATUSES.join(', ')}`, request, env, 422);
   }
@@ -436,6 +440,7 @@ async function postLive(request, env) {
       colour:   String(r.colour || '').slice(0, 9),
       number:   String(r.number ?? '').slice(0, 4),
       gap:      String(r.gap || '').slice(0, 16),
+      lap:      String(r.lap || '').slice(0, 16),
       out:      Boolean(r.out),
     })));
   }
@@ -444,6 +449,7 @@ async function postLive(request, env) {
   await env.DB.prepare(
     `UPDATE race_control SET
        class        = COALESCE(?, class),
+       mode         = COALESCE(?, mode),
        round        = COALESCE(?, round),
        race_name    = COALESCE(?, race_name),
        track        = COALESCE(?, track),
@@ -456,6 +462,7 @@ async function postLive(request, env) {
      WHERE id = 'live'`
   ).bind(
     body.class ?? null,
+    body.mode ?? null,
     body.round ?? null,
     body.raceName ?? null,
     body.track ?? null,

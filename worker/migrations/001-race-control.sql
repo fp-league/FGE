@@ -1,25 +1,28 @@
 -- Adds the race_control table to a Worker that is already deployed.
 --
--- schema.sql is the full build and starts by DROPping every table, so running
--- it again on a live database would throw away the votes. Run this instead:
+-- Run this, NOT schema.sql: schema.sql rebuilds every table from scratch and
+-- would throw away the DOTD votes and fantasy entries along the way.
 --
 --   npx wrangler d1 execute fge --remote --file=./migrations/001-race-control.sql
 --
--- Safe to run twice: it creates nothing that already exists and the INSERT is
--- ignored once the 'live' row is there.
+-- Safe to run as many times as you like. race_control holds nothing but
+-- "what is happening right now", so dropping it costs nothing — it just ends
+-- any session that happened to be open.
 
-CREATE TABLE IF NOT EXISTS race_control (
+DROP TABLE IF EXISTS race_control;
+CREATE TABLE race_control (
   id           TEXT    PRIMARY KEY,     -- always 'live'
   class        TEXT,                    -- gt3 | gt4
+  mode         TEXT,                    -- race | quali
   round        INTEGER,
   race_name    TEXT,
   track        TEXT,
   status       TEXT    NOT NULL,        -- idle|formation|green|sc|vsc|red|chequered|finished
   message      TEXT,
-  lights_out   INTEGER,                 -- unix ms, when the race starts
+  lights_out   INTEGER,                 -- unix ms, when the session starts
   duration_min INTEGER,
   running      TEXT,                    -- JSON array of the running order
   updated_at   INTEGER NOT NULL
 );
 
-INSERT OR IGNORE INTO race_control (id, status, updated_at) VALUES ('live', 'idle', 0);
+INSERT INTO race_control (id, mode, status, updated_at) VALUES ('live', 'race', 'idle', 0);

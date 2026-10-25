@@ -48,6 +48,7 @@ DROP TABLE IF EXISTS race_control;
 CREATE TABLE race_control (
   id           TEXT    PRIMARY KEY,     -- always 'live'
   class        TEXT,                    -- gt3 | gt4
+  mode         TEXT,                    -- race | quali
   round        INTEGER,
   race_name    TEXT,
   track        TEXT,
@@ -58,4 +59,4 @@ CREATE TABLE race_control (
   running      TEXT,                    -- JSON array of the running order
   updated_at   INTEGER NOT NULL
 );
-INSERT INTO race_control (id, status, updated_at) VALUES ('live', 'idle', 0);
+INSERT INTO race_control (id, mode, status, updated_at) VALUES ('live', 'race', 'idle', 0);
