@@ -2147,9 +2147,10 @@ async function checkMaintenance() {
         const cfg = (body && body.settings) || {};
         if (String(cfg.maintenance) !== '1') return;
 
-        if (cfg.maintenance_title) {
-            document.getElementById('maintTitle').textContent = cfg.maintenance_title;
-        }
+        // The heading stays "WE'RE WORKING ON IT". maintenance_title is the
+        // bot's, where a blunt ERROR is the right answer to a command that
+        // will not run; on the site it would read as something broken
+        // rather than something being worked on.
         if (cfg.maintenance_message) {
             document.getElementById('maintMsg').textContent = cfg.maintenance_message;
         }
