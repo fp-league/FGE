@@ -84,6 +84,31 @@ html,body { width:1920px; height:1080px; background:transparent; overflow:hidden
 #status.formation { background:#B58100; border-color:#B58100; }
 #status.chequered, #status.finished { background:#fff; color:#111; border-color:#fff; }
 
+/* ── championship impact (after the flag) ── */
+#champ {
+  position:absolute; top:46px; right:46px; width:420px;
+  background:rgba(10,2,1,.86); border-radius:3px;
+  border-right:5px solid var(--cls,#E10600);
+  opacity:0; transform:translateX(14px); transition:opacity .4s, transform .4s;
+  pointer-events:none;
+}
+#champ.on { opacity:1; transform:none; }
+.ch-head { font-size:11px; font-weight:700; letter-spacing:.18em; color:var(--cls,#E10600);
+  padding:12px 16px 9px; border-bottom:1px solid rgba(255,255,255,.1); }
+.ch-row { display:grid; grid-template-columns:34px 1fr auto 74px; align-items:center;
+  gap:10px; padding:8px 16px; border-bottom:1px solid rgba(255,255,255,.055); }
+.ch-row:last-child { border-bottom:none; }
+.ch-pos { font-weight:700; font-size:16px; color:#fff; font-variant-numeric:tabular-nums; }
+.ch-row.lead .ch-pos { color:#FFD24A; }
+.ch-name { font-weight:600; font-size:15px; color:#fff;
+  overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+.ch-move { font-weight:700; font-size:12px; font-variant-numeric:tabular-nums; }
+.ch-move.up   { color:#7ED38A; }
+.ch-move.down { color:#ef9a9a; }
+.ch-move.same { color:#6d6060; }
+.ch-pts { font-weight:700; font-size:15px; color:#fff; text-align:right; font-variant-numeric:tabular-nums; }
+.ch-gain { font-size:11px; color:#9f8f8f; }
+
 /* ── race control message ── */
 #msg {
   position:absolute; left:46px; bottom:46px; max-width:900px;
@@ -127,6 +152,11 @@ html,body { width:1920px; height:1080px; background:transparent; overflow:hidden
     <div class="cd" id="preCd">--:--</div>
   </div>
 
+  <div id="champ">
+    <div class="ch-head">CHAMPIONSHIP AFTER THIS ROUND</div>
+    <div id="chRows"></div>
+  </div>
+
   <div id="msg"><span class="lbl">RACE CONTROL</span><span class="txt" id="msgTxt"></span></div>
 
 <script>
@@ -138,6 +168,9 @@ const MAX_ROWS = Number(new URLSearchParams(location.search).get('rows') || 12);
 let state = { status:'idle', running:[] };
 let skew  = 0;                 // server clock minus ours
 let lastRowSig = null;         // so the tower only repaints when it changes
+let league     = null;         // the season record, for the championship panel
+let leagueTried = false;
+let lastChampSig = null;
 const now = () => Date.now() + skew;
 
 const $ = id => document.getElementById(id);
@@ -149,6 +182,189 @@ const esc = s => String(s == null ? '' : s)
 // hex is dropped rather than written into a style attribute.
 const hex = v => /^#[0-9a-fA-F]{6}$/.test(String(v || '').trim())
   ? String(v).trim().toUpperCase() : '#888888';
+
+// ── Championship impact ───────────────────────────────────
+// The overlay reads the season itself (read-only key, same one the public
+// site uses) so that after the flag it can show what the result just did to
+// the title fight. Fetched once, lazily, the first time a session is live.
+const BIN_URL = 'https://api.jsonbin.io/v3/b/6ada83fdac6210605a4a3a74/latest';
+const BIN_KEY = '$2a$10$G0A4V5Q7TOSTCAm/D4oskenfMyJjU.5SXbAVK5kdCNIkmelTS/.be';
+
+async function loadLeague() {
+  if (leagueTried) return;
+  leagueTried = true;
+  try {
+    const r = await fetch(BIN_URL, { headers: { 'X-Access-Key': BIN_KEY } });
+    league = (await r.json()).record || null;
+  } catch { league = null; }
+}
+
+const DEFAULT_TABLE = [20,15,12,10,8,6,4,3,2,1];
+
+function pointsOf(cd) {
+  const p = (cd && cd.points) || {};
+  const num = (v, d) => (v === '' || v == null || isNaN(Number(v)) ? d : Number(v));
+  return {
+    table: Array.isArray(p.table) && p.table.length ? p.table.map(n => Number(n) || 0) : DEFAULT_TABLE,
+    fastestLap: num(p.fastestLap, 1),
+    dotd: num(p.dotd, 0),
+  };
+}
+
+const dKey = d => (d && (d.id || d.name)) || '';
+
+function keyOf(res, drivers) {
+  if (!res) return '';
+  if (typeof res === 'object' && res.driverId) {
+    const byId = (drivers || []).find(x => x.id === res.driverId);
+    if (byId) return dKey(byId);
+  }
+  const name = (typeof res === 'string') ? res : res.driver;
+  if (!name) return '';
+  const byName = (drivers || []).find(x => x.name === name);
+  return byName ? dKey(byName) : name;
+}
+
+/**
+ * Like keyOf, but refuses to invent a driver. The live session names a class;
+ * if those drivers aren't on that class's roster we are looking at the wrong
+ * season and must not score them.
+ */
+function rosterKey(entry, drivers) {
+  if (entry.driverId) {
+    const byId = (drivers || []).find(x => x.id === entry.driverId);
+    if (byId) return dKey(byId);
+  }
+  const byName = (drivers || []).find(x => x.name === entry.name);
+  return byName ? dKey(byName) : '';
+}
+
+/** Wins, then seconds, then thirds — so a points tie is never arbitrary. */
+function countback(cd, drivers) {
+  const tally = {};
+  (cd.races || []).forEach(r => (r.results || []).forEach((res, i) => {
+    const k = keyOf(res, drivers);
+    if (!k) return;
+    const pos = (typeof res === 'object' && res.pos != null) ? res.pos : i + 1;
+    if (String(pos).toUpperCase() === 'DNF') return;
+    const n = Number(pos);
+    if (!Number.isFinite(n) || n > 3) return;
+    (tally[k] ||= [0, 0, 0])[n - 1]++;
+  }));
+  return tally;
+}
+
+/** Points for every driver across the races that have results. */
+function standingsOf(cd) {
+  const cfg = pointsOf(cd);
+  const drivers = cd.drivers || [];
+  const pts = {};
+  (cd.races || []).forEach(r => {
+    (r.results || []).forEach((res, i) => {
+      const k = keyOf(res, drivers);
+      if (!k) return;
+      const pos = (typeof res === 'object' && res.pos != null) ? res.pos : i + 1;
+      if (String(pos).toUpperCase() === 'DNF') return;
+      pts[k] = (pts[k] || 0) + (cfg.table[Number(pos) - 1] || 0);
+      if (r.fastestLap && keyOf(r.fastestLap, drivers) === k) pts[k] += cfg.fastestLap;
+    });
+    if (r.dotdWinner && cfg.dotd) {
+      const dk = keyOf(r.dotdWinner, drivers);
+      if (dk) pts[dk] = (pts[dk] || 0) + cfg.dotd;
+    }
+  });
+  return { pts, cfg, drivers };
+}
+
+/**
+ * Championship before and after, using the running order on screen as the
+ * finishing order. Only drawn once the flag has fallen.
+ */
+function champRows() {
+  const cd = league && league[state.class === 'gt4' ? 'gt4' : 'gt3'];
+  if (!cd) return null;
+
+  const { pts, cfg, drivers } = standingsOf(cd);
+
+  // Has this round already been saved into the season? If so the points are
+  // in `pts` already and adding them again would double-count.
+  const round = state.round;
+  const saved = (cd.races || []).some(r =>
+    String(r.round) === String(round) && (r.results || []).length);
+
+  // If nobody on screen is on this class's roster, the overlay is pointed at
+  // the wrong season — show nothing rather than a made-up table.
+  const onRoster = (state.running || []).filter(r => rosterKey(r, drivers));
+  if (!onRoster.length) return null;
+
+  const after = { ...pts };
+  const gained = {};
+  if (!saved) {
+    let pos = 0;
+    (state.running || []).forEach(r => {
+      if (r.out) return;
+      pos++;
+      const k = rosterKey(r, drivers);
+      if (!k) return;
+      const earn = cfg.table[pos - 1] || 0;
+      after[k] = (after[k] || 0) + earn;
+      gained[k] = earn;
+    });
+  }
+
+  const cb = countback(cd, drivers);
+  const order = arr => Object.keys(arr).sort((a, b) => {
+    const diff = (arr[b] || 0) - (arr[a] || 0);
+    if (diff) return diff;
+    const ca = cb[a] || [0,0,0], cbb = cb[b] || [0,0,0];
+    for (let i = 0; i < 3; i++) if (cbb[i] !== ca[i]) return cbb[i] - ca[i];
+    return 0;
+  });
+  const beforeOrder = order(pts);
+  const afterOrder  = order(after);
+
+  const nameOf = k => {
+    const d = drivers.find(x => dKey(x) === k);
+    return d ? d.name : k;
+  };
+
+  return afterOrder.slice(0, 5).map((k, i) => {
+    const was = beforeOrder.indexOf(k);
+    const move = was === -1 ? 0 : was - i;
+    return {
+      pos: i + 1, name: nameOf(k), points: after[k] || 0,
+      gain: gained[k] || 0, move,
+    };
+  });
+}
+
+function renderChamp() {
+  // Only after the flag, and only once there is an order to score.
+  const show = ['chequered', 'finished'].includes(state.status) && (state.running || []).length;
+  if (!show) { $('champ').className = ''; lastChampSig = null; return; }
+
+  if (!leagueTried) { loadLeague().then(render); return; }
+
+  const rows = champRows();
+  if (!rows || !rows.length) { $('champ').className = ''; return; }
+
+  const sig = JSON.stringify(rows);
+  if (sig !== lastChampSig) {
+    lastChampSig = sig;
+    $('chRows').innerHTML = rows.map(r => {
+      const arrow = r.move > 0 ? `<span class="ch-move up">▲${r.move}</span>`
+                  : r.move < 0 ? `<span class="ch-move down">▼${-r.move}</span>`
+                  : `<span class="ch-move same">—</span>`;
+      return `<div class="ch-row${r.pos === 1 ? ' lead' : ''}">
+          <span class="ch-pos">${r.pos}</span>
+          <span class="ch-name">${esc(r.name)}</span>
+          ${arrow}
+          <span class="ch-pts">${r.points}${r.gain ? `<span class="ch-gain"> +${r.gain}</span>` : ''}</span>
+        </div>`;
+    }).join('');
+  }
+  $('champ').className = 'on';
+}
 
 /** "1:42.391", "42.391" or "1:42" → ms. Anything else → null. */
 const lapMs = v => {
@@ -194,6 +410,9 @@ function render() {
     $('preRace').textContent = state.raceName || '';
     $('preCd').textContent = clock(state.lightsOut - now());
   }
+
+  // championship impact, after the flag
+  renderChamp();
 
   // race control message
   const m = (state.message || '').trim();
