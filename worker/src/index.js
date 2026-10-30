@@ -511,8 +511,14 @@ async function postAnnounce(request, env) {
   if (env.ADMIN_TOKEN && request.headers.get('X-Admin-Token') !== env.ADMIN_TOKEN) {
     return bad('not authorised', request, env, 401);
   }
+  let body;
+  try { body = await request.json(); } catch { return bad('invalid JSON body', request, env); }
+  const cls = normClass(body.class);
+  const round = body.round;
+
   // Results are per class, and most servers keep a channel per class, so a
   // class-specific channel wins over the shared one when it is set.
+  // Resolved after cls exists, obviously.
   const channel = (cls === 'gt4' ? env.ANNOUNCE_CHANNEL_GT4 : env.ANNOUNCE_CHANNEL_GT3)
                   || env.ANNOUNCE_CHANNEL_ID;
 
@@ -524,11 +530,6 @@ async function postAnnounce(request, env) {
     return bad('set ANNOUNCE_CHANNEL_GT3 / ANNOUNCE_CHANNEL_GT4 in wrangler.toml ' +
       '(or a DISCORD_WEBHOOK_URL secret)', request, env, 503);
   }
-
-  let body;
-  try { body = await request.json(); } catch { return bad('invalid JSON body', request, env); }
-  const cls = normClass(body.class);
-  const round = body.round;
 
   // The admin just wrote to the bin; the cached copy is a few seconds stale.
   leagueCache = { at: 0, data: null };
