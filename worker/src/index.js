@@ -590,6 +590,35 @@ async function postRegisterCommands(request, env) {
 }
 
 /**
+ * Maintenance. Checked before anything else, so no command half-runs
+ * against a league that is mid-edit — a pack opened out of a set somebody
+ * is rebuilding is a card people keep.
+ *
+ * Reads the setting every time rather than caching it: the point of a
+ * switch is that flipping it takes effect, and one D1 read on a slash
+ * command is nothing.
+ */
+async function maintenanceReply(env) {
+  let cfg;
+  try { cfg = await settings(env); } catch { return null; }
+  if (String(cfg.maintenance) !== '1') return null;
+
+  return {
+    type: 4,
+    data: {
+      embeds: [{
+        title: cfg.maintenance_title || 'ERROR',
+        description: cfg.maintenance_message ||
+          'FGE is being worked on right now. Everything is coming back shortly.',
+        color: 0xE10600,
+        footer: { text: 'FGE · fp-league.github.io/FGE' },
+      }],
+      allowed_mentions: { parse: [] },
+    },
+  };
+}
+
+/**
  * Turn whatever a command handler returned into a Discord reply.
  *
  * Most return one embed. A pack returns { embeds: [...] } so each card's art
@@ -757,7 +786,11 @@ async function getEconPublic(request, env) {
                   settings: await settings(env) }, null, request, env);
   } catch {
     // Not an error for the site — it just means there are no custom cards.
-    return json({ ok: true, cards: [], packs: [] }, null, request, env);
+    // The settings still go out, because the maintenance switch lives in
+    // them and a site that cannot read it would never put the screen up.
+    let cfg = {};
+    try { cfg = await settings(env); } catch { /* defaults are fine */ }
+    return json({ ok: true, cards: [], packs: [], settings: cfg }, null, request, env);
   }
 }
 
@@ -1066,6 +1099,15 @@ export default {
         }
 
         if (interaction.type === 2) {
+          // Before the league data is even fetched: maintenance should hold
+          // whether or not the rest of the stack is answering.
+          const held = await maintenanceReply(env);
+          if (held) {
+            return new Response(JSON.stringify(held), {
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+
           let record;
           try { record = await league(env); }
           catch {

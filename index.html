@@ -35,6 +35,20 @@
     <link href="https://fonts.googleapis.com/css2?family=Titillium+Web:wght@400;600;700;900&display=swap" rel="stylesheet">
 </head>
 <body>
+    <!-- Maintenance screen. Hidden unless the Worker says the league is
+         being worked on, so it costs nothing the rest of the time. -->
+    <div class="maint" id="maintScreen" hidden>
+      <div class="maint-card">
+        <img src="fge-logo.webp" alt="FGE" class="maint-logo" width="120" height="120">
+        <div class="maint-flag" aria-hidden="true"><i></i><i></i><i></i></div>
+        <h1 id="maintTitle">WE'RE WORKING ON IT</h1>
+        <p id="maintMsg">FGE is being updated right now. Everything is coming back shortly.</p>
+        <p class="maint-sub">Standings, results and the card set are all safe — they're just
+           off the track for a moment.</p>
+        <button class="maint-btn" onclick="location.reload()">CHECK AGAIN</button>
+      </div>
+    </div>
+
     <a class="skip-link" href="#home">Skip to content</a>
     <nav class="navbar">
         <!-- Install banner -->

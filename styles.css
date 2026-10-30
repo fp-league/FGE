@@ -1582,3 +1582,77 @@ textarea:focus-visible,
     .tc-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 0.6rem; }
     .tc-stats b { font-size: 0.78rem; }
 }
+
+/* ── MAINTENANCE SCREEN ───────────────────────────────────
+   Covers the site while the league is being worked on. Fixed and on top
+   of everything rather than replacing the page, so nothing else has to
+   know it exists and turning it off is one attribute. */
+.maint {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1.5rem;
+    background:
+        radial-gradient(ellipse at 50% 0%, rgba(225, 6, 0, 0.22), transparent 62%),
+        #0B0B0C;
+    overflow-y: auto;
+}
+.maint[hidden] { display: none; }
+
+.maint-card {
+    max-width: 440px;
+    width: 100%;
+    text-align: center;
+    animation: maint-in 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+@keyframes maint-in { from { opacity: 0; transform: translateY(14px); } }
+@media (prefers-reduced-motion: reduce) {
+    .maint-card { animation: none; }
+    .maint-flag i { animation: none !important; }
+}
+
+.maint-logo { width: 120px; height: auto; margin-bottom: 1.6rem; }
+
+/* Three marshal's flags waving in sequence — a bit of life, so the screen
+   reads as "being worked on" rather than "broken". */
+.maint-flag { display: flex; gap: 0.5rem; justify-content: center; margin-bottom: 1.6rem; }
+.maint-flag i {
+    width: 26px; height: 7px; border-radius: 1px; background: var(--gt3, #E10600);
+    animation: maint-wave 1.4s ease-in-out infinite;
+}
+.maint-flag i:nth-child(2) { animation-delay: 0.18s; opacity: 0.75; }
+.maint-flag i:nth-child(3) { animation-delay: 0.36s; opacity: 0.5; }
+@keyframes maint-wave {
+    0%, 100% { transform: scaleX(0.45); opacity: 0.35; }
+    50%      { transform: scaleX(1);    opacity: 1; }
+}
+
+.maint h1 {
+    font-family: var(--fu, inherit);
+    font-size: clamp(1.4rem, 5vw, 2rem);
+    letter-spacing: 0.1em;
+    color: #fff;
+    margin: 0 0 0.9rem;
+    line-height: 1.15;
+}
+.maint p { color: var(--grey-light, #CCC); line-height: 1.6; margin: 0 0 0.8rem; }
+.maint .maint-sub { color: var(--grey, #A6A6A6); font-size: 0.88rem; }
+
+.maint-btn {
+    margin-top: 1.4rem;
+    padding: 0.75rem 1.9rem;
+    font-family: var(--fu, inherit);
+    font-size: 0.78rem;
+    letter-spacing: 0.14em;
+    color: #fff;
+    background: var(--gt3, #E10600);
+    border: 0;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: filter 0.15s ease;
+}
+.maint-btn:hover { filter: brightness(1.15); }
+.maint-btn:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }

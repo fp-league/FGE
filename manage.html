@@ -773,6 +773,29 @@ textarea { resize:vertical; min-height:80px; }
       <div class="adm-section" id="sec-economy">
         <div class="sec-head"><h2>ECONOMY</h2></div>
 
+        <div class="form-card" id="maintCard">
+          <h3>MAINTENANCE MODE</h3>
+          <p class="bk-note">One switch for both: the site puts up a holding screen and the
+             Discord bot answers every command with an error instead of running it. Use it
+             while you are rebuilding the card set so nobody opens a pack out of a half-finished
+             one. This panel keeps working either way.</p>
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="fg-label">HEADING</label>
+              <input id="mtTitle" placeholder="ERROR">
+            </div>
+            <div class="form-group">
+              <label class="fg-label">MESSAGE</label>
+              <input id="mtMsg" placeholder="FGE is being worked on right now.">
+            </div>
+          </div>
+          <div class="form-actions">
+            <button class="btn btn-danger" id="mtOn" onclick="ecMaintenance(true)">TURN ON</button>
+            <button class="btn btn-white" id="mtOff" onclick="ecMaintenance(false)">TURN OFF</button>
+            <span class="img-size" id="mtStatus"></span>
+          </div>
+        </div>
+
         <div class="form-card">
           <h3>WALLETS</h3>
           <p class="bk-note">Credits are earned in Discord with <code>/work</code>, <code>/daily</code>,
@@ -2540,6 +2563,7 @@ async function loadEcon(quiet) {
 }
 
 function renderEconomy() {
+    renderMaintenance();
     renderEconPacks();
     renderEconCards();
     renderEconJobs();
@@ -2968,6 +2992,47 @@ function ecEditMode(kind, what) {
     if (st)  st.textContent  = what ? `editing ${what} — press NEW for a different one` : '';
     const card = btn && btn.closest('.form-card');
     if (card) card.classList.toggle('is-editing', Boolean(what));
+}
+
+
+/* ── Maintenance ─────────────────────────────────────── */
+
+/** Reflect the live state on the two buttons, so the switch reads at a glance. */
+function renderMaintenance() {
+    const cfg = (econ && econ.settings) || {};
+    const on  = String(cfg.maintenance) === '1';
+    const card = document.getElementById('maintCard');
+    if (card) card.classList.toggle('is-editing', on);
+    const t = document.getElementById('mtTitle');
+    const m = document.getElementById('mtMsg');
+    if (t && document.activeElement !== t) t.value = cfg.maintenance_title || '';
+    if (m && document.activeElement !== m) m.value = cfg.maintenance_message || '';
+    const st = document.getElementById('mtStatus');
+    if (st) st.textContent = on ? 'ON — the site and the bot are held' : 'off — everything is live';
+    const onBtn = document.getElementById('mtOn');
+    const offBtn = document.getElementById('mtOff');
+    if (onBtn)  onBtn.disabled  = on;
+    if (offBtn) offBtn.disabled = !on;
+}
+
+async function ecMaintenance(on) {
+    const st = document.getElementById('mtStatus');
+    st.textContent = on ? 'turning on…' : 'turning off…';
+    const title = document.getElementById('mtTitle').value.trim();
+    const msg   = document.getElementById('mtMsg').value.trim();
+    try {
+        await econPost({ action: 'settings', settings: {
+            maintenance: on ? '1' : '0',
+            ...(title ? { maintenance_title: title } : {}),
+            ...(msg ? { maintenance_message: msg } : {}),
+        } });
+        await loadEcon(true);
+        toast(on ? 'Maintenance on — the site and the bot are held'
+                 : 'Maintenance off — everything is live again', 'ok');
+    } catch (e) {
+        st.textContent = '';
+        toast('Could not switch it: ' + (e.message || 'unknown'), 'err');
+    }
 }
 
 /* ── Jobs ────────────────────────────────────────────── */

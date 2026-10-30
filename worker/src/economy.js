@@ -38,6 +38,12 @@ const DEFAULTS = {
   sell_values: '{"common":25,"uncommon":60,"rare":140,"epic":350,"legendary":900}',
   pay_min: '10',
   pay_max: '100000',
+  // Maintenance. One switch: the bot refuses every command and the site
+  // puts up a holding screen, so the league can be worked on without
+  // anyone pulling a pack out of a half-finished set.
+  maintenance: '0',
+  maintenance_title: 'ERROR',
+  maintenance_message: 'FGE is being worked on right now. Everything is coming back shortly.',
 };
 
 /**

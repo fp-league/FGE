@@ -2127,8 +2127,45 @@ function startCountdownTick() {
 }
 
 // ── INIT ──────────────────────────────────────────────────
+/**
+ * Maintenance screen.
+ *
+ * The switch lives in the Worker rather than in this file, so turning it on
+ * and off is the admin panel rather than a deploy. It is checked without
+ * blocking the rest of the boot: the page loads as normal and the screen
+ * drops over the top a moment later, which is the right way round — a
+ * Worker that is down should never be able to hide the site.
+ */
+async function checkMaintenance() {
+    if (!API_BASE) return;
+    const el = document.getElementById('maintScreen');
+    if (!el) return;
+    try {
+        const res = await fetch(`${API_BASE.replace(/\/+$/, '')}/api/econ/public`,
+                                { cache: 'no-store' });
+        const body = await res.json();
+        const cfg = (body && body.settings) || {};
+        if (String(cfg.maintenance) !== '1') return;
+
+        if (cfg.maintenance_title) {
+            document.getElementById('maintTitle').textContent = cfg.maintenance_title;
+        }
+        if (cfg.maintenance_message) {
+            document.getElementById('maintMsg').textContent = cfg.maintenance_message;
+        }
+        el.hidden = false;
+        // Nothing behind it should scroll or be reachable by tab.
+        document.body.style.overflow = 'hidden';
+        document.querySelectorAll('body > *:not(#maintScreen)')
+            .forEach(n => n.setAttribute('inert', ''));
+    } catch (e) {
+        // Unreachable Worker means the site carries on, which is correct.
+    }
+}
+
 async function init() {
     lightsOut();
+    checkMaintenance();
 
     // Full-screen nav overlay toggle
     document.getElementById('navToggle')?.addEventListener('click', () => {
