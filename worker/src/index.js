@@ -383,6 +383,64 @@ async function getImage(request, env, pathname) {
 const LIVE_STATUSES = ['idle','formation','green','sc','vsc','red','chequered','finished'];
 
 /**
+ * GET /api/discord/images?channel=ID — admin only.
+ *
+ * Walks a channel's history and returns every image it finds, as attachments
+ * or as embeds. Paginates until it runs out or hits the cap, because the
+ * interesting channel is usually the one with hundreds of posts in it.
+ */
+async function getDiscordImages(request, env) {
+  if (env.ADMIN_TOKEN && request.headers.get('X-Admin-Token') !== env.ADMIN_TOKEN) {
+    return bad('not authorised', request, env, 401);
+  }
+  if (!env.DISCORD_TOKEN) return bad('no DISCORD_TOKEN secret', request, env, 503);
+
+  const url = new URL(request.url);
+  const channel = (url.searchParams.get('channel') || '').trim();
+  if (!/^\d{5,25}$/.test(channel)) return bad('a channel id is required', request, env, 422);
+  const cap = Math.min(2000, Math.max(1, Number(url.searchParams.get('limit')) || 500));
+
+  const auth = { Authorization: `Bot ${env.DISCORD_TOKEN}` };
+  const out = [];
+  let before = null, scanned = 0, pages = 0;
+
+  while (out.length < cap && pages < 20) {
+    pages++;
+    const q = new URLSearchParams({ limit: '100' });
+    if (before) q.set('before', before);
+    const res = await fetch(
+      `https://discord.com/api/v10/channels/${channel}/messages?${q}`, { headers: auth });
+    if (!res.ok) {
+      return bad(`Discord said ${res.status} — the bot may not be able to read that channel`,
+        request, env, res.status === 403 ? 403 : 502);
+    }
+    const msgs = await res.json();
+    if (!msgs.length) break;
+    scanned += msgs.length;
+    before = msgs[msgs.length - 1].id;
+
+    for (const m of msgs) {
+      const author = (m.author && (m.author.global_name || m.author.username)) || '';
+      for (const a of (m.attachments || [])) {
+        if (a.content_type && !a.content_type.startsWith('image/')) continue;
+        if (!a.content_type && !/\.(png|jpe?g|webp|gif)$/i.test(a.filename || '')) continue;
+        out.push({ url: a.url, name: a.filename, w: a.width, h: a.height,
+                   bytes: a.size, author, text: (m.content || '').slice(0, 200), at: m.timestamp });
+      }
+      for (const e of (m.embeds || [])) {
+        const src = (e.image && e.image.url) || (e.thumbnail && e.thumbnail.url);
+        if (src) out.push({ url: src, name: e.title || '', w: (e.image||e.thumbnail).width,
+                            h: (e.image||e.thumbnail).height, author,
+                            text: (m.content || '').slice(0, 200), at: m.timestamp });
+      }
+    }
+  }
+
+  return json({ ok: true, channel, scanned, found: out.length, images: out.slice(0, cap) },
+    null, request, env);
+}
+
+/**
  * POST /api/cards/grant — admin only. Hands someone packs.
  * { userId, count } — the packs wait until they run /cards pack.
  */
@@ -425,12 +483,31 @@ async function getDiscordChannels(request, env) {
   const cats = {};
   all.filter(c => c.type === 4).forEach(c => { cats[c.id] = c.name; });
 
+  // ?all=1 includes forums, voice and stage as well, plus active threads.
+  // A channel people post images into is often a forum or a thread, and
+  // filtering to plain text channels makes those invisible.
+  const wide = new URL(request.url).searchParams.get('all') === '1';
+  const TYPES = { 0:'text', 2:'voice', 4:'category', 5:'announcement',
+                  10:'thread', 11:'thread', 12:'thread', 13:'stage', 15:'forum', 16:'media' };
+
+  let threads = [];
+  if (wide) {
+    try {
+      const t = await fetch(
+        `https://discord.com/api/v10/guilds/${env.DISCORD_GUILD_ID}/threads/active`,
+        { headers: { Authorization: `Bot ${env.DISCORD_TOKEN}` } });
+      if (t.ok) threads = (await t.json()).threads || [];
+    } catch { /* threads are a bonus; carry on without them */ }
+  }
+
+  const keep = c => wide ? c.type !== 4 : (c.type === 0 || c.type === 5);
+
   return json({
     ok: true,
-    channels: all
-      .filter(c => c.type === 0 || c.type === 5)        // text and announcement
+    channels: [...all.filter(keep), ...threads]
       .sort((a, b) => (a.position || 0) - (b.position || 0))
-      .map(c => ({ id: c.id, name: '#' + c.name, category: cats[c.parent_id] || null })),
+      .map(c => ({ id: c.id, name: '#' + c.name, kind: TYPES[c.type] || String(c.type),
+                   category: cats[c.parent_id] || null })),
   }, null, request, env);
 }
 
@@ -833,6 +910,10 @@ export default {
 
         return new Response(JSON.stringify({ type: 4, data: { content: 'Unsupported interaction.' } }),
           { headers: { 'Content-Type': 'application/json' } });
+      }
+
+      if (pathname === '/api/discord/images' && request.method === 'GET') {
+        return await getDiscordImages(request, env);
       }
 
       if (pathname === '/api/cards/grant' && request.method === 'POST') {
