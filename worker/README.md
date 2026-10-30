@@ -319,6 +319,53 @@ site and every 1s on the overlay while a session is open, dropping to 60s and
 20,000 requests across a 90-minute race, well inside the 100,000/day free
 tier. An overlay left open overnight on idle costs about 5,800.
 
+## Trading cards
+
+Driver cards, collected in Discord. Discord is the login — the site has no
+accounts, and this did not seem worth adding them for.
+
+| Command | What it does |
+|---------|--------------|
+| `/cards pack [class]` | Opens 5 cards. One free pack every 8 hours |
+| `/cards collection [user] [class]` | What you (or someone else) hold, with completion |
+| `/cards card <name> [class]` | One driver's card, and whether you own it |
+| `/cards collectors [class]` | Who has collected the most |
+
+GT3 and GT4 are separate sets.
+
+### Rarity
+
+Earned, not invented — it comes from the season, so the set re-rates itself
+as the championship moves:
+
+| Tier | Who |
+|------|-----|
+| 🟡 Legendary | Championship leader |
+| 🟣 Epic | Championship podium, or any race winner |
+| 🔵 Rare | A race podium |
+| 🟢 Uncommon | Has scored points |
+| ⚪ Common | Everyone else |
+
+Pull weights are 50/28/15/6/1 from Common to Legendary, and a tier that is
+empty falls through to the next one down. A pack never contains the same
+driver twice; duplicates across packs are the point and still happen.
+
+The full set is also browsable on the site under **CARDS**, which is where
+the good-looking version lives — Discord can only render an embed.
+
+### Setup
+
+```bash
+npx wrangler d1 execute fge --remote --file=./migrations/002-trading-cards.sql
+node register-commands.mjs YOUR_SERVER_ID    # re-register so /cards appears
+```
+
+Or just push `worker/migrations/**` — the Migrate workflow runs it. The
+commands still have to be registered from your machine, because that needs
+the bot token, which never goes near the Worker.
+
+`/api/health` reports `cards: true` once the tables exist.
+
 ## Endpoints
 
 | Method | Path           | Purpose |

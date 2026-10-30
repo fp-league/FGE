@@ -380,6 +380,7 @@ function renderCurrentPage() {
         case 'fantasy':    renderFantasy(); break;
         case 'race':       renderRace(); break;
         case 'live':       renderLive(); break;
+        case 'cards':      renderCards(); break;
         case 'stewards':   renderStewards(); break;
         case 'dotd':       renderDOTD(); break;
     }
@@ -1569,6 +1570,123 @@ async function voteDOTD(name) {
     }
     dotdBusy = false;
     renderDOTD();
+}
+
+// ── TRADING CARDS ────────────────────────────────────────
+// The set is shown here; collecting happens in Discord, which is also the
+// login — the site has no accounts and this did not seem worth adding them
+// for. These rarity rules mirror worker/src/cards.js exactly; if one changes
+// the other has to.
+const CARD_TIERS = {
+    legendary: { label: 'LEGENDARY', colour: '#FFC400' },
+    epic:      { label: 'EPIC',      colour: '#9C27B0' },
+    rare:      { label: 'RARE',      colour: '#2196F3' },
+    uncommon:  { label: 'UNCOMMON',  colour: '#4CAF50' },
+    common:    { label: 'COMMON',    colour: '#9E9E9E' },
+};
+const TIER_ORDER = ['legendary', 'epic', 'rare', 'uncommon', 'common'];
+
+function cardSetFor(d) {
+    const drivers = d.drivers || [];
+    const { pts } = calcStandings(d.races || [], drivers, d.teams || []);
+
+    const extra = {};
+    drivers.forEach(x => { extra[driverKey(x)] = { wins: 0, podiums: 0, starts: 0 }; });
+    (d.races || []).forEach(r => (r.results || []).forEach((res, i) => {
+        const k = resultKey(res, drivers);
+        const e = extra[k];
+        if (!e) return;
+        e.starts++;
+        const raw = (typeof res === 'object' && res.pos != null) ? res.pos : i + 1;
+        if (String(raw).toUpperCase() === 'DNF') return;
+        const pos = Number(raw);
+        if (!Number.isFinite(pos)) return;
+        if (pos === 1) e.wins++;
+        if (pos <= 3) e.podiums++;
+    }));
+
+    const ranked = drivers.slice()
+        .sort((a, b) => (pts[driverKey(b)] || 0) - (pts[driverKey(a)] || 0));
+
+    return ranked.map((drv, i) => {
+        const k = driverKey(drv);
+        const e = extra[k] || { wins: 0, podiums: 0, starts: 0 };
+        const p = pts[k] || 0;
+        let rarity;
+        if (i === 0 && p > 0)     rarity = 'legendary';
+        else if (i <= 2 && p > 0) rarity = 'epic';
+        else if (e.wins > 0)      rarity = 'epic';
+        else if (e.podiums > 0)   rarity = 'rare';
+        else if (p > 0)           rarity = 'uncommon';
+        else                      rarity = 'common';
+        return { drv, rarity, position: i + 1, points: p, ...e };
+    });
+}
+
+function renderCards() {
+    const d = cls();
+    const el = document.getElementById('cardsContent');
+    if (!el) return;
+
+    const set = cardSetFor(d);
+    if (!set.length) {
+        el.innerHTML = '<p style="color:var(--muted);padding:2rem">No drivers in this class yet.</p>';
+        return;
+    }
+
+    const counts = {};
+    set.forEach(c => { counts[c.rarity] = (counts[c.rarity] || 0) + 1; });
+
+    const key = `<div class="tc-key">` + TIER_ORDER.filter(t => counts[t]).map(t =>
+        `<span class="tc-chip" style="--tc:${CARD_TIERS[t].colour}">
+           <i></i>${CARD_TIERS[t].label} <b>${counts[t]}</b></span>`).join('') + `</div>`;
+
+    const how = `<div class="tc-how">
+        <strong>${set.length} cards in the ${esc(currentClass)} set.</strong>
+        Collect them in Discord — <code>/cards pack</code> for a free pack every 8 hours,
+        <code>/cards collection</code> to see yours.
+        Rarity comes from the season: the championship leader is Legendary, the
+        championship podium and race winners are Epic, a race podium is Rare.
+      </div>`;
+
+    const grid = TIER_ORDER.filter(t => counts[t]).map(t => `
+        <h2 class="tc-head" style="--tc:${CARD_TIERS[t].colour}">
+          ${CARD_TIERS[t].label}<span>${counts[t]}</span>
+        </h2>
+        <div class="tc-grid">${
+          set.filter(c => c.rarity === t).map(c => cardHTML(c, d)).join('')
+        }</div>`).join('');
+
+    el.innerHTML = how + key + grid;
+}
+
+function cardHTML(c, d) {
+    const drv = c.drv;
+    const tier = CARD_TIERS[c.rarity];
+    const team = safeHex(colourFor(drv.team, d.teams), '#888888');
+    const names = String(drv.name || '').trim().split(/\s+/);
+    const initials = ((names[0] || '')[0] || '') + ((names[names.length - 1] || '')[0] || '');
+    return `
+      <div class="tc" style="--tc:${tier.colour};--team:${team}"
+           onclick="navigate('drivers',{driverFocusId:'${esc(driverKey(drv))}'})"
+           role="button" tabindex="0"
+           onkeydown="if(event.key==='Enter')navigate('drivers',{driverFocusId:'${esc(driverKey(drv))}'})">
+        <div class="tc-rar">${tier.label}</div>
+        <div class="tc-media">
+          ${drv.photo
+            ? `<img src="${esc(drv.photo)}" alt="${esc(drv.name)}" loading="lazy" decoding="async">`
+            : `<span class="tc-initials">${esc(initials.toUpperCase())}</span>`}
+          ${drv.number ? `<span class="tc-num">${esc(String(drv.number))}</span>` : ''}
+        </div>
+        <div class="tc-name">${esc(drv.name)}</div>
+        <div class="tc-team">${esc(drv.team || '—')}</div>
+        <div class="tc-stats">
+          <span><b>P${c.position}</b>POS</span>
+          <span><b>${c.points}</b>PTS</span>
+          <span><b>${c.wins}</b>WINS</span>
+          <span><b>${c.podiums}</b>POD</span>
+        </div>
+      </div>`;
 }
 
 // ── STEWARDS' DECISIONS ──────────────────────────────────
