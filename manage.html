@@ -226,6 +226,12 @@ textarea { resize:vertical; min-height:80px; }
   white-space:nowrap; }
 .ec-row .ec-mono { font-variant-numeric:tabular-nums; color:var(--grey); font-size:0.8rem; }
 .ec-off { opacity:0.45; }
+.bulk-box { margin-top:1.1rem; padding:0.9rem 1rem; border:1px dashed var(--line2);
+  border-radius:4px; background:rgba(255,255,255,0.02); }
+.bulk-box h4 { font-family:var(--fu); font-size:0.74rem; letter-spacing:0.12em;
+  margin:0 0 0.4rem; color:var(--grey); }
+.sm-bar > i { display:block; height:100%; background:var(--accent,#E10600);
+  transition:width 0.2s ease; }
 
 .tc-chip-adm i { width:8px; height:8px; border-radius:50%; background:var(--tc); }
 .tc-chip-adm b { color:#fff; }
@@ -899,6 +905,41 @@ textarea { resize:vertical; min-height:80px; }
             <button class="btn btn-ghost" onclick="ecNewCard()">NEW</button>
             <span class="img-size" id="ccStatus"></span>
           </div>
+
+          <div class="bulk-box">
+            <h4>ADD A WHOLE FOLDER</h4>
+            <p class="bk-note">Pick as many images as you like and each becomes a card named
+               after its file. <code>A-DGK.png</code> becomes <b>DGK</b>, A Tier;
+               <code>Wave2-Maxi.png</code> becomes <b>Maxi</b>, Wave 2. Tiers map to rarity
+               (S → Legendary, A → Epic, B → Rare, Wave → Uncommon) unless you pick one below.
+               Anything already there with the same name is updated rather than duplicated.</p>
+            <div class="form-grid">
+              <div class="form-group">
+                <label class="fg-label">RARITY</label>
+                <select id="bulkRarity">
+                  <option value="">Auto, from the file name</option>
+                  <option value="common">Common</option>
+                  <option value="uncommon">Uncommon</option>
+                  <option value="rare">Rare</option>
+                  <option value="epic">Epic</option>
+                  <option value="legendary">Legendary</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="fg-label">IMAGES</label>
+                <input type="file" id="bulkFiles" accept="image/*" multiple
+                       onchange="ecBulkPreview()">
+              </div>
+            </div>
+            <div id="bulkPreview" class="bk-note"></div>
+            <div class="form-actions">
+              <button class="btn btn-white" id="bulkGo" onclick="ecBulkImport()" disabled>IMPORT</button>
+              <button class="btn btn-ghost" onclick="ecBulkCancel()">STOP</button>
+              <span class="img-size" id="bulkStatus"></span>
+            </div>
+            <div class="sm-bar" style="margin-top:0.6rem"><i id="bulkBar" style="width:0%"></i></div>
+          </div>
+
           <div id="ecCards" style="margin-top:1rem"></div>
         </div>
 
@@ -2789,6 +2830,118 @@ function renderEconCards() {
         </div>`).join('');
 }
 
+
+/* ── Bulk import ─────────────────────────────────────── */
+// Twenty-nine cards one form at a time is the slow part, not the upload.
+
+let bulkStop = false;
+
+/** Tier prefixes are already a rarity ranking, so use them as one. */
+const BULK_TIER_RARITY = { s:'legendary', a:'epic', b:'rare', c:'uncommon', d:'common' };
+
+/**
+ * `A-DGK.png` → { name:'DGK', subtitle:'A Tier', rarity:'epic' }
+ * `Wave2-Free_Kies.png` → { name:'Free Kies', subtitle:'Wave 2', rarity:'uncommon' }
+ * Anything without a recognised prefix keeps its whole filename as the name.
+ */
+function bulkParseName(filename) {
+    const base = filename.replace(/\.[a-z0-9]+$/i, '');
+    const m = /^(S|A|B|C|D|Wave\s*([0-9]+))[-_ ]+(.+)$/i.exec(base);
+    if (!m) return { name: base.replace(/[_]+/g, ' ').trim(), subtitle: '', rarity: '' };
+
+    const tier = m[1].trim();
+    const name = m[3].replace(/[_]+/g, ' ').trim();
+    if (m[2]) return { name, subtitle: `Wave ${m[2]}`, rarity: 'uncommon' };
+    return { name, subtitle: `${tier.toUpperCase()} Tier`,
+             rarity: BULK_TIER_RARITY[tier.toLowerCase()] || '' };
+}
+
+function ecBulkPreview() {
+    const input = document.getElementById('bulkFiles');
+    const box   = document.getElementById('bulkPreview');
+    const go    = document.getElementById('bulkGo');
+    const files = [...(input.files || [])];
+    go.disabled = !files.length;
+    if (!files.length) { box.textContent = ''; return; }
+
+    const forced = document.getElementById('bulkRarity').value;
+    const rows = files.slice(0, 6).map(f => {
+        const p = bulkParseName(f.name);
+        const r = forced || p.rarity || 'rare';
+        return `<b style="color:${(RTIER[r] || RTIER.rare)[1]}">${esc(p.name)}</b>` +
+               (p.subtitle ? ` · ${esc(p.subtitle)}` : '') + ` · ${(RTIER[r] || RTIER.rare)[0]}`;
+    });
+    const bytes = files.reduce((n, f) => n + f.size, 0);
+    box.innerHTML = `${files.length} file${files.length !== 1 ? 's' : ''} · ${fmtBytes(bytes)}<br>` +
+        rows.join('<br>') + (files.length > 6 ? `<br>…and ${files.length - 6} more` : '');
+}
+
+function ecBulkCancel() {
+    bulkStop = true;
+    document.getElementById('bulkStatus').textContent = 'stopping after this one…';
+}
+
+async function ecBulkImport() {
+    const input  = document.getElementById('bulkFiles');
+    const files  = [...(input.files || [])];
+    const forced = document.getElementById('bulkRarity').value;
+    const st     = document.getElementById('bulkStatus');
+    const bar    = document.getElementById('bulkBar');
+    const go     = document.getElementById('bulkGo');
+    if (!files.length) return;
+    if (!API_BASE) { toast('Worker URL not configured', 'err'); return; }
+
+    bulkStop = false;
+    go.disabled = true;
+    const failed = [];
+    let done = 0;
+
+    for (const file of files) {
+        if (bulkStop) break;
+        const p = bulkParseName(file.name);
+        st.textContent = `${done + 1} of ${files.length} — ${p.name}`;
+        try {
+            if (!/^image\//.test(file.type)) throw new Error('not an image');
+            // Same path as the single-file field: resize, re-encode, upload.
+            // No data URL, because the Worker takes the blob.
+            const { blob, type } = await compressImage(file, 'card', false);
+            const url = await uploadToR2(blob, type, pct => {
+                st.textContent = `${done + 1} of ${files.length} — ${p.name}` +
+                                 (pct >= 0 ? ` (${pct}%)` : '');
+            });
+            await econPost({ action: 'saveCard', card: {
+                id: p.name, name: p.name, subtitle: p.subtitle,
+                rarity: forced || p.rarity || 'rare', image: url, blurb: '',
+            } });
+        } catch (e) {
+            failed.push(`${file.name}: ${e.message || 'failed'}`);
+        }
+        done++;
+        bar.style.width = `${Math.round(done / files.length * 100)}%`;
+    }
+
+    go.disabled = false;
+    input.value = '';
+    document.getElementById('bulkPreview').textContent = '';
+    await loadEcon(true);
+
+    const made = done - failed.length;
+    st.textContent = `${made} card${made !== 1 ? 's' : ''} added` +
+        (failed.length ? ` · ${failed.length} failed` : '') +
+        (bulkStop ? ' · stopped' : '');
+    if (failed.length) {
+        console.warn('Bulk import failures:\n' + failed.join('\n'));
+        toast(`${made} added, ${failed.length} failed — see the browser console for which`, 'err');
+    } else {
+        toast(`${made} cards added, and they are in the packs from now on`, 'ok');
+    }
+}
+
+// Re-render the preview when the rarity override changes.
+document.addEventListener('change', e => {
+    if (e.target && e.target.id === 'bulkRarity') ecBulkPreview();
+});
+
 /* ── Jobs ────────────────────────────────────────────── */
 
 function ecNewJob() {
@@ -3540,10 +3693,32 @@ function loadImage(src) {
     });
 }
 
-/** Resize to fit `max` on the long edge and re-encode. Prefers WebP. */
-async function compressImage(file, presetName) {
+/**
+ * Decode an image file without going through a data URL.
+ *
+ * The old path was file → base64 string → <img> → canvas, which for a 10MB
+ * PNG means building a 13MB string and decoding it on the main thread
+ * before any resizing starts. createImageBitmap reads the file directly and
+ * decodes off-thread. FileReader stays as the fallback for anything that
+ * doesn't support it.
+ */
+async function decodeImage(file) {
+    if (typeof createImageBitmap === 'function') {
+        try { return await createImageBitmap(file); } catch (e) { /* fall through */ }
+    }
+    return loadImage(await readFileAsDataURL(file));
+}
+
+/**
+ * Resize to fit `max` on the long edge and re-encode. Prefers WebP.
+ *
+ * `wantDataUrl` is off by default because encoding twice — once to a blob
+ * for the upload and once to a base64 string nobody reads — was doubling
+ * the slowest part of the job. Only the bin fallback needs the string.
+ */
+async function compressImage(file, presetName, wantDataUrl) {
     const p = IMG_PRESETS[presetName] || IMG_PRESETS.avatar;
-    const img = await loadImage(await readFileAsDataURL(file));
+    const img = await decodeImage(file);
 
     const scale = Math.min(1, p.max / Math.max(img.width, img.height));
     const w = Math.max(1, Math.round(img.width * scale));
@@ -3554,16 +3729,19 @@ async function compressImage(file, presetName) {
     const ctx = canvas.getContext('2d');
     ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(img, 0, 0, w, h);
+    if (img.close) img.close();          // release the bitmap straight away
 
-    // WebP is much smaller and keeps alpha; fall back if unsupported.
+    // WebP is much smaller and keeps alpha, which matters for cut-out card
+    // art. Safari before 14 can't encode it and silently hands back a PNG.
     let type = 'image/webp';
-    let out = canvas.toDataURL(type, p.q);
-    if (!out.startsWith('data:image/webp')) {
+    let blob = await new Promise(res => canvas.toBlob(res, type, p.q));
+    if (!blob || blob.type !== type) {
         type = 'image/jpeg';
-        out = canvas.toDataURL(type, p.q);
+        blob = await new Promise(res => canvas.toBlob(res, type, p.q));
     }
-    const blob = await new Promise(res => canvas.toBlob(res, type, p.q));
-    return { dataUrl: out, blob, type, w, h };
+
+    const dataUrl = wantDataUrl ? canvas.toDataURL(type, p.q) : '';
+    return { dataUrl, blob, type, w, h };
 }
 
 /**
@@ -3590,19 +3768,38 @@ async function uploadToImgbb(dataUrl) {
     return body.data.display_url || body.data.url;
 }
 
-/** Send the compressed image to the Worker, which stores it in KV or R2. */
-async function uploadToR2(blob, type) {
-    const res = await fetch(`${API_BASE.replace(/\/+$/,'')}/api/upload`, {
-        method: 'POST',
-        headers: { 'Content-Type': type, ...(ADMIN_TOKEN ? {'X-Admin-Token': ADMIN_TOKEN} : {}) },
-        body: blob,
+/**
+ * Send the compressed image to the Worker, which stores it in KV or R2.
+ *
+ * XHR rather than fetch, because fetch has no upload progress event and an
+ * upload with no progress is indistinguishable from one that has hung. The
+ * timeout is the other half of that: without one a stalled connection waits
+ * forever behind a label that says "uploading".
+ */
+function uploadToR2(blob, type, onProgress) {
+    const UPLOAD_TIMEOUT_MS = 45000;
+    return new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', `${API_BASE.replace(/\/+$/,'')}/api/upload`);
+        xhr.timeout = UPLOAD_TIMEOUT_MS;
+        xhr.setRequestHeader('Content-Type', type);
+        if (ADMIN_TOKEN) xhr.setRequestHeader('X-Admin-Token', ADMIN_TOKEN);
+
+        if (onProgress && xhr.upload) {
+            xhr.upload.onprogress = e => onProgress(
+                e.lengthComputable ? Math.round(e.loaded / e.total * 100) : -1);
+        }
+        xhr.onload = () => {
+            let body = {};
+            try { body = JSON.parse(xhr.responseText); } catch (e) {}
+            if (xhr.status >= 200 && xhr.status < 300 && body.url) return resolve(body.url);
+            reject(new Error(body.error || `upload failed (HTTP ${xhr.status})`));
+        };
+        xhr.onerror = () => reject(new Error('upload failed — no answer from the Worker'));
+        xhr.ontimeout = () => reject(new Error(
+            `upload gave up after ${UPLOAD_TIMEOUT_MS / 1000}s — check the connection and try again`));
+        xhr.send(blob);
     });
-    let body = {};
-    try { body = await res.json(); } catch(e) {}
-    if (!res.ok || !body.url) {
-        throw new Error(body.error || `upload failed (HTTP ${res.status})`);
-    }
-    return body.url;
 }
 
 const fmtBytes = n =>
@@ -3617,20 +3814,25 @@ async function handleImage(input, targetId, presetName) {
     if (!/^image\//.test(file.type)) { toast('That file is not an image','err'); input.value=''; return; }
 
     const sizeEl = document.getElementById(targetId + 'Size');
-    if (sizeEl) sizeEl.textContent = 'compressing…';
+    const host = imageHost();
+    // imgBB wants base64 and the bin stores it inline; the Worker takes the
+    // blob. Encoding the string when nothing will read it is pure waiting.
+    const needsDataUrl = host !== 'worker';
+    if (sizeEl) sizeEl.textContent = `compressing ${fmtBytes(file.size)}…`;
 
     try {
-        const { dataUrl, blob, type, w, h } = await compressImage(file, presetName);
-        const bytes = dataUrlBytes(dataUrl);
+        const { dataUrl, blob, type, w, h } = await compressImage(file, presetName, needsDataUrl);
+        const bytes = blob ? blob.size : dataUrlBytes(dataUrl);
 
         // Hosted externally: the bin only stores a URL, so there is no
         // size pressure and nothing to check against the budget.
-        const host = imageHost();
         if (host !== 'bin') {
-            if (sizeEl) sizeEl.textContent = 'uploading…';
             const url = host === 'imgbb'
                 ? await uploadToImgbb(dataUrl)
-                : await uploadToR2(blob, type);
+                : await uploadToR2(blob, type, pct => {
+                    if (sizeEl) sizeEl.textContent =
+                        pct < 0 ? 'uploading…' : `uploading ${pct}%`;
+                  });
             document.getElementById(targetId).value = url;
             if (sizeEl) sizeEl.textContent =
                 `${w}×${h} · ${fmtBytes(blob ? blob.size : bytes)} · hosted`;

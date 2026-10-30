@@ -30,7 +30,10 @@ const MAX_ENTRIES_PER_VOTER = 3;   // stops one person farming fantasy sign-ups
 const LEAGUE_TTL_MS = 30_000;
 
 const MAX_UPLOAD_BYTES = 3 * 1024 * 1024;   // 3MB per image
-const UPLOADS_PER_HOUR = 40;                // per IP, stops bucket flooding
+// Per IP, and a backstop rather than the lock: /api/upload already requires
+// the admin token. 40 was low enough that importing a folder of card art in
+// one go tripped it, which read as a broken upload rather than a limit.
+const UPLOADS_PER_HOUR = 300;
 const ALLOWED_IMAGE_TYPES = {
   'image/webp': 'webp',
   'image/jpeg': 'jpg',
