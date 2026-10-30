@@ -15,6 +15,7 @@
  */
 
 import { verifyRequest, handleCommand, buildResults } from './discord.js';
+import { openPack, showCollection, showCard, showCollectors, CARD_VIEWS } from './cards.js';
 
 const MAX_NAME = 24;
 const MAX_IDENT = 64;
@@ -381,6 +382,42 @@ async function getImage(request, env, pathname) {
 const LIVE_STATUSES = ['idle','formation','green','sc','vsc','red','chequered','finished'];
 
 /**
+ * Trading cards. Returns null when the interaction is not a card command, so
+ * the caller falls through to the ordinary synchronous commands.
+ */
+async function handleCards(interaction, record, env) {
+  const data = interaction.data || {};
+  if (data.name !== 'cards') return null;
+
+  const sub = (data.options || []).find(o => o.type === 1) || (data.options || [])[0];
+  const view = (sub && sub.name) || '';
+  if (!CARD_VIEWS.includes(view)) return null;
+
+  const opts = (sub && sub.options) || [];
+  const pick = n => (opts.find(o => o.name === n) || {}).value;
+  const cls = String(pick('class') || 'gt3').toLowerCase() === 'gt4' ? 'gt4' : 'gt3';
+
+  let embed;
+  try {
+    switch (view) {
+      case 'pack':       embed = await openPack(env, interaction, cls, record); break;
+      case 'collection': embed = await showCollection(env, interaction, cls, record, pick('user')); break;
+      case 'card':       embed = await showCard(env, interaction, cls, record, pick('name')); break;
+      case 'collectors': embed = await showCollectors(env, cls, record); break;
+    }
+  } catch (err) {
+    // Almost always the tables not existing yet; say so rather than failing silently.
+    return { type: 4, data: { content:
+      'Cards are not set up on the server yet — the card tables are missing.' } };
+  }
+
+  embed.footer = embed.footer || { text: 'FGE' };
+  embed.footer.text += ' · fp-league.github.io/FGE';
+  // Mentioning a collector should not ping them.
+  return { type: 4, data: { embeds: [embed], allowed_mentions: { parse: [] } } };
+}
+
+/**
  * POST /api/announce — admin only. Posts a race classification to Discord.
  *
  * The admin panel sends only {class, round}; the Worker reads the result out
@@ -656,6 +693,15 @@ export default {
               data: { content: "Couldn't reach the league data just now — try again in a moment." },
             }), { headers: { 'Content-Type': 'application/json' } });
           }
+          // Card commands touch the database, so they are handled here
+          // rather than in the synchronous command builder.
+          const cardReply = await handleCards(interaction, record, env);
+          if (cardReply) {
+            return new Response(JSON.stringify(cardReply), {
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+
           return new Response(JSON.stringify(handleCommand(interaction, record)), {
             headers: { 'Content-Type': 'application/json' },
           });
@@ -695,6 +741,10 @@ export default {
           discord: Boolean(env.DISCORD_PUBLIC_KEY),
           members: Boolean(env.DISCORD_TOKEN && env.DISCORD_GUILD_ID),
           announce: Boolean(env.DISCORD_WEBHOOK_URL),
+          cards: await (async () => {
+            try { await env.DB.prepare('SELECT 1 FROM card_collection LIMIT 1').first(); return true; }
+            catch { return false; }
+          })(),
         }, null, request, env);
       }
       return bad('not found', request, env, 404);

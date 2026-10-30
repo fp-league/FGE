@@ -106,6 +106,26 @@ commands.push(
   { name: 'gt4', description: 'GT4 — standings, results, calendar and lineups', options: subcommands },
 );
 
+// ── Trading cards ────────────────────────────────────────
+// Reuses the class picker declared at the top of this file.
+commands.push({
+  name: 'cards',
+  description: 'FGE driver trading cards — open packs and build a collection',
+  options: [
+    { name: 'pack', description: 'Open a pack of 5 driver cards (one free pack every 8 hours)',
+      type: 1, options: [CLASS_OPTION] },
+    { name: 'collection', description: 'See a collection', type: 1, options: [
+      { name: 'user', description: 'Whose collection (defaults to yours)', type: 6, required: false },
+      CLASS_OPTION,
+    ] },
+    { name: 'card', description: 'Look at one driver’s card', type: 1, options: [
+      { name: 'name', description: 'Driver name', type: 3, required: true },
+      CLASS_OPTION,
+    ] },
+    { name: 'collectors', description: 'Who has collected the most', type: 1, options: [CLASS_OPTION] },
+  ],
+});
+
 const url = GUILD
   ? `https://discord.com/api/v10/applications/${APP_ID}/guilds/${GUILD}/commands`
   : `https://discord.com/api/v10/applications/${APP_ID}/commands`;
