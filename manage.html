@@ -226,6 +226,8 @@ textarea { resize:vertical; min-height:80px; }
   white-space:nowrap; }
 .ec-row .ec-mono { font-variant-numeric:tabular-nums; color:var(--grey); font-size:0.8rem; }
 .ec-off { opacity:0.45; }
+.form-card.is-editing { box-shadow:inset 3px 0 0 var(--accent,#E10600); }
+.form-card.is-editing h3::after { content:' — EDITING'; color:var(--accent,#E10600); font-size:0.7rem; letter-spacing:0.1em; }
 .bulk-box { margin-top:1.1rem; padding:0.9rem 1rem; border:1px dashed var(--line2);
   border-radius:4px; background:rgba(255,255,255,0.02); }
 .bulk-box h4 { font-family:var(--fu); font-size:0.74rem; letter-spacing:0.12em;
@@ -849,7 +851,7 @@ textarea { resize:vertical; min-height:80px; }
           </div>
           <div id="pkOddsPreview" class="bk-note" style="margin-top:0.5rem"></div>
           <div class="form-actions">
-            <button class="btn btn-white" onclick="ecSavePack()">SAVE PACK</button>
+            <button class="btn btn-white" id="pkSaveBtn" onclick="ecSavePack()">SAVE PACK</button>
             <button class="btn btn-ghost" onclick="ecNewPack()">NEW</button>
             <span class="img-size" id="pkStatus"></span>
           </div>
@@ -901,7 +903,7 @@ textarea { resize:vertical; min-height:80px; }
             </div>
           </div>
           <div class="form-actions">
-            <button class="btn btn-white" onclick="ecSaveCard()">SAVE CARD</button>
+            <button class="btn btn-white" id="ccSaveBtn" onclick="ecSaveCard()">SAVE CARD</button>
             <button class="btn btn-ghost" onclick="ecNewCard()">NEW</button>
             <span class="img-size" id="ccStatus"></span>
           </div>
@@ -974,7 +976,7 @@ textarea { resize:vertical; min-height:80px; }
             </div>
           </div>
           <div class="form-actions">
-            <button class="btn btn-white" onclick="ecSaveJob()">SAVE JOB</button>
+            <button class="btn btn-white" id="jbSaveBtn" onclick="ecSaveJob()">SAVE JOB</button>
             <button class="btn btn-ghost" onclick="ecNewJob()">NEW</button>
             <span class="img-size" id="jbStatus"></span>
           </div>
@@ -2668,7 +2670,7 @@ function ecNewPack() {
     document.getElementById('pkSize').value = 5;
     document.getElementById('pkGuarantee').value = '';
     RORDER.forEach(r => { const e = document.getElementById('pkOdds' + r[0].toUpperCase() + r.slice(1)); if (e) e.value = ''; });
-    document.getElementById('pkStatus').textContent = '';
+    ecEditMode('pk', null);
     ecOddsPreview();
 }
 
@@ -2688,7 +2690,7 @@ function ecEditPack(id) {
         const e = document.getElementById('pkOdds' + r[0].toUpperCase() + r.slice(1));
         if (e) e.value = (odds && odds[r] != null) ? odds[r] : '';
     });
-    document.getElementById('pkStatus').textContent = `editing ${p.id}`;
+    ecEditMode('pk', p.id);
     ecOddsPreview();
     document.getElementById('pkName').scrollIntoView({ behavior:'smooth', block:'center' });
 }
@@ -2707,12 +2709,13 @@ async function ecSavePack() {
         guarantee: document.getElementById('pkGuarantee').value || null,
         odds: packOddsFromForm(),
     };
+    const wasEditing = editingPack;
     st.textContent = 'saving…';
     try {
         const out = await econPost({ action: 'savePack', pack });
-        editingPack = out.id;
-        st.textContent = `saved as ${out.id}`;
-        toast(`Pack saved — buy it with /buy pack:${out.id}`, 'ok');
+        ecNewPack();               // same trap as the card form; see ecSaveCard
+        st.textContent = wasEditing ? `updated ${out.id}` : `saved as ${out.id}`;
+        toast(`${wasEditing ? 'Updated' : 'Saved'} — buy it with /buy pack:${out.id}`, 'ok');
         await loadEcon(true);
     } catch (e) { st.textContent = ''; toast('Could not save: ' + (e.message || 'unknown'), 'err'); }
 }
@@ -2756,7 +2759,7 @@ function ecNewCard() {
     document.getElementById('ccRarity').value = 'rare';
     syncPreview('ccImage');
     const sz = document.getElementById('ccImageSize'); if (sz) sz.textContent = '';
-    document.getElementById('ccStatus').textContent = '';
+    ecEditMode('cc', null);
 }
 
 function ecEditCard(id) {
@@ -2769,7 +2772,7 @@ function ecEditCard(id) {
     document.getElementById('ccImage').value = c.image || '';
     document.getElementById('ccBlurb').value = c.blurb || '';
     syncPreview('ccImage');
-    document.getElementById('ccStatus').textContent = `editing ${c.id}`;
+    ecEditMode('cc', c.id);
     document.getElementById('ccName').scrollIntoView({ behavior:'smooth', block:'center' });
 }
 
@@ -2777,6 +2780,7 @@ async function ecSaveCard() {
     const name = document.getElementById('ccName').value.trim();
     const st = document.getElementById('ccStatus');
     if (!name) { toast('Give the card a name', 'err'); return; }
+    const wasEditing = editingCard;
     const card = {
         id: editingCard || name,
         name,
@@ -2788,9 +2792,15 @@ async function ecSaveCard() {
     st.textContent = 'saving…';
     try {
         const out = await econPost({ action: 'saveCard', card });
-        editingCard = out.id;
-        st.textContent = `saved as ${out.id}`;
-        toast('Card saved — it is in the packs from now on', 'ok');
+        // Clear the form and drop out of edit mode.
+        //
+        // Leaving it bound to what was just saved meant the obvious way to
+        // add a second card — type over the first and press save again —
+        // renamed the first one instead of making a second. Save now always
+        // means "that card is done"; EDIT is one click away to go back to it.
+        ecNewCard();
+        st.textContent = wasEditing ? `updated ${out.id}` : `saved as ${out.id}`;
+        toast(wasEditing ? `Updated ${name}` : `${name} saved — it is in the packs from now on`, 'ok');
         await loadEcon(true);
     } catch (e) { st.textContent = ''; toast('Could not save: ' + (e.message || 'unknown'), 'err'); }
 }
@@ -2942,6 +2952,24 @@ document.addEventListener('change', e => {
     if (e.target && e.target.id === 'bulkRarity') ecBulkPreview();
 });
 
+
+/**
+ * Make it obvious which card the form is pointing at.
+ *
+ * The form being silently bound to the last thing saved is how a second
+ * card ended up overwriting the first, so edit mode now says so on the
+ * button itself rather than in a small grey label beside it.
+ */
+function ecEditMode(kind, what) {
+    const btn = document.getElementById(kind + 'SaveBtn');
+    const st  = document.getElementById(kind + 'Status');
+    const noun = { pk: 'PACK', cc: 'CARD', jb: 'JOB' }[kind];
+    if (btn) btn.textContent = what ? `UPDATE ${noun}` : `SAVE ${noun}`;
+    if (st)  st.textContent  = what ? `editing ${what} — press NEW for a different one` : '';
+    const card = btn && btn.closest('.form-card');
+    if (card) card.classList.toggle('is-editing', Boolean(what));
+}
+
 /* ── Jobs ────────────────────────────────────────────── */
 
 function ecNewJob() {
@@ -2951,7 +2979,7 @@ function ecNewJob() {
     document.getElementById('jbMin').value = 60;
     document.getElementById('jbMax').value = 130;
     document.getElementById('jbCooldown').value = 90;
-    document.getElementById('jbStatus').textContent = '';
+    ecEditMode('jb', null);
 }
 
 function ecEditJob(id) {
@@ -2964,7 +2992,7 @@ function ecEditJob(id) {
     document.getElementById('jbMin').value = j.min_pay;
     document.getElementById('jbMax').value = j.max_pay;
     document.getElementById('jbCooldown').value = j.cooldown_min;
-    document.getElementById('jbStatus').textContent = `editing ${j.id}`;
+    ecEditMode('jb', j.id);
     document.getElementById('jbName').scrollIntoView({ behavior:'smooth', block:'center' });
 }
 
@@ -2981,12 +3009,13 @@ async function ecSaveJob() {
         max_pay: parseInt(document.getElementById('jbMax').value, 10) || 0,
         cooldown_min: parseInt(document.getElementById('jbCooldown').value, 10) || 60,
     };
+    const wasEditing = editingJob;
     st.textContent = 'saving…';
     try {
         const out = await econPost({ action: 'saveJob', job });
-        editingJob = out.id;
-        st.textContent = `saved as ${out.id}`;
-        toast(`Job saved — /work job:${out.id}`, 'ok');
+        ecNewJob();                // same trap as the card form; see ecSaveCard
+        st.textContent = wasEditing ? `updated ${out.id}` : `saved as ${out.id}`;
+        toast(`${wasEditing ? 'Updated' : 'Saved'} — /work job:${out.id}`, 'ok');
         await loadEcon(true);
     } catch (e) { st.textContent = ''; toast('Could not save: ' + (e.message || 'unknown'), 'err'); }
 }
