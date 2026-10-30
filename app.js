@@ -12,7 +12,12 @@ const API_BASE    = 'https://fge-api.benjaminjameswestley.workers.dev';
 
 // ── STATE ────────────────────────────────────────────────
 let rawData       = null;           // full JSONBin record { gt3:{…}, gt4:{…} }
-let currentClass  = localStorage.getItem('fge_class') || 'GT3';
+let currentClass  = (() => {
+    // Reading storage throws outright in some privacy modes. This runs at the
+    // very top of the file, so an exception here would stop app.js loading at
+    // all and leave the site on a blank page.
+    try { return localStorage.getItem('fge_class') || 'GT3'; } catch (e) { return 'GT3'; }
+})();
 let currentPage   = 'home';
 let standingsTab  = 'drivers';
 let driverFocusId = null;
@@ -20,8 +25,8 @@ let teamFocusId   = null;
 let raceFocusIdx  = null;
 
 // User identity (DOTD / Fantasy / Predictions)
-let userId = localStorage.getItem('fge_userId') || null;
-let userName = localStorage.getItem('fge_userName') || null;
+let userId   = (() => { try { return localStorage.getItem('fge_userId'); }   catch (e) { return null; } })();
+let userName = (() => { try { return localStorage.getItem('fge_userName'); } catch (e) { return null; } })();
 
 // Driver of the Day — the real tally, fetched from the Worker. Votes used to
 // live in localStorage, which meant every visitor saw only their own vote and
@@ -918,7 +923,7 @@ function renderTeams() {
                 <div class="ftc-name">${t.name}</div>
                 <div style="font-family:var(--font-display);color:var(--accent2);font-size:0.85rem;margin-top:0.2rem">${tpts[t.name]||0} PTS</div>
               </div>
-              <div class="ftc-logo">${t.logo ? `<img class="ftc-logo-img" src="${t.logo}" alt="">` : `<div style="width:48px;height:48px;border-radius:50%;background:${col};display:flex;align-items:center;justify-content:center;font-family:var(--font-display);color:#fff;font-size:1rem">${(t.name||'').charAt(0)}</div>`}</div>
+              <div class="ftc-logo">${t.logo ? `<img class="ftc-logo-img" src="${esc(t.logo)}" alt="" loading="lazy" decoding="async">` : `<div style="width:48px;height:48px;border-radius:50%;background:${col};display:flex;align-items:center;justify-content:center;font-family:var(--font-display);color:#fff;font-size:1rem">${(t.name||'').charAt(0)}</div>`}</div>
             </div>
             <div class="ftc-drivers">
               ${teamDrivers.map(dr => `<div class="tdrv"><div class="tdrv-av-fb">${(dr.name||'').charAt(0)}</div><div><div><b>${dr.name}</b></div><div style="font-size:0.7rem;color:var(--muted)">#${dr.number||'?'}</div></div></div>`).join('')}
@@ -1124,7 +1129,7 @@ function renderDrivers() {
             <div class="fdc-num">${esc(drv.number||'')}</div>
             <div class="fdc-media">
               ${drv.photo
-                ? `<img class="fdc-photo" src="${esc(drv.photo)}" alt="${esc(drv.name)}" loading="lazy">`
+                ? `<img class="fdc-photo" src="${esc(drv.photo)}" alt="${esc(drv.name)}" loading="lazy" decoding="async">`
                 : `<div class="fdc-initials">${esc(initials)}</div>`}
             </div>
             <div class="fdc-body">
@@ -1178,7 +1183,7 @@ function renderDriverProfile(id) {
           <div class="dp-bignum">${esc(drv.number||'')}</div>
           <div class="dp-media">
             ${drv.photo
-              ? `<img class="dp-photo" src="${esc(drv.photo)}" alt="${esc(drv.name)}">`
+              ? `<img class="dp-photo" src="${esc(drv.photo)}" alt="${esc(drv.name)}" decoding="async">`
               : `<div class="dp-initials">${esc(initials)}</div>`}
           </div>
           <div class="dp-ident">

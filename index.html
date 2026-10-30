@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>FGE - Fortnite Global Endurance</title>
     <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="512x512" href="icon-512.png">
     <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -34,6 +35,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Titillium+Web:wght@400;600;700;900&display=swap" rel="stylesheet">
 </head>
 <body>
+    <a class="skip-link" href="#home">Skip to content</a>
     <nav class="navbar">
         <!-- Install banner -->
         <div class="install-banner" id="installBanner" style="display:none;">
@@ -113,17 +115,17 @@
     <!-- CLASS SWITCHER -->
     <div class="class-switcher" id="classSwitcher">
         <button class="cs-btn active" id="csGT3" onclick="switchClass('GT3')" aria-label="Show GT3">
-            <img src="gt3-logo.webp" alt="GT3" class="cs-logo">
+            <img src="gt3-logo.webp" alt="" class="cs-logo" width="96" height="48" decoding="async">
             <span class="cs-sub">Tier 1</span>
         </button>
         <div class="cs-divider"></div>
         <button class="cs-btn" id="csGT4" onclick="switchClass('GT4')" aria-label="Show GT4">
-            <img src="gt4-logo.webp" alt="GT4" class="cs-logo">
+            <img src="gt4-logo.webp" alt="" class="cs-logo" width="96" height="48" decoding="async">
             <span class="cs-sub">Tier 2</span>
         </button>
     </div>
 
-    <main class="container">
+    <main class="container" id="main">
         <!-- ══ HOME ══ -->
         <section id="home" class="page active">
             <div class="hero-section">

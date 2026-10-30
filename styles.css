@@ -6,7 +6,7 @@
     --black: #000000;
     --white: #FFFFFF;
     --off-white: #F0F0F0;
-    --grey: #888888;
+    --grey: #A6A6A6;   /* 6.6:1 on the page background — was #888888 at 4.56:1 */
     --grey-light: #CCCCCC;
     --grey-dark: #1A1A1A;
     --grey-mid: #333333;
@@ -86,6 +86,7 @@ body {
 .nav-logo {
     display: flex; align-items: center; gap: 0.75rem;
     text-decoration: none; flex: 1;
+    color: inherit;      /* was falling back to the default link blue */
 }
 .logo-img { height: 26px; width: auto; display: block; flex-shrink: 0; }
 .hero-logo-img {
@@ -264,10 +265,10 @@ body {
 .cs-sub {
     font-family: var(--font-ui); font-size: 0.58rem;
     letter-spacing: 0.081em; text-transform: uppercase;
-    color: var(--grey-mid); transition: color 0.3s;
+    color: var(--grey); transition: color 0.3s;   /* was --grey-mid, 1.3:1 */
 }
 .cs-btn.active .cs-sub { color: var(--grey-light); }
-.cs-btn#csGT3.active .cs-sub { color: var(--gt3); }
+.cs-btn#csGT3.active .cs-sub { color: #FF6B63; }   /* brand red is 3.2:1 at this size */
 .cs-btn#csGT4.active .cs-sub { color: var(--gt4-bright); }
 
 @media (max-width: 480px) {
@@ -360,7 +361,7 @@ body {
 .cb-unit { text-align: center; }
 .cb-unit span { display: block; font-family: var(--font-display); font-size: 1.8rem; color: var(--white); line-height: 1; }
 .cb-unit label { font-size: 0.58rem; letter-spacing: 0.1em; color: var(--grey); font-family: var(--font-ui); }
-.cb-sep { font-family: var(--font-display); font-size: 1.6rem; color: var(--grey-mid); margin-bottom: 0.4rem; }
+.cb-sep { font-family: var(--font-display); font-size: 1.6rem; color: var(--grey); margin-bottom: 0.4rem; }
 .cb-raceday {
     font-family: var(--font-display); font-size: 1.8rem;
     letter-spacing: 0.12em; color: var(--class-color);
@@ -1465,3 +1466,49 @@ select:focus { outline: none; border-color: var(--class-color); }
 .stw-pen.stw-nfa  { background: rgba(46,125,50,0.18); color: #7ED38A; border: 1px solid rgba(46,125,50,0.5); }
 .stw-reason { color: var(--grey-light); font-size: 0.9rem; }
 .stw-inc { color: var(--grey); font-size: 0.78rem; margin-top: 0.25rem; }
+
+/* ══════════ ACCESSIBILITY ══════════ */
+/* Everything interactive has to show where the keyboard is. Several of these
+   are divs and spans with click handlers, which get no focus ring for free. */
+a:focus-visible,
+button:focus-visible,
+select:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible,
+[role="button"]:focus-visible,
+.standings-table tbody tr:focus-visible,
+.fdc:focus-visible,
+.dotd-card:focus-visible {
+    outline: 3px solid var(--class-color);
+    outline-offset: 2px;
+    border-radius: 3px;
+}
+/* Pointer users keep a clean look; only keyboard focus draws a ring. */
+:focus:not(:focus-visible) { outline: none; }
+
+/* Skip straight to the content rather than tabbing the whole nav. */
+.skip-link {
+    position: absolute; left: 50%; transform: translateX(-50%) translateY(-200%);
+    top: 0; z-index: 10000; background: var(--class-color); color: #fff;
+    padding: 0.7rem 1.2rem; border-radius: 0 0 4px 4px; font-family: var(--font-ui);
+    font-size: 0.82rem; letter-spacing: 0.08em; text-decoration: none;
+    transition: transform 0.15s;
+}
+.skip-link:focus { transform: translateX(-50%) translateY(0); }
+
+/* Respect a system setting for reduced motion: the intro sweep, the pulsing
+   live dot and the flashing red flag are exactly what that setting is for. */
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration: 0.001ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.001ms !important;
+        scroll-behavior: auto !important;
+    }
+    .nl-dot, .lv-dot { animation: none; box-shadow: none; }
+    .intro-car { animation: none; }
+}
+
+/* A DNF is dimmed, but it also says DNF — colour is never the only signal. */
+.rt-dnf td:first-child::after { content: ''; }
