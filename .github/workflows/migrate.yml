@@ -29,13 +29,21 @@ jobs:
           workingDirectory: worker
           command: whoami
 
-      - name: Create the race_control table
-        uses: cloudflare/wrangler-action@v4
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          workingDirectory: worker
-          command: d1 execute fge --remote --yes --file=./migrations/001-race-control.sql
+      # Every migration, in filename order. Deliberately a loop rather than a
+      # list of files: adding 003 later should not need this workflow edited,
+      # and forgetting to edit it is exactly how a migration silently never
+      # runs. Each file is written to be safe to re-apply.
+      - name: Apply every migration
+        working-directory: worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -e
+          for f in migrations/*.sql; do
+            echo "── $f"
+            npx --yes wrangler@4 d1 execute fge --remote --yes --file="$f"
+          done
 
       - name: Deploy the Worker on top
         uses: cloudflare/wrangler-action@v4

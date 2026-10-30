@@ -5,12 +5,11 @@
 --
 --   npx wrangler d1 execute fge --remote --file=./migrations/001-race-control.sql
 --
--- Safe to run as many times as you like. race_control holds nothing but
--- "what is happening right now", so dropping it costs nothing — it just ends
--- any session that happened to be open.
+-- Safe to run as many times as you like, and non-destructive: every
+-- migration is re-run whenever any of them changes, and dropping this table
+-- would end a session that happened to be live at the time.
 
-DROP TABLE IF EXISTS race_control;
-CREATE TABLE race_control (
+CREATE TABLE IF NOT EXISTS race_control (
   id           TEXT    PRIMARY KEY,     -- always 'live'
   class        TEXT,                    -- gt3 | gt4
   mode         TEXT,                    -- race | quali
@@ -25,8 +24,4 @@ CREATE TABLE race_control (
   updated_at   INTEGER NOT NULL
 );
 
-INSERT INTO race_control (id, mode, status, updated_at) VALUES ('live', 'race', 'idle', 0);
-
--- Applied via GitHub Actions on first run of the Migrate workflow.
-
--- The existing table predates the mode column, so this re-run adds it.
+INSERT OR IGNORE INTO race_control (id, mode, status, updated_at) VALUES ('live', 'race', 'idle', 0);
