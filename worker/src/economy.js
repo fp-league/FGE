@@ -12,7 +12,7 @@
  * decide the numbers.
  */
 
-import { RARITY, RARITIES, drawPack, fullSet, SET } from './cards.js';
+import { RARITY, RARITIES, drawPack, fullSet, SET, packEmbeds } from './cards.js';
 
 const userOf = i => (i.member && i.member.user) || i.user || {};
 const nameOf = u => u.global_name || u.username || 'Someone';
@@ -489,16 +489,14 @@ export async function buyPack(env, interaction, packId, record) {
   });
 
   const have = Object.keys(copies).filter(k => set.some(c => c.id === k)).length;
-  const embed = {
+  const summary = {
     title: `${pack.emoji} ${nameOf(user)} opened a ${pack.name}`,
     description: lines.join('\n'),
     color: RARITY[best.rarity].colour,
     footer: { text: `${have}/${set.length} collected · ${paid.balance.toLocaleString('en-GB')} ` +
                     `${cfg.currency_emoji} left · dupes sell with /sell` },
   };
-  const art = best.cardImage || best.photo;
-  if (art) embed.thumbnail = { url: art };
-  return embed;
+  return packEmbeds(summary, pulled, copies);
 }
 
 /* ── /sell ─────────────────────────────────────────────── */
@@ -601,11 +599,13 @@ async function sellFrom(env, user, query, howMany, cfg, values, set) {
 
   const w = await adjust(env, user.id, take, `Sold ${n}× ${card.name}`, cfg);
 
+  const art = card.cardImage || card.photo;
   return {
     title: `💰 Sold ${n}× ${card.name}`,
     description: `${RARITY[card.rarity].icon} ${RARITY[card.rarity].label} → ${money(take, cfg)}\n` +
                  `Balance: ${money(w.balance, cfg)}`,
     color: GOLD,
+    ...(art ? { thumbnail: { url: art } } : {}),
     footer: { text: `${spare - n} spare left · one copy stays in your collection` },
   };
 }

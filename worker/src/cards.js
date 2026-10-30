@@ -283,6 +283,37 @@ const classColour = c => (c === 'gt4' ? 0x0033A0 : 0xE10600);
 // One set means one colour on the embeds rather than a class red/blue.
 const BRAND = 0xE10600;
 
+/**
+ * A pack as Discord renders it: a summary, then one embed per card so the
+ * art is actually visible. A thumbnail in the corner of a single embed is
+ * the one card in a pack of five and about 80px wide, which is no way to
+ * look at a card you just pulled.
+ *
+ * Ten embeds is Discord's ceiling for one message, so the summary plus nine
+ * cards. Cards with no art still appear in the summary lines; they just have
+ * nothing to show.
+ */
+export function packEmbeds(summary, pulled, copies) {
+  const MAX_EMBEDS = 10;
+  const art = c => c.cardImage || c.photo;
+  const shown = pulled.filter(art).slice(0, MAX_EMBEDS - 1);
+  if (!shown.length) return summary;
+
+  return {
+    embeds: [summary, ...shown.map(c => {
+      const isNew = (copies[c.id] || 0) <= 1;
+      return {
+        title: `${RARITY[c.rarity].icon} ${c.name}${c.number ? `  #${c.number}` : ''}`,
+        description: `**${RARITY[c.rarity].label}**` +
+                     `${c.team ? ` · ${c.team}` : ''}` +
+                     `${isNew ? '  ·  ✨ NEW' : '  ·  duplicate'}`,
+        color: RARITY[c.rarity].colour,
+        image: { url: art(c) },
+      };
+    })],
+  };
+}
+
 /* ── /pack ─────────────────────────────────────────────── */
 export async function openPack(env, interaction, record) {
   const user = userOf(interaction);
@@ -369,18 +400,16 @@ export async function openPack(env, interaction, record) {
 
   const have = Object.keys(copies).length;
   const left = useGrant ? (granted.packs - 1) : 0;
-  const embed = {
+  const summary = {
     title: `${user.global_name || user.username} opened a pack`,
     description: lines.join('\n'),
     color: RARITY[best.rarity].colour,
-    footer: { text: `${have}/${set.length} drivers collected · ` +
+    footer: { text: `${have}/${set.length} collected · ` +
       (left > 0 ? `${left} bonus pack${left !== 1 ? 's' : ''} left`
                 : useGrant ? 'that was a bonus pack — your free one is still waiting'
                 : 'next pack in 8h') },
   };
-  const art = best.cardImage || best.photo;
-  if (art) embed.thumbnail = { url: art };
-  return embed;
+  return packEmbeds(summary, pulled, copies);
 }
 
 /* ── /collection ───────────────────────────────────────── */
@@ -423,8 +452,17 @@ export async function showCollection(env, interaction, record, targetId) {
   const dupes = held.reduce((n, r) => n + Math.max(0, r.copies - 1), 0);
   const name = targetId ? 'Collection' : `${user.global_name || user.username}'s collection`;
 
+  // Thirty images would be unreadable, so the collection shows the best card
+  // in it — which is the one anyone asking to see a collection wants anyway.
+  const best = held
+    .map(r => byId[r.driver_id])
+    .filter(c => c && (c.cardImage || c.photo))
+    .sort((a, b) => RARITIES.indexOf(b.rarity) - RARITIES.indexOf(a.rarity) ||
+                    a.position - b.position)[0];
+
   return {
     title: name,
+    ...(best ? { thumbnail: { url: best.cardImage || best.photo } } : {}),
     description: `**${held.length} of ${set.length}** drivers · ${pct}% complete` +
                  (dupes ? ` · ${dupes} duplicate${dupes !== 1 ? 's' : ''}` : ''),
     color: BRAND,

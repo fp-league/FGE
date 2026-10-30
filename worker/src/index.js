@@ -590,6 +590,22 @@ async function postRegisterCommands(request, env) {
 }
 
 /**
+ * Turn whatever a command handler returned into a Discord reply.
+ *
+ * Most return one embed. A pack returns { embeds: [...] } so each card's art
+ * gets its own embed and is actually visible; the footer belongs on the
+ * summary, which is the first of them.
+ */
+function embedReply(out) {
+  const embeds = Array.isArray(out.embeds) ? out.embeds.slice(0, 10) : [out];
+  const head = embeds[0];
+  head.footer = head.footer || { text: 'FGE' };
+  head.footer.text += ' · fp-league.github.io/FGE';
+  // Mentioning a collector should not ping them.
+  return { type: 4, data: { embeds, allowed_mentions: { parse: [] } } };
+}
+
+/**
  * Trading cards. Returns null when the interaction is not a card command, so
  * the caller falls through to the ordinary synchronous commands.
  */
@@ -618,10 +634,7 @@ async function handleCards(interaction, record, env) {
       'Cards are not set up on the server yet — the card tables are missing.' } };
   }
 
-  embed.footer = embed.footer || { text: 'FGE' };
-  embed.footer.text += ' · fp-league.github.io/FGE';
-  // Mentioning a collector should not ping them.
-  return { type: 4, data: { embeds: [embed], allowed_mentions: { parse: [] } } };
+  return embedReply(embed);
 }
 
 /**
@@ -659,9 +672,7 @@ async function handleEconomy(interaction, record, env) {
   }
   if (!embed) return null;
 
-  embed.footer = embed.footer || { text: 'FGE' };
-  embed.footer.text += ' · fp-league.github.io/FGE';
-  return { type: 4, data: { embeds: [embed], allowed_mentions: { parse: [] } } };
+  return embedReply(embed);
 }
 
 /**
