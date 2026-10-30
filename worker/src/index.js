@@ -15,7 +15,7 @@
  */
 
 import { verifyRequest, handleCommand, buildResults } from './discord.js';
-import { openPack, showCollection, showCard, showCollectors, CARD_VIEWS } from './cards.js';
+import { openPack, showCollection, showCard, showCollectors, grantPacks, CARD_VIEWS } from './cards.js';
 import { COMMANDS } from './commands.js';
 
 const MAX_NAME = 24;
@@ -381,6 +381,28 @@ async function getImage(request, env, pathname) {
 /* ── live race control ───────────────────────────────────── */
 
 const LIVE_STATUSES = ['idle','formation','green','sc','vsc','red','chequered','finished'];
+
+/**
+ * POST /api/cards/grant — admin only. Hands someone packs.
+ * { userId, count } — the packs wait until they run /cards pack.
+ */
+async function postGrantPacks(request, env) {
+  if (env.ADMIN_TOKEN && request.headers.get('X-Admin-Token') !== env.ADMIN_TOKEN) {
+    return bad('not authorised', request, env, 401);
+  }
+  let body;
+  try { body = await request.json(); } catch { return bad('invalid JSON body', request, env); }
+
+  const userId = String(body.userId || '').trim();
+  if (!/^\d{5,25}$/.test(userId)) return bad('a Discord user id is required', request, env, 422);
+
+  try {
+    const out = await grantPacks(env, userId, body.count);
+    return json({ ok: true, ...out }, null, request, env);
+  } catch {
+    return bad('card tables are not set up on this Worker yet', request, env, 503);
+  }
+}
 
 /**
  * GET /api/discord/channels — admin only. Lists the text channels the bot
@@ -811,6 +833,10 @@ export default {
 
         return new Response(JSON.stringify({ type: 4, data: { content: 'Unsupported interaction.' } }),
           { headers: { 'Content-Type': 'application/json' } });
+      }
+
+      if (pathname === '/api/cards/grant' && request.method === 'POST') {
+        return await postGrantPacks(request, env);
       }
 
       if (pathname === '/api/discord/channels' && request.method === 'GET') {

@@ -208,6 +208,12 @@ textarea { resize:vertical; min-height:80px; }
 
 .rc-mini.del { color: #ef9a9a; font-size: 1rem; line-height: 1; }
 
+.tc-chip-adm { display:inline-flex; align-items:center; gap:0.4rem; background:rgba(255,255,255,0.06);
+  border:1px solid rgba(255,255,255,0.12); border-radius:999px; padding:0.24rem 0.65rem;
+  font-size:0.64rem; letter-spacing:0.09em; color:#cfcfcf; }
+.tc-chip-adm i { width:8px; height:8px; border-radius:50%; background:var(--tc); }
+.tc-chip-adm b { color:#fff; }
+
 .rc-btn kbd { display:inline-block; margin-left:0.5rem; padding:0.05rem 0.34rem;
   font:600 0.66rem/1.5 var(--font-ui,inherit); border-radius:3px;
   background:rgba(0,0,0,0.35); border:1px solid rgba(255,255,255,0.22); color:#fff; }
@@ -348,6 +354,7 @@ textarea { resize:vertical; min-height:80px; }
       <button class="snav-item"       onclick="showSec('results')"><span class="snav-icon">🏁</span>Results</button>
       <button class="snav-item"       onclick="showSec('dotd')"><span class="snav-icon">⭐</span>DOTD</button>
       <button class="snav-item"       onclick="showSec('control')"><span class="snav-icon">🏁</span>Race Control</button>
+      <button class="snav-item"       onclick="showSec('cards')"><span class="snav-icon">🃏</span>Cards</button>
       <button class="snav-item"       onclick="showSec('availability')"><span class="snav-icon">✅</span>Available</button>
       <button class="snav-item"       onclick="showSec('stewards')"><span class="snav-icon">⚖️</span>Stewards</button>
       <button class="snav-item"       onclick="showSec('season')"><span class="snav-icon">⚙️</span>Season</button>
@@ -426,6 +433,21 @@ textarea { resize:vertical; min-height:80px; }
                 </div>
               </div>
               <input id="dPhoto" placeholder="…or paste an image URL" oninput="syncPreview('dPhoto')">
+            </div>
+            <div class="form-group img-field">
+              <label class="fg-label">CARD ART <span style="color:var(--grey);font-weight:400">(optional)</span></label>
+              <div class="img-pick">
+                <div class="img-prev" id="dCardImagePrev"></div>
+                <div class="img-pick-side">
+                  <input type="file" accept="image/*" onchange="handleImage(this,'dCardImage','card')">
+                  <div class="img-row">
+                    <span class="img-size" id="dCardImageSize"></span>
+                    <button type="button" class="btn btn-ghost btn-sm" onclick="clearImage('dCardImage')">REMOVE</button>
+                  </div>
+                </div>
+              </div>
+              <input id="dCardImage" placeholder="…or paste an image URL" oninput="syncPreview('dCardImage')">
+              <span class="fg-hint">Used on their trading card instead of the photo. Square works best.</span>
             </div>
           </div>
           <div class="form-group" style="margin-bottom:0.9rem"><label class="fg-label">BIO</label><textarea id="dBio" rows="3" placeholder="Short driver bio…"></textarea></div>
@@ -660,6 +682,40 @@ textarea { resize:vertical; min-height:80px; }
             <button class="btn btn-ghost btn-sm" onclick="rcResetOrder()">RESET TO ENTRY LIST</button>
             <span class="img-size" id="rcSaveState"></span>
           </div>
+        </div>
+      </div>
+
+      <!-- TRADING CARDS -->
+      <div class="adm-section" id="sec-cards">
+        <div class="sec-head"><h2>TRADING CARDS</h2></div>
+
+        <div class="form-card">
+          <h3>GIVE PACKS</h3>
+          <p class="bk-note">Hands someone extra packs on top of their free one every 8 hours.
+             They stay waiting until the person runs <code>/cards pack</code> in Discord, and a
+             bonus pack doesn't use up their free one.</p>
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="fg-label">WHO</label>
+              <select id="grantMember"><option value="">Load members first…</option></select>
+            </div>
+            <div class="form-group">
+              <label class="fg-label">HOW MANY</label>
+              <input id="grantCount" type="number" min="1" max="50" value="1">
+            </div>
+          </div>
+          <div class="form-actions">
+            <button class="btn btn-ghost" onclick="loadGrantMembers()">LOAD MEMBERS</button>
+            <button class="btn btn-white" onclick="givePacks()">GIVE PACKS</button>
+            <span class="img-size" id="grantStatus"></span>
+          </div>
+        </div>
+
+        <div class="form-card">
+          <h3>THE SET</h3>
+          <p class="bk-note">Rarity comes from the season, so it moves on its own as the
+             championship does. Give a driver card art on their driver page.</p>
+          <div id="cardsSetTable"></div>
         </div>
       </div>
 
@@ -973,6 +1029,7 @@ function refreshSec() {
         case 'results': populateResultsSelect(); break;
         case 'dotd':    populateDotdSelects(); break;
         case 'control': rcPopulateRaces(); rcPopulateEntry(); rcRefresh(); break;
+        case 'cards': renderCardsAdmin(); break;
         case 'availability': avPopulateRaces(); renderAvailability(); break;
         case 'stewards': renderStewards(); break;
         case 'season':  document.getElementById('seasonName').value = d().seasonName||'Season 1'; renderFviPanel(); renderPointsEditor(); renderStorageMeter(); break;
@@ -1103,9 +1160,11 @@ function editDriver(i) {
     document.getElementById('dNumber').value = drv.number||'';
     document.getElementById('dNat').value    = drv.nationality||'';
     document.getElementById('dPhoto').value  = drv.photo||'';
+    document.getElementById('dCardImage').value = drv.cardImage||'';
     document.getElementById('dBio').value    = drv.bio||'';
     buildTeamSelect(drv.team||'');
     syncPreview('dPhoto');
+    syncPreview('dCardImage');
     document.getElementById('driverForm').style.display = 'block';
     document.getElementById('driverForm').scrollIntoView({behavior:'smooth', block:'start'});
 }
@@ -1121,6 +1180,7 @@ function saveDriver() {
         nationality: document.getElementById('dNat').value.trim(),
         team:        document.getElementById('dTeam').value,
         photo:       document.getElementById('dPhoto').value.trim(),
+        cardImage:   document.getElementById('dCardImage').value.trim(),
         bio:         document.getElementById('dBio').value.trim()
     };
     if (!item.name) { toast('Name is required','err'); return; }
@@ -1977,6 +2037,130 @@ function rcKeyHandler(e) {
 
 document.addEventListener('keydown', rcKeyHandler);
 
+// ── TRADING CARDS ────────────────────────────────────────
+let grantMembers = [];
+
+async function loadGrantMembers() {
+    const sel = document.getElementById('grantMember');
+    const st  = document.getElementById('grantStatus');
+    if (!API_BASE) { toast('Worker URL not configured', 'err'); return; }
+    st.textContent = 'loading…';
+    try {
+        const res = await fetch(`${API_BASE.replace(/\/+$/,'')}/api/discord/members`, {
+            headers: ADMIN_TOKEN ? { 'X-Admin-Token': ADMIN_TOKEN } : {},
+        });
+        const body = await res.json();
+        if (!res.ok || !body.ok) throw new Error(body.error || `HTTP ${res.status}`);
+        grantMembers = body.members || [];
+        sel.innerHTML = grantMembers.length
+            ? grantMembers.map(m => `<option value="${esc(m.id)}">${esc(m.displayName)}</option>`).join('')
+            : '<option value="">No members found</option>';
+        st.textContent = `${grantMembers.length} members`;
+    } catch (e) {
+        st.textContent = '';
+        toast('Could not load members: ' + (e.message || 'unknown'), 'err');
+    }
+}
+
+async function givePacks() {
+    const userId = document.getElementById('grantMember').value;
+    const count  = parseInt(document.getElementById('grantCount').value, 10) || 1;
+    const st     = document.getElementById('grantStatus');
+    if (!userId) { toast('Load members and pick someone first', 'err'); return; }
+
+    const who = (grantMembers.find(m => m.id === userId) || {}).displayName || 'them';
+    st.textContent = 'giving…';
+    try {
+        const res = await fetch(`${API_BASE.replace(/\/+$/,'')}/api/cards/grant`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json',
+                       ...(ADMIN_TOKEN ? { 'X-Admin-Token': ADMIN_TOKEN } : {}) },
+            body: JSON.stringify({ userId, count }),
+        });
+        const body = await res.json();
+        if (!res.ok || !body.ok) throw new Error(body.error || `HTTP ${res.status}`);
+        st.textContent = `${who} now has ${body.waiting} waiting`;
+        toast(`Gave ${who} ${body.granted} pack${body.granted !== 1 ? 's' : ''}`, 'ok');
+    } catch (e) {
+        st.textContent = '';
+        toast('Could not give packs: ' + (e.message || 'unknown'), 'err');
+    }
+}
+
+/** Mirrors worker/src/cards.js — the two must agree or the set means nothing. */
+function cardRarityOf(drivers, races, points) {
+    const cfg = points || { table:[20,15,12,10,8,6,4,3,2,1], fastestLap:1, dotd:0 };
+    const key = x => (x && (x.id || x.name)) || '';
+    const resKey = res => {
+        if (!res) return '';
+        if (typeof res === 'object' && res.driverId) {
+            const m = drivers.find(x => x.id === res.driverId);
+            if (m) return key(m);
+        }
+        const n = (typeof res === 'string') ? res : res.driver;
+        const m = drivers.find(x => x.name === n);
+        return m ? key(m) : (n || '');
+    };
+    const stat = {};
+    drivers.forEach(x => { stat[key(x)] = { points: 0, wins: 0, podiums: 0 }; });
+    (races || []).forEach(r => (r.results || []).forEach((res, i) => {
+        const k = resKey(res), st = stat[k];
+        if (!st) return;
+        const raw = (typeof res === 'object' && res.pos != null) ? res.pos : i + 1;
+        if (String(raw).toUpperCase() === 'DNF') return;
+        const pos = Number(raw);
+        if (!Number.isFinite(pos)) return;
+        st.points += (cfg.table || [])[pos - 1] || 0;
+        if (r.fastestLap && resKey(r.fastestLap) === k) st.points += cfg.fastestLap || 0;
+        if (pos === 1) st.wins++;
+        if (pos <= 3) st.podiums++;
+    }));
+    const ranked = drivers.slice().sort((a, b) => stat[key(b)].points - stat[key(a)].points);
+    return ranked.map((drv, i) => {
+        const st = stat[key(drv)];
+        let rarity;
+        if (i === 0 && st.points > 0)     rarity = 'legendary';
+        else if (i <= 2 && st.points > 0) rarity = 'epic';
+        else if (st.wins > 0)             rarity = 'epic';
+        else if (st.podiums > 0)          rarity = 'rare';
+        else if (st.points > 0)           rarity = 'uncommon';
+        else                              rarity = 'common';
+        return { drv, rarity, position: i + 1, ...st };
+    });
+}
+
+function renderCardsAdmin() {
+    const box = document.getElementById('cardsSetTable');
+    if (!box) return;
+    const cd = d();
+    const set = cardRarityOf(cd.drivers || [], cd.races || [], cd.points);
+    if (!set.length) { box.innerHTML = '<p class="bk-note">No drivers in this class.</p>'; return; }
+
+    const TIER = { legendary:['LEGENDARY','#FFC400'], epic:['EPIC','#9C27B0'],
+                   rare:['RARE','#2196F3'], uncommon:['UNCOMMON','#4CAF50'], common:['COMMON','#9E9E9E'] };
+    const counts = {};
+    set.forEach(c => { counts[c.rarity] = (counts[c.rarity] || 0) + 1; });
+    const noArt = set.filter(c => !c.drv.cardImage && !c.drv.photo).length;
+
+    box.innerHTML = `
+      <div class="rc-entry-acts" style="margin-bottom:0.8rem">
+        ${['legendary','epic','rare','uncommon','common'].filter(t => counts[t]).map(t =>
+          `<span class="tc-chip-adm" style="--tc:${TIER[t][1]}"><i></i>${TIER[t][0]} <b>${counts[t]}</b></span>`).join('')}
+        ${noArt ? `<span class="img-size">${noArt} with no image at all</span>` : ''}
+      </div>` + set.map(c => {
+        const art = c.drv.cardImage || c.drv.photo;
+        return `<div class="rc-row">
+            <span class="rc-pos">${c.position}</span>
+            <span class="rc-dot" style="background:${esc(TIER[c.rarity][1])}"></span>
+            <span class="rc-name">${esc(c.drv.name)}</span>
+            <span class="rc-name" style="color:${esc(TIER[c.rarity][1])};flex:0 0 90px">${TIER[c.rarity][0]}</span>
+            <span class="img-size" style="flex:0 0 110px">${
+              c.drv.cardImage ? 'card art' : c.drv.photo ? 'photo only' : 'no image'}</span>
+            ${art ? `<img src="${esc(art)}" class="drv-thumb" alt="" loading="lazy">` : '<span class="drv-thumb"></span>'}
+          </div>`;
+    }).join('');
+}
+
 // ── WHO'S AVAILABLE ──────────────────────────────────────
 // Stored on the race itself as { driverId: 'in' | 'out' }. Anyone not listed
 // is simply unknown, which is different from "out" — unknown still gets
@@ -2383,7 +2567,7 @@ function renderSyncTable() {
               ${drv.photo ? '<span class="sync-has">has photo</span>' : ''}</td>
             <td><span class="sync-badge ${how}">${badge}</span></td>
             <td>
-              <select class="sync-pick" onchange="syncPreview(this)">
+              <select class="sync-pick" onchange="syncRowPreview(this)">
                 <option value="">— none —</option>${opts(member)}
               </select>
             </td>
@@ -2413,7 +2597,12 @@ function renderSyncTable() {
       </div>`;
 }
 
-function syncPreview(sel) {
+/**
+ * Preview for a row of the Discord avatar matcher. Named apart from
+ * syncPreview(id) deliberately: they used to share a name, the image one
+ * won, and this quietly did nothing at all.
+ */
+function syncRowPreview(sel) {
     const row = sel.closest('tr');
     const m = discordMembers.find(x => x.id === sel.value);
     const cell = row.querySelector('.sync-prev');
@@ -2480,6 +2669,7 @@ function imageHost() {
 
 const IMG_PRESETS = {
     avatar: { max: 256, q: 0.82 },   // shown at 132px, so 256 covers retina
+    card:   { max: 640, q: 0.85 },   // card art fills a Discord embed
     logo:   { max: 240, q: 0.86 },
     hero:   { max: 900, q: 0.76 },   // full-width news image
 };

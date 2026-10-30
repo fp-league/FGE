@@ -92,6 +92,7 @@ export function cardSet(cd) {
     return {
       id: dKey(d), name: d.name, team: d.team || '', number: String(d.number ?? ''),
       nationality: d.nationality || '', photo: d.photo || '',
+      cardImage: d.cardImage || '',
       rarity, position: i + 1, ...s,
     };
   });
@@ -163,7 +164,18 @@ export async function openPack(env, interaction, cls, record) {
     `SELECT last_opened, total_packs FROM card_packs WHERE user_id = ?`
   ).bind(user.id).first();
 
-  if (row && now - row.last_opened < COOLDOWN_MS) {
+  // A pack handed out by an admin jumps the queue, and deliberately does not
+  // consume the free one — being given a pack should not cost you your
+  // 8-hourly.
+  let granted = null;
+  try {
+    granted = await env.DB.prepare(
+      `SELECT packs FROM card_grants WHERE user_id = ?`
+    ).bind(user.id).first();
+  } catch { /* table not migrated yet; carry on with the cooldown only */ }
+  const useGrant = Boolean(granted && granted.packs > 0);
+
+  if (!useGrant && row && now - row.last_opened < COOLDOWN_MS) {
     const left = COOLDOWN_MS - (now - row.last_opened);
     return simple('Not yet',
       `Your next pack is ready in **${fmtLeft(left)}**.\nOne free pack every 8 hours.`,
@@ -180,14 +192,28 @@ export async function openPack(env, interaction, cls, record) {
      DO UPDATE SET copies = copies + 1, rarity = excluded.rarity`
   ).bind(user.id, cls, c.id, c.rarity, now));
 
-  stmts.push(env.DB.prepare(
-    `INSERT INTO card_packs (user_id, last_opened, total_packs, total_cards)
-     VALUES (?, ?, 1, ?)
-     ON CONFLICT (user_id) DO UPDATE SET
-       last_opened = excluded.last_opened,
-       total_packs = total_packs + 1,
-       total_cards = total_cards + excluded.total_cards`
-  ).bind(user.id, now, pulled.length));
+  if (useGrant) {
+    // Spend the grant, leave the cooldown clock alone.
+    stmts.push(env.DB.prepare(
+      `UPDATE card_grants SET packs = packs - 1, updated_at = ? WHERE user_id = ?`
+    ).bind(now, user.id));
+    stmts.push(env.DB.prepare(
+      `INSERT INTO card_packs (user_id, last_opened, total_packs, total_cards)
+       VALUES (?, 0, 1, ?)
+       ON CONFLICT (user_id) DO UPDATE SET
+         total_packs = total_packs + 1,
+         total_cards = total_cards + excluded.total_cards`
+    ).bind(user.id, pulled.length));
+  } else {
+    stmts.push(env.DB.prepare(
+      `INSERT INTO card_packs (user_id, last_opened, total_packs, total_cards)
+       VALUES (?, ?, 1, ?)
+       ON CONFLICT (user_id) DO UPDATE SET
+         last_opened = excluded.last_opened,
+         total_packs = total_packs + 1,
+         total_cards = total_cards + excluded.total_cards`
+    ).bind(user.id, now, pulled.length));
+  }
 
   await env.DB.batch(stmts);
 
@@ -208,13 +234,18 @@ export async function openPack(env, interaction, cls, record) {
   });
 
   const have = Object.keys(copies).length;
+  const left = useGrant ? (granted.packs - 1) : 0;
   const embed = {
     title: `${user.global_name || user.username} opened a ${classLabel(cls)} pack`,
     description: lines.join('\n'),
     color: RARITY[best.rarity].colour,
-    footer: { text: `${have}/${set.length} drivers collected · next pack in 8h` },
+    footer: { text: `${have}/${set.length} drivers collected · ` +
+      (left > 0 ? `${left} bonus pack${left !== 1 ? 's' : ''} left`
+                : useGrant ? 'that was a bonus pack — your free one is still waiting'
+                : 'next pack in 8h') },
   };
-  if (best.photo) embed.thumbnail = { url: best.photo };
+  const art = best.cardImage || best.photo;
+  if (art) embed.thumbnail = { url: art };
   return embed;
 }
 
@@ -306,7 +337,8 @@ export async function showCard(env, interaction, cls, record, query) {
         value: owned ? `Yes ×${owned.copies}` : 'Not yet', inline: true },
     ],
   };
-  if (card.photo) embed.image = { url: card.photo };
+  const art = card.cardImage || card.photo;
+  if (art) embed.image = { url: art };
   return embed;
 }
 
@@ -340,6 +372,25 @@ export async function showCollectors(env, cls, record) {
 
 function simple(title, description, color) {
   return { title, description, color };
+}
+
+/** Hand someone packs from the admin panel. */
+export async function grantPacks(env, userId, count) {
+  const n = Math.max(1, Math.min(50, Number(count) || 1));
+  const now = Date.now();
+  await env.DB.prepare(
+    `INSERT INTO card_grants (user_id, packs, total, updated_at)
+     VALUES (?, ?, ?, ?)
+     ON CONFLICT (user_id) DO UPDATE SET
+       packs = packs + excluded.packs,
+       total = total + excluded.packs,
+       updated_at = excluded.updated_at`
+  ).bind(String(userId), n, n, now).run();
+
+  const row = await env.DB.prepare(
+    `SELECT packs, total FROM card_grants WHERE user_id = ?`
+  ).bind(String(userId)).first();
+  return { granted: n, waiting: row ? row.packs : n, everGranted: row ? row.total : n };
 }
 
 export const CARD_VIEWS = ['pack', 'collection', 'card', 'collectors'];

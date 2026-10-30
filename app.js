@@ -1673,8 +1673,8 @@ function cardHTML(c, d) {
            onkeydown="if(event.key==='Enter')navigate('drivers',{driverFocusId:'${esc(driverKey(drv))}'})">
         <div class="tc-rar">${tier.label}</div>
         <div class="tc-media">
-          ${drv.photo
-            ? `<img src="${esc(drv.photo)}" alt="${esc(drv.name)}" loading="lazy" decoding="async">`
+          ${(drv.cardImage || drv.photo)
+            ? `<img src="${esc(drv.cardImage || drv.photo)}" alt="${esc(drv.name)}" loading="lazy" decoding="async">`
             : `<span class="tc-initials">${esc(initials.toUpperCase())}</span>`}
           ${drv.number ? `<span class="tc-num">${esc(String(drv.number))}</span>` : ''}
         </div>
