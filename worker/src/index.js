@@ -402,6 +402,7 @@ async function getDiscordImages(request, env) {
 
   const auth = { Authorization: `Bot ${env.DISCORD_TOKEN}` };
   const out = [];
+  const diag = { withContent: 0, withAttachments: 0, withEmbeds: 0 };
   let before = null, scanned = 0, pages = 0;
 
   while (out.length < cap && pages < 20) {
@@ -420,6 +421,13 @@ async function getDiscordImages(request, env) {
     before = msgs[msgs.length - 1].id;
 
     for (const m of msgs) {
+      // Diagnostic: without the Message Content intent Discord returns
+      // messages with content, attachments and embeds all stripped, which
+      // looks identical to a channel that simply has no images in it.
+      if (m.content) diag.withContent++;
+      if ((m.attachments || []).length) diag.withAttachments++;
+      if ((m.embeds || []).length) diag.withEmbeds++;
+
       const author = (m.author && (m.author.global_name || m.author.username)) || '';
       for (const a of (m.attachments || [])) {
         if (a.content_type && !a.content_type.startsWith('image/')) continue;
@@ -436,8 +444,18 @@ async function getDiscordImages(request, env) {
     }
   }
 
-  return json({ ok: true, channel, scanned, found: out.length, images: out.slice(0, cap) },
-    null, request, env);
+  // All three at zero across a busy channel means the intent, not an empty
+  // channel - say so rather than reporting "no images found".
+  const blind = scanned > 0 && !diag.withContent && !diag.withAttachments && !diag.withEmbeds;
+
+  return json({
+    ok: true, channel, scanned, found: out.length, diag,
+    hint: blind
+      ? 'Every message came back empty, which means the Message Content intent is off. ' +
+        'Discord Developer Portal -> Bot -> Privileged Gateway Intents -> Message Content Intent.'
+      : undefined,
+    images: out.slice(0, cap),
+  }, null, request, env);
 }
 
 /**
