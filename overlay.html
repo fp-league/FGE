@@ -465,11 +465,14 @@ function render() {
   }
 }
 
+// With no length set this counts up: race control can start a clock without
+// committing to a finish time, and a rising clock beats a blank one.
 function raceClock() {
-  if (!state.durationMin || !state.lightsOut) return '';
-  const end = state.lightsOut + state.durationMin * 60000;
-  if (now() < state.lightsOut) return clock(state.durationMin * 60000);
-  return clock(Math.max(0, end - now()));
+  if (!state.lightsOut) return '';
+  const dur = (state.durationMin || 0) * 60000;
+  if (now() < state.lightsOut) return dur ? clock(dur) : '';
+  if (!dur) return clock(now() - state.lightsOut);
+  return clock(Math.max(0, state.lightsOut + dur - now()));
 }
 
 async function poll() {

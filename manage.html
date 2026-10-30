@@ -218,6 +218,13 @@ textarea { resize:vertical; min-height:80px; }
   font:600 0.66rem/1.5 var(--font-ui,inherit); border-radius:3px;
   background:rgba(0,0,0,0.35); border:1px solid rgba(255,255,255,0.22); color:#fff; }
 
+.rc-timer { display:flex; align-items:center; gap:1.2rem; flex-wrap:wrap; }
+.rc-clock { font-family:var(--fd,inherit); font-size:2.6rem; line-height:1; color:#6d6d6d;
+  font-variant-numeric:tabular-nums; min-width:150px; letter-spacing:0.02em; }
+.rc-clock.live { color:#fff; }
+.rc-timer-side { flex:1; min-width:220px; }
+.rc-timer-state { font-size:0.74rem; letter-spacing:0.08em; color:var(--grey,#9a9a9a); }
+
 .av-row { grid-template-columns: 14px 1fr 54px auto auto !important; }
 .av-state { font-family: var(--fu,inherit); font-size: 0.66rem; letter-spacing: 0.08em;
   text-align: right; color: #7a7a7a; }
@@ -643,6 +650,23 @@ textarea { resize:vertical; min-height:80px; }
         </div>
 
         <div class="form-card">
+          <h3>TIMER</h3>
+          <div class="rc-timer">
+            <div class="rc-clock" id="rcClock">--:--</div>
+            <div class="rc-timer-side">
+              <div class="rc-timer-state" id="rcClockState">No timer running</div>
+              <div class="form-actions" style="margin:0.5rem 0 0">
+                <button class="btn btn-white" onclick="rcStartTimer()">START TIMER<kbd>T</kbd></button>
+                <button class="btn btn-ghost btn-sm" onclick="rcResetTimer()">RESET</button>
+              </div>
+            </div>
+          </div>
+          <p class="bk-note">Starts the clock from right now and throws the green flag, so you
+             don't have to predict lights out in advance. Everyone watching the site and the
+             overlay sees the same countdown. With no length set it counts up instead.</p>
+        </div>
+
+        <div class="form-card">
           <h3>FLAGS</h3>
           <div class="rc-flags">
             <button class="rc-btn formation" data-race-only onclick="rcStatus('formation')">FORMATION<kbd>F</kbd></button>
@@ -654,7 +678,7 @@ textarea { resize:vertical; min-height:80px; }
           </div>
           <p class="bk-note" style="margin-top:0.6rem">Press the key on its own to throw a flag —
              no need to find the button mid-incident. Shortcuts are off while you are typing
-             in a box, and RED asks first.</p>
+             in a box, and RED asks first. <b>T</b> starts the timer.</p>
           <div class="form-group" style="margin-top:1rem">
             <label class="fg-label">RACE CONTROL MESSAGE</label>
             <div class="rc-msg-row">
@@ -2021,6 +2045,8 @@ function rcKeyHandler(e) {
     const tag = (t && t.tagName || '').toLowerCase();
     if (tag === 'input' || tag === 'textarea' || tag === 'select' || (t && t.isContentEditable)) return;
 
+    if (e.key.toLowerCase() === 't') { e.preventDefault(); rcStartTimer(); return; }
+
     const status = RC_KEYS[e.key.toLowerCase()];
     if (!status) return;
     // Quali has no formation lap and no safety car.
@@ -2340,6 +2366,70 @@ function teamColour(name) {
     return /^#[0-9a-f]{6}$/i.test(v || '') ? v : '#888888';
 }
 
+/**
+ * Starts the clock from now, rather than needing lights out predicted in
+ * advance. Green at the same moment, because that is what lights out is.
+ */
+function rcStartTimer() {
+    if (!rcState.status || rcState.status === 'idle') { toast('Load a session first', 'err'); return; }
+    if (rcState.lightsOut && Date.now() > rcState.lightsOut &&
+        !confirm('The clock is already running. Restart it from now?')) return;
+    rcPush({ lightsOut: Date.now(), status: 'green' });
+    rcState.lightsOut = Date.now();
+    rcTick();
+    toast(rcMode() === 'quali' ? 'Session started' : 'Lights out', 'ok');
+}
+
+function rcResetTimer() {
+    if (!confirm('Clear the clock? The session stays loaded.')) return;
+    // 0, not null: the Worker uses COALESCE, so null would mean "leave it".
+    rcPush({ lightsOut: 0 });
+    rcState.lightsOut = null;
+    rcTick();
+    toast('Timer cleared', 'ok');
+}
+
+function rcFmt(ms) {
+    const t = Math.max(0, Math.floor(ms / 1000));
+    const h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), sec = t % 60;
+    const p = n => String(n).padStart(2, '0');
+    return h ? `${h}:${p(m)}:${p(sec)}` : `${p(m)}:${p(sec)}`;
+}
+
+/** The operator's own copy of the clock, so they can see what viewers see. */
+function rcTick() {
+    const el = document.getElementById('rcClock');
+    const st = document.getElementById('rcClockState');
+    if (!el) return;
+    const s = rcState;
+    if (!s.lightsOut) {
+        el.textContent = '--:--';
+        if (st) st.textContent = s.status && s.status !== 'idle'
+            ? 'No timer running — press START TIMER'
+            : 'No session loaded';
+        el.classList.remove('live');
+        return;
+    }
+    const now = Date.now();
+    if (now < s.lightsOut) {
+        el.textContent = rcFmt(s.lightsOut - now);
+        if (st) st.textContent = 'Starts in';
+        el.classList.add('live');
+        return;
+    }
+    const dur = (s.durationMin || 0) * 60000;
+    if (!dur) {
+        el.textContent = rcFmt(now - s.lightsOut);
+        if (st) st.textContent = 'Elapsed — no length set';
+    } else {
+        const left = Math.max(0, s.lightsOut + dur - now);
+        el.textContent = rcFmt(left);
+        if (st) st.textContent = left > 0 ? 'Time remaining' : 'Time up';
+    }
+    el.classList.add('live');
+}
+setInterval(() => { if (currentSec === 'control') rcTick(); }, 1000);
+
 const rcStatus       = st => rcPush({ status: st });
 const rcSendMessage  = () => rcPush({ message: document.getElementById('rcMessage').value.trim() });
 const rcClearMessage = () => { document.getElementById('rcMessage').value = ''; rcPush({ message: '' }); };
@@ -2451,6 +2541,7 @@ function rcRenderState() {
     if (document.getElementById('rcMessage') && document.activeElement?.id !== 'rcMessage') {
         document.getElementById('rcMessage').value = rcState.message || '';
     }
+    rcTick();
 }
 
 async function rcRefresh() {

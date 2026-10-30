@@ -1819,12 +1819,18 @@ function liveClock(ms) {
     return (neg ? '-' : '') + (h ? `${h}:${p(m)}:${p(s)}` : `${p(m)}:${p(s)}`);
 }
 
-/** Time left in the race, or the full duration before lights out. */
+/**
+ * Time left in the race, or the full duration before lights out. With no
+ * length set it counts up instead — race control can start a clock without
+ * committing to a finish time, and a rising clock beats no clock at all.
+ */
 function liveRaceClock() {
     const s = liveState;
-    if (!s.durationMin || !s.lightsOut) return '';
-    if (liveNow() < s.lightsOut) return liveClock(s.durationMin * 60000);
-    return liveClock(Math.max(0, s.lightsOut + s.durationMin * 60000 - liveNow()));
+    if (!s.lightsOut) return '';
+    const dur = (s.durationMin || 0) * 60000;
+    if (liveNow() < s.lightsOut) return dur ? liveClock(dur) : '';
+    if (!dur) return liveClock(liveNow() - s.lightsOut);
+    return liveClock(Math.max(0, s.lightsOut + dur - liveNow()));
 }
 
 /** A strip on the home page that doubles as the way in to the live page. */
