@@ -10,6 +10,11 @@ BIN_ID = "6ada83fdac6210605a4a3a74"
 # Leave blank to serve images through the Worker at /img/<key>.
 # Set it to a custom domain or r2.dev URL to serve straight from R2.
 IMAGE_BASE_URL = ""
+# Where results get posted when you save them in the admin panel.
+# A channel id is not a secret, so it lives here rather than as one.
+# Find yours: GET /api/discord/channels with the admin token.
+# Leave blank to turn result posting off.
+ANNOUNCE_CHANNEL_ID = ""
 
 # D1 database. These ids are not secrets - they only identify the resource,
 # and are useless without an API token. Cloudflare's own docs commit them.

@@ -383,6 +383,36 @@ async function getImage(request, env, pathname) {
 const LIVE_STATUSES = ['idle','formation','green','sc','vsc','red','chequered','finished'];
 
 /**
+ * GET /api/discord/channels — admin only. Lists the text channels the bot
+ * can see, so a channel can be chosen by name rather than by hunting for an
+ * id in the Discord UI.
+ */
+async function getDiscordChannels(request, env) {
+  if (env.ADMIN_TOKEN && request.headers.get('X-Admin-Token') !== env.ADMIN_TOKEN) {
+    return bad('not authorised', request, env, 401);
+  }
+  if (!env.DISCORD_TOKEN || !env.DISCORD_GUILD_ID) {
+    return bad('DISCORD_TOKEN and DISCORD_GUILD_ID are needed', request, env, 503);
+  }
+  const res = await fetch(
+    `https://discord.com/api/v10/guilds/${env.DISCORD_GUILD_ID}/channels`,
+    { headers: { Authorization: `Bot ${env.DISCORD_TOKEN}` } });
+  if (!res.ok) return bad(`Discord said ${res.status}`, request, env, 502);
+
+  const all = await res.json();
+  const cats = {};
+  all.filter(c => c.type === 4).forEach(c => { cats[c.id] = c.name; });
+
+  return json({
+    ok: true,
+    channels: all
+      .filter(c => c.type === 0 || c.type === 5)        // text and announcement
+      .sort((a, b) => (a.position || 0) - (b.position || 0))
+      .map(c => ({ id: c.id, name: '#' + c.name, category: cats[c.parent_id] || null })),
+  }, null, request, env);
+}
+
+/**
  * POST /api/discord/register — admin only.
  *
  * Registers the slash commands using the bot token the Worker already holds.
@@ -481,8 +511,13 @@ async function postAnnounce(request, env) {
   if (env.ADMIN_TOKEN && request.headers.get('X-Admin-Token') !== env.ADMIN_TOKEN) {
     return bad('not authorised', request, env, 401);
   }
-  if (!env.DISCORD_WEBHOOK_URL) {
-    return bad('no Discord webhook configured on the Worker', request, env, 503);
+  // Either route works. The bot token is preferred because the Worker
+  // already has it — a webhook means setting another secret, and posting as
+  // the bot keeps one identity in the channel rather than two.
+  const viaBot = Boolean(env.DISCORD_TOKEN && env.ANNOUNCE_CHANNEL_ID);
+  if (!viaBot && !env.DISCORD_WEBHOOK_URL) {
+    return bad('set ANNOUNCE_CHANNEL_ID in wrangler.toml (or a DISCORD_WEBHOOK_URL secret)',
+      request, env, 503);
   }
 
   let body;
@@ -505,19 +540,28 @@ async function postAnnounce(request, env) {
     return bad('no result to post for that round', request, env, 404);
   }
 
-  const res = await fetch(env.DISCORD_WEBHOOK_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      username: 'FGE',
-      embeds: [{ ...embed, timestamp: new Date().toISOString() }],
-    }),
-  });
+  const payload = { embeds: [{ ...embed, timestamp: new Date().toISOString() }] };
+
+  const res = viaBot
+    ? await fetch(`https://discord.com/api/v10/channels/${env.ANNOUNCE_CHANNEL_ID}/messages`, {
+        method: 'POST',
+        headers: { Authorization: `Bot ${env.DISCORD_TOKEN}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+    : await fetch(env.DISCORD_WEBHOOK_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: 'FGE', ...payload }),
+      });
 
   if (!res.ok) {
-    return bad(`Discord rejected the post (${res.status})`, request, env, 502);
+    const detail = await res.text();
+    return json({ ok: false, error: `Discord rejected the post (${res.status})`,
+      detail: detail.slice(0, 300), via: viaBot ? 'bot' : 'webhook' },
+      { status: 502 }, request, env);
   }
-  return json({ ok: true, posted: embed.title }, null, request, env);
+  return json({ ok: true, posted: embed.title, via: viaBot ? 'bot' : 'webhook' },
+    null, request, env);
 }
 
 /** GET /api/live — public. The overlay and the site both read this. */
@@ -763,6 +807,10 @@ export default {
           { headers: { 'Content-Type': 'application/json' } });
       }
 
+      if (pathname === '/api/discord/channels' && request.method === 'GET') {
+        return await getDiscordChannels(request, env);
+      }
+
       if (pathname === '/api/discord/register' && request.method === 'POST') {
         return await postRegisterCommands(request, env);
       }
@@ -796,7 +844,8 @@ export default {
           images: imageStore(env) || 'none',
           discord: Boolean(env.DISCORD_PUBLIC_KEY),
           members: Boolean(env.DISCORD_TOKEN && env.DISCORD_GUILD_ID),
-          announce: Boolean(env.DISCORD_WEBHOOK_URL),
+          announce: Boolean(env.DISCORD_WEBHOOK_URL ||
+                            (env.DISCORD_TOKEN && env.ANNOUNCE_CHANNEL_ID)),
           cards: await (async () => {
             try { await env.DB.prepare('SELECT 1 FROM card_collection LIMIT 1').first(); return true; }
             catch { return false; }
