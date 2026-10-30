@@ -1,9 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="https://www.sitemaps.org/schemas/sitemap/0.9">
+<!-- The namespace must be http://, not https://. It is an identifier, not a
+     link, and Google rejects the whole file if it does not match exactly. -->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>https://fp-league.github.io/FGE/</loc>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
-    <lastmod>2026-10-23</lastmod>
+    <lastmod>2026-10-30</lastmod>
   </url>
 </urlset>
