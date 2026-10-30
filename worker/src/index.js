@@ -511,13 +511,18 @@ async function postAnnounce(request, env) {
   if (env.ADMIN_TOKEN && request.headers.get('X-Admin-Token') !== env.ADMIN_TOKEN) {
     return bad('not authorised', request, env, 401);
   }
+  // Results are per class, and most servers keep a channel per class, so a
+  // class-specific channel wins over the shared one when it is set.
+  const channel = (cls === 'gt4' ? env.ANNOUNCE_CHANNEL_GT4 : env.ANNOUNCE_CHANNEL_GT3)
+                  || env.ANNOUNCE_CHANNEL_ID;
+
   // Either route works. The bot token is preferred because the Worker
   // already has it — a webhook means setting another secret, and posting as
   // the bot keeps one identity in the channel rather than two.
-  const viaBot = Boolean(env.DISCORD_TOKEN && env.ANNOUNCE_CHANNEL_ID);
+  const viaBot = Boolean(env.DISCORD_TOKEN && channel);
   if (!viaBot && !env.DISCORD_WEBHOOK_URL) {
-    return bad('set ANNOUNCE_CHANNEL_ID in wrangler.toml (or a DISCORD_WEBHOOK_URL secret)',
-      request, env, 503);
+    return bad('set ANNOUNCE_CHANNEL_GT3 / ANNOUNCE_CHANNEL_GT4 in wrangler.toml ' +
+      '(or a DISCORD_WEBHOOK_URL secret)', request, env, 503);
   }
 
   let body;
@@ -543,7 +548,7 @@ async function postAnnounce(request, env) {
   const payload = { embeds: [{ ...embed, timestamp: new Date().toISOString() }] };
 
   const res = viaBot
-    ? await fetch(`https://discord.com/api/v10/channels/${env.ANNOUNCE_CHANNEL_ID}/messages`, {
+    ? await fetch(`https://discord.com/api/v10/channels/${channel}/messages`, {
         method: 'POST',
         headers: { Authorization: `Bot ${env.DISCORD_TOKEN}`, 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -844,8 +849,9 @@ export default {
           images: imageStore(env) || 'none',
           discord: Boolean(env.DISCORD_PUBLIC_KEY),
           members: Boolean(env.DISCORD_TOKEN && env.DISCORD_GUILD_ID),
-          announce: Boolean(env.DISCORD_WEBHOOK_URL ||
-                            (env.DISCORD_TOKEN && env.ANNOUNCE_CHANNEL_ID)),
+          announce: Boolean(env.DISCORD_WEBHOOK_URL || (env.DISCORD_TOKEN &&
+                     (env.ANNOUNCE_CHANNEL_GT3 || env.ANNOUNCE_CHANNEL_GT4 ||
+                      env.ANNOUNCE_CHANNEL_ID))),
           cards: await (async () => {
             try { await env.DB.prepare('SELECT 1 FROM card_collection LIMIT 1').first(); return true; }
             catch { return false; }
