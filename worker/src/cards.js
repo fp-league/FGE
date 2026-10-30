@@ -201,21 +201,74 @@ const userOf = i => (i.member && i.member.user) || i.user || {};
  * table is missing, so a Worker that hasn't run the economy migration still
  * serves driver cards instead of erroring.
  */
-export async function loadCustom(env, cls) {
+export async function loadCustom(env) {
   try {
     const rows = await env.DB.prepare(
       `SELECT id, name, subtitle, rarity, image, blurb, enabled
-         FROM custom_card WHERE class = ? AND enabled = 1 ORDER BY sort, name`
-    ).bind(cls).all();
+         FROM custom_card WHERE enabled = 1 ORDER BY sort, name`).all();
     return rows.results || [];
   } catch { return []; }
 }
 
-/** The full set for a class: driver cards plus anything an admin added. */
-export async function fullSet(env, cls, record) {
-  const cd = (record && record[cls]) || {};
-  return cardSet(cd, await loadCustom(env, cls));
+/**
+ * There is one set, not two.
+ *
+ * Rarity is still earned inside a class — being the GT4 leader means being
+ * the best in GT4, and ranking a GT4 driver against GT3 points would be
+ * comparing two different championships. So each class is rated on its own
+ * and the two results are poured into one set afterwards.
+ *
+ * A driver entered in both classes appears once, at whichever rarity they
+ * earned higher; two cards of the same person would be a bug, not a bonus.
+ */
+export function combinedSet(record, custom) {
+  const out = [];
+  const seen = new Map();
+
+  for (const cls of ['gt3', 'gt4']) {
+    const cd = (record && record[cls]) || {};
+    cardSet(cd, null).forEach(c => {
+      const card = { ...c, cls };
+      const prev = seen.get(card.id);
+      if (!prev) { seen.set(card.id, card); out.push(card); return; }
+      if (RARITIES.indexOf(card.rarity) > RARITIES.indexOf(prev.rarity)) {
+        Object.assign(prev, card);           // same object, so order is kept
+      }
+    });
+  }
+
+  // Order the whole set by rarity, then by where they sit in their own
+  // championship, so a merged set still reads top-down.
+  out.sort((a, b) =>
+    RARITIES.indexOf(b.rarity) - RARITIES.indexOf(a.rarity) ||
+    a.position - b.position ||
+    a.name.localeCompare(b.name));
+
+  (custom || [])
+    .filter(c => c && c.id && c.enabled !== 0)
+    .forEach((c, i) => out.push({
+      id: String(c.id), name: c.name || 'Untitled', team: c.subtitle || '', number: '',
+      nationality: '', photo: '', cardImage: c.image || '', blurb: c.blurb || '',
+      rarity: RARITIES.includes(c.rarity) ? c.rarity : 'rare',
+      position: out.length + i + 1, custom: true, cls: '',
+      points: 0, wins: 0, podiums: 0, starts: 0,
+    }));
+
+  return out;
 }
+
+/** The whole set: every driver in the league plus anything an admin added. */
+export async function fullSet(env, record) {
+  return combinedSet(record, await loadCustom(env));
+}
+
+/**
+ * One collection, so one bucket. The class column stays on the table
+ * because SQLite will not drop one and because the history is worth
+ * keeping; everything written from here on goes in under 'all', and
+ * migration 005 folded the old per-class rows into it.
+ */
+export const SET = 'all';
 
 function fmtLeft(ms) {
   const m = Math.ceil(ms / 60000);
@@ -227,14 +280,17 @@ function fmtLeft(ms) {
 const classLabel = c => (c === 'gt4' ? 'GT4' : 'GT3');
 const classColour = c => (c === 'gt4' ? 0x0033A0 : 0xE10600);
 
+// One set means one colour on the embeds rather than a class red/blue.
+const BRAND = 0xE10600;
+
 /* ── /pack ─────────────────────────────────────────────── */
-export async function openPack(env, interaction, cls, record) {
+export async function openPack(env, interaction, record) {
   const user = userOf(interaction);
   if (!user.id) return simple('Who are you?', "Couldn't read your Discord account.", 0x9E9E9E);
 
-  const set = await fullSet(env, cls, record);
+  const set = await fullSet(env, record);
   if (!set.length) {
-    return simple('No cards yet', `There are no ${classLabel(cls)} drivers to make cards from.`, 0x9E9E9E);
+    return simple('No cards yet', 'There are no drivers to make cards from.', 0x9E9E9E);
   }
 
   const now = Date.now();
@@ -268,7 +324,7 @@ export async function openPack(env, interaction, cls, record) {
      VALUES (?, ?, ?, ?, 1, ?)
      ON CONFLICT (user_id, class, driver_id)
      DO UPDATE SET copies = copies + 1, rarity = excluded.rarity`
-  ).bind(user.id, cls, c.id, c.rarity, now));
+  ).bind(user.id, SET, c.id, c.rarity, now));
 
   if (useGrant) {
     // Spend the grant, leave the cooldown clock alone.
@@ -298,7 +354,7 @@ export async function openPack(env, interaction, cls, record) {
   // Which of these were new? Worked out after the write so duplicates read true.
   const owned = await env.DB.prepare(
     `SELECT driver_id, copies FROM card_collection WHERE user_id = ? AND class = ?`
-  ).bind(user.id, cls).all();
+  ).bind(user.id, SET).all();
   const copies = {};
   for (const r of (owned.results || [])) copies[r.driver_id] = r.copies;
 
@@ -314,7 +370,7 @@ export async function openPack(env, interaction, cls, record) {
   const have = Object.keys(copies).length;
   const left = useGrant ? (granted.packs - 1) : 0;
   const embed = {
-    title: `${user.global_name || user.username} opened a ${classLabel(cls)} pack`,
+    title: `${user.global_name || user.username} opened a pack`,
     description: lines.join('\n'),
     color: RARITY[best.rarity].colour,
     footer: { text: `${have}/${set.length} drivers collected · ` +
@@ -328,24 +384,24 @@ export async function openPack(env, interaction, cls, record) {
 }
 
 /* ── /collection ───────────────────────────────────────── */
-export async function showCollection(env, interaction, cls, record, targetId) {
+export async function showCollection(env, interaction, record, targetId) {
   const user = userOf(interaction);
   const id = targetId || user.id;
   if (!id) return simple('Who are you?', "Couldn't read your Discord account.", 0x9E9E9E);
 
-  const set = await fullSet(env, cls, record);
+  const set = await fullSet(env, record);
   const byId = {};
   set.forEach(c => { byId[c.id] = c; });
 
   const rows = await env.DB.prepare(
     `SELECT driver_id, rarity, copies FROM card_collection WHERE user_id = ? AND class = ?`
-  ).bind(id, cls).all();
+  ).bind(id, SET).all();
 
   const held = (rows.results || []).filter(r => byId[r.driver_id]);
   if (!held.length) {
-    return simple(`No ${classLabel(cls)} cards yet`,
+    return simple('No cards yet',
       targetId ? 'They have not opened a pack yet.' : 'Open your first with `/cards pack`.',
-      classColour(cls));
+      BRAND);
   }
 
   // Group by rarity, rarest first — that is how anyone reads a collection.
@@ -368,18 +424,18 @@ export async function showCollection(env, interaction, cls, record, targetId) {
   const name = targetId ? 'Collection' : `${user.global_name || user.username}'s collection`;
 
   return {
-    title: `${name} — ${classLabel(cls)}`,
+    title: name,
     description: `**${held.length} of ${set.length}** drivers · ${pct}% complete` +
                  (dupes ? ` · ${dupes} duplicate${dupes !== 1 ? 's' : ''}` : ''),
-    color: classColour(cls),
+    color: BRAND,
     fields,
   };
 }
 
 /* ── /card ─────────────────────────────────────────────── */
-export async function showCard(env, interaction, cls, record, query) {
+export async function showCard(env, interaction, record, query) {
   const user = userOf(interaction);
-  const set = await fullSet(env, cls, record);
+  const set = await fullSet(env, record);
   const q = String(query || '').trim().toLowerCase();
   if (!q) return simple('Which driver?', 'Give me a name, e.g. `/cards card name:Maxi`.', 0x9E9E9E);
 
@@ -387,14 +443,14 @@ export async function showCard(env, interaction, cls, record, query) {
             || set.find(c => c.name.toLowerCase().includes(q))
             || set.find(c => String(c.number) === q);
   if (!card) {
-    return simple('No such driver', `Nothing in the ${classLabel(cls)} set matches “${query}”.`, 0x9E9E9E);
+    return simple('No such card', `Nothing in the set matches “${query}”.`, 0x9E9E9E);
   }
 
   let owned = null;
   if (user.id) {
     owned = await env.DB.prepare(
       `SELECT copies FROM card_collection WHERE user_id = ? AND class = ? AND driver_id = ?`
-    ).bind(user.id, cls, card.id).first();
+    ).bind(user.id, SET, card.id).first();
   }
 
   const r = RARITY[card.rarity];
@@ -414,7 +470,8 @@ export async function showCard(env, interaction, cls, record, query) {
 
   const embed = {
     title: `${r.icon} ${card.name}${card.number ? `  #${card.number}` : ''}`,
-    description: `**${r.label}** · ${classLabel(cls)}${card.team ? ` · ${card.team}` : ''}` +
+    description: `**${r.label}**${card.cls ? ` · ${classLabel(card.cls)}` : ''}` +
+                 `${card.team ? ` · ${card.team}` : ''}` +
                  `${card.nationality ? ` · ${card.nationality}` : ''}` +
                  `${card.blurb ? `\n\n${card.blurb}` : ''}`,
     color: r.colour,
@@ -426,28 +483,28 @@ export async function showCard(env, interaction, cls, record, query) {
 }
 
 /* ── /collectors ───────────────────────────────────────── */
-export async function showCollectors(env, cls, record) {
-  const total = (await fullSet(env, cls, record)).length;
+export async function showCollectors(env, record) {
+  const total = (await fullSet(env, record)).length;
 
   const rows = await env.DB.prepare(
     `SELECT user_id, COUNT(*) AS held, SUM(copies) AS cards
        FROM card_collection WHERE class = ?
       GROUP BY user_id ORDER BY held DESC, cards DESC LIMIT 10`
-  ).bind(cls).all();
+  ).bind(SET).all();
 
   const list = rows.results || [];
   if (!list.length) {
     return simple('No collectors yet', 'Nobody has opened a pack. Be first with `/cards pack`.',
-      classColour(cls));
+      BRAND);
   }
 
   const medal = i => ['🥇', '🥈', '🥉'][i] || `\`${String(i + 1).padStart(2)}\``;
   return {
-    title: `Top ${classLabel(cls)} collectors`,
+    title: 'Top collectors',
     description: list.map((r, i) =>
       `${medal(i)} <@${r.user_id}> — **${r.held}/${total}**` +
       ` (${Math.round(r.held / total * 100)}%) · ${r.cards} cards`).join('\n'),
-    color: classColour(cls),
+    color: BRAND,
     footer: { text: 'Ranked by unique drivers held' },
   };
 }

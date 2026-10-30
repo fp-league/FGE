@@ -12,13 +12,13 @@
  * decide the numbers.
  */
 
-import { RARITY, RARITIES, drawPack, fullSet } from './cards.js';
+import { RARITY, RARITIES, drawPack, fullSet, SET } from './cards.js';
 
 const userOf = i => (i.member && i.member.user) || i.user || {};
 const nameOf = u => u.global_name || u.username || 'Someone';
 const classLabel = c => (c === 'gt4' ? 'GT4' : 'GT3');
-const classColour = c => (c === 'gt4' ? 0x0033A0 : 0xE10600);
 const GOLD = 0xFFC400;
+const BRAND = 0xE10600;   // one set, one colour
 const GREY = 0x9E9E9E;
 
 const simple = (title, description, color) => ({ title, description, color: color || GREY });
@@ -360,13 +360,10 @@ export async function payUser(env, interaction, toId, amount) {
 
 /* ── Packs for sale ────────────────────────────────────── */
 
-export async function listPackTypes(env, cls) {
+export async function listPackTypes(env) {
   try {
-    const rows = cls
-      ? await env.DB.prepare(
-          `SELECT * FROM pack_type WHERE enabled = 1 AND class = ? ORDER BY sort, price`).bind(cls).all()
-      : await env.DB.prepare(
-          `SELECT * FROM pack_type WHERE enabled = 1 ORDER BY sort, price`).all();
+    const rows = await env.DB.prepare(
+      `SELECT * FROM pack_type WHERE enabled = 1 ORDER BY sort, price`).all();
     return rows.results || [];
   } catch { return []; }
 }
@@ -383,12 +380,11 @@ function packOpts(row) {
 
 /* ── /shop ─────────────────────────────────────────────── */
 
-export async function showShop(env, interaction, cls) {
+export async function showShop(env, interaction) {
   const cfg = await settings(env);
-  const packs = await listPackTypes(env, cls);
+  const packs = await listPackTypes(env);
   if (!packs.length) {
-    return simple('Shop is empty', `No ${classLabel(cls)} packs are on sale. An admin can add some.`,
-      classColour(cls));
+    return simple('Shop is empty', 'No packs are on sale. An admin can add some.', BRAND);
   }
 
   const user = userOf(interaction);
@@ -405,9 +401,9 @@ export async function showShop(env, interaction, cls) {
   });
 
   return {
-    title: `${classLabel(cls)} shop`,
+    title: 'Shop',
     description: lines.join('\n'),
-    color: classColour(cls),
+    color: BRAND,
     footer: { text: `You have ${w.balance.toLocaleString('en-GB')} ${cfg.currency_emoji}` +
                     ' · /work and /daily to earn more' },
   };
@@ -420,7 +416,7 @@ export async function buyPack(env, interaction, packId, record) {
   if (!user.id) return simple('Who are you?', "Couldn't read your Discord account.");
 
   const cfg = await settings(env);
-  const all = await listPackTypes(env, null);
+  const all = await listPackTypes(env);
   if (!all.length) return simple('Shop is empty', 'No packs are on sale yet.');
 
   const q = String(packId || '').trim().toLowerCase();
@@ -432,10 +428,9 @@ export async function buyPack(env, interaction, packId, record) {
       `Nothing called “${packId}”. Run \`/shop\` to see what's on sale.`);
   }
 
-  const cls = pack.class === 'gt4' ? 'gt4' : 'gt3';
-  const set = await fullSet(env, cls, record);
+  const set = await fullSet(env, record);
   if (!set.length) {
-    return simple('Nothing to put in it', `There are no ${classLabel(cls)} cards yet.`);
+    return simple('Nothing to put in it', 'There are no cards yet.');
   }
 
   // Take the money first. If the draw somehow fails afterwards it refunds;
@@ -466,7 +461,7 @@ export async function buyPack(env, interaction, packId, record) {
        VALUES (?, ?, ?, ?, 1, ?)
        ON CONFLICT (user_id, class, driver_id)
        DO UPDATE SET copies = copies + 1, rarity = excluded.rarity`
-    ).bind(user.id, cls, c.id, c.rarity, now)),
+    ).bind(user.id, SET, c.id, c.rarity, now)),
     // A bought pack counts towards the totals but leaves the free-pack clock
     // alone — paying for one shouldn't cost you your eight-hourly.
     env.DB.prepare(
@@ -480,7 +475,7 @@ export async function buyPack(env, interaction, packId, record) {
 
   const owned = await env.DB.prepare(
     `SELECT driver_id, copies FROM card_collection WHERE user_id = ? AND class = ?`
-  ).bind(user.id, cls).all();
+  ).bind(user.id, SET).all();
   const copies = {};
   for (const r of (owned.results || [])) copies[r.driver_id] = r.copies;
 
@@ -513,20 +508,20 @@ export async function buyPack(env, interaction, packId, record) {
  * wakes up having dismantled their own collection, and a pile of dupes is
  * worth something instead of being dead weight.
  */
-export async function sellCard(env, interaction, cls, query, howMany, record) {
+export async function sellCard(env, interaction, query, howMany, record) {
   const user = userOf(interaction);
   if (!user.id) return simple('Who are you?', "Couldn't read your Discord account.");
 
   const cfg = await settings(env);
   const values = parseJson(cfg.sell_values, {}) || {};
-  const set = await fullSet(env, cls, record);
-  return sellFrom(env, user, cls, query, howMany, cfg, values, set);
+  const set = await fullSet(env, record);
+  return sellFrom(env, user, query, howMany, cfg, values, set);
 }
 
-async function sellFrom(env, user, cls, query, howMany, cfg, values, set) {
+async function sellFrom(env, user, query, howMany, cfg, values, set) {
   const rows = await env.DB.prepare(
     `SELECT driver_id, rarity, copies FROM card_collection
-      WHERE user_id = ? AND class = ? AND copies > 1`).bind(user.id, cls).all();
+      WHERE user_id = ? AND class = ? AND copies > 1`).bind(user.id, SET).all();
   const dupes = rows.results || [];
   const byId = {};
   set.forEach(c => { byId[c.id] = c; });
@@ -539,8 +534,7 @@ async function sellFrom(env, user, cls, query, howMany, cfg, values, set) {
     const sellable = dupes.filter(r => byId[r.driver_id]);
     if (!sellable.length) {
       return simple('No duplicates',
-        `You have no spare ${classLabel(cls)} cards. Your last copy of a card is never sellable.`,
-        classColour(cls));
+        'You have no spare cards. Your last copy of a card is never sellable.', BRAND);
     }
     const total = sellable.reduce((n, r) => n + (r.copies - 1) * price(byId[r.driver_id].rarity), 0);
     const lines = sellable
@@ -552,9 +546,9 @@ async function sellFrom(env, user, cls, query, howMany, cfg, values, set) {
                `${(price(c.rarity)).toLocaleString('en-GB')} ${cfg.currency_emoji} each`;
       });
     return {
-      title: `Spare ${classLabel(cls)} cards`,
+      title: 'Spare cards',
       description: lines.join('\n') + (sellable.length > 20 ? `\n…and ${sellable.length - 20} more` : ''),
-      color: classColour(cls),
+      color: BRAND,
       footer: { text: `All of it is worth ${total.toLocaleString('en-GB')} ${cfg.currency_emoji}` +
                       ' · sell one with /sell name:… · /sell name:all' },
     };
@@ -563,7 +557,7 @@ async function sellFrom(env, user, cls, query, howMany, cfg, values, set) {
   // `all` dumps every spare in one go.
   if (q === 'all') {
     const sellable = dupes.filter(r => byId[r.driver_id] && r.copies > 1);
-    if (!sellable.length) return simple('No duplicates', 'Nothing spare to sell.', classColour(cls));
+    if (!sellable.length) return simple('No duplicates', 'Nothing spare to sell.', BRAND);
     let total = 0, cards = 0;
     const stmts = [];
     for (const r of sellable) {
@@ -572,10 +566,10 @@ async function sellFrom(env, user, cls, query, howMany, cfg, values, set) {
       cards += spare;
       stmts.push(env.DB.prepare(
         `UPDATE card_collection SET copies = 1
-          WHERE user_id = ? AND class = ? AND driver_id = ?`).bind(user.id, cls, r.driver_id));
+          WHERE user_id = ? AND class = ? AND driver_id = ?`).bind(user.id, SET, r.driver_id));
     }
     await env.DB.batch(stmts);
-    const w = await adjust(env, user.id, total, `Sold ${cards} spare ${classLabel(cls)} cards`, cfg);
+    const w = await adjust(env, user.id, total, `Sold ${cards} spare cards`, cfg);
     return {
       title: '💰 Sold the lot',
       description: `${cards} spare card${cards !== 1 ? 's' : ''} → ${money(total, cfg)}\n` +
@@ -588,7 +582,7 @@ async function sellFrom(env, user, cls, query, howMany, cfg, values, set) {
   const card = set.find(c => c.name.toLowerCase() === q)
             || set.find(c => c.name.toLowerCase().includes(q))
             || set.find(c => String(c.number) === q);
-  if (!card) return simple('No such card', `Nothing in the ${classLabel(cls)} set matches “${query}”.`);
+  if (!card) return simple('No such card', `Nothing in the set matches “${query}”.`);
 
   const row = dupes.find(r => r.driver_id === card.id);
   const spare = row ? row.copies - 1 : 0;
@@ -603,7 +597,7 @@ async function sellFrom(env, user, cls, query, howMany, cfg, values, set) {
   await env.DB.prepare(
     `UPDATE card_collection SET copies = copies - ?
       WHERE user_id = ? AND class = ? AND driver_id = ? AND copies - ? >= 1`
-  ).bind(n, user.id, cls, card.id, n).run();
+  ).bind(n, user.id, SET, card.id, n).run();
 
   const w = await adjust(env, user.id, take, `Sold ${n}× ${card.name}`, cfg);
 
@@ -681,10 +675,10 @@ const slug = s => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-')
   .replace(/^-+|-+$/g, '').slice(0, 48) || `x${Date.now().toString(36)}`;
 
 export async function adminConfig(env) {
-  const [cfg, jobs, packs] = await Promise.all([settings(env), listJobs(env), listPackTypes(env, null)]);
+  const [cfg, jobs, packs] = await Promise.all([settings(env), listJobs(env), listPackTypes(env)]);
   let cards = [];
   try {
-    const rows = await env.DB.prepare(`SELECT * FROM custom_card ORDER BY class, sort, name`).all();
+    const rows = await env.DB.prepare(`SELECT * FROM custom_card ORDER BY sort, name`).all();
     cards = rows.results || [];
   } catch { /* not migrated */ }
   let allPacks = packs;
@@ -714,7 +708,6 @@ export async function setSettings(env, patch) {
 
 export async function savePack(env, p) {
   const id = slug(p.id || p.name);
-  const cls = p.class === 'gt4' ? 'gt4' : 'gt3';
   const odds = p.odds && typeof p.odds === 'object' ? JSON.stringify(p.odds)
              : (typeof p.odds === 'string' && p.odds.trim()) ? p.odds : null;
   const pool = Array.isArray(p.pool) && p.pool.length ? JSON.stringify(p.pool.map(String)) : null;
@@ -732,7 +725,7 @@ export async function savePack(env, p) {
     String(p.blurb || '').slice(0, 200),
     Math.max(0, Math.round(num(p.price, 0))),
     Math.max(1, Math.min(20, Math.round(num(p.size, 5)))),
-    cls, odds, RARITIES.includes(p.guarantee) ? p.guarantee : null, pool,
+    SET, odds, RARITIES.includes(p.guarantee) ? p.guarantee : null, pool,
     p.enabled === false || p.enabled === 0 ? 0 : 1,
     Math.round(num(p.sort, 0)), Date.now()
   ).run();
@@ -748,7 +741,6 @@ export async function saveCustomCard(env, c) {
   // driver id inside card_collection.
   let id = String(c.id || '');
   if (!id.startsWith('c:')) id = 'c:' + slug(id || c.name);
-  const cls = c.class === 'gt4' ? 'gt4' : 'gt3';
   await env.DB.prepare(
     `INSERT INTO custom_card (id, class, name, subtitle, rarity, image, blurb, enabled, sort, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -757,7 +749,7 @@ export async function saveCustomCard(env, c) {
        rarity = excluded.rarity, image = excluded.image, blurb = excluded.blurb,
        enabled = excluded.enabled, sort = excluded.sort`
   ).bind(
-    id, cls, String(c.name || 'Untitled').slice(0, 60), String(c.subtitle || '').slice(0, 80),
+    id, SET, String(c.name || 'Untitled').slice(0, 60), String(c.subtitle || '').slice(0, 80),
     RARITIES.includes(c.rarity) ? c.rarity : 'rare',
     String(c.image || '').slice(0, 500), String(c.blurb || '').slice(0, 300),
     c.enabled === false || c.enabled === 0 ? 0 : 1,

@@ -1645,17 +1645,42 @@ async function loadCustomCards() {
     if (document.getElementById('page-cards')?.classList.contains('active')) renderCards();
 }
 
-/** Custom cards for this class, shaped like the driver entries above. */
+/** Custom cards, shaped like the driver entries above. */
 function customFor() {
-    return (customCards || [])
-        .filter(c => (c.class === 'gt4' ? 'gt4' : 'gt3') === currentClass)
-        .map((c, i) => ({
-            drv: { name: c.name, team: c.subtitle || '', number: '',
-                   cardImage: c.image || '', photo: '', nationality: '' },
-            rarity: TIER_ORDER.includes(c.rarity) ? c.rarity : 'rare',
-            position: 0, points: 0, wins: 0, podiums: 0, starts: 0,
-            custom: true, blurb: c.blurb || '',
-        }));
+    return (customCards || []).map(c => ({
+        drv: { name: c.name, team: c.subtitle || '', number: '',
+               cardImage: c.image || '', photo: '', nationality: '' },
+        rarity: TIER_ORDER.includes(c.rarity) ? c.rarity : 'rare',
+        position: 0, points: 0, wins: 0, podiums: 0, starts: 0,
+        custom: true, blurb: c.blurb || '',
+    }));
+}
+
+/**
+ * One set. Rarity is still earned inside a class — the GT4 leader is the
+ * best in GT4, and ranking them against GT3 points would be comparing two
+ * championships — so each class is rated on its own and then poured into
+ * one list. This mirrors combinedSet() in worker/src/cards.js; the two must
+ * agree or the page shows a different set from the one in the packs.
+ */
+function wholeSet() {
+    const out = [];
+    const seen = new Map();
+    ['gt3', 'gt4'].forEach(k => {
+        const cd = rawData && rawData[k];
+        if (!cd) return;
+        cardSetFor(cd).forEach(c => {
+            const id = driverKey(c.drv);
+            const prev = seen.get(id);
+            const card = { ...c, cls: k };
+            if (!prev) { seen.set(id, card); out.push(card); return; }
+            // Entered in both classes: one card, at the better rarity.
+            if (TIER_ORDER.indexOf(card.rarity) > TIER_ORDER.indexOf(prev.rarity)) {
+                Object.assign(prev, card);
+            }
+        });
+    });
+    return out.concat(customFor());
 }
 
 function renderCards() {
@@ -1664,9 +1689,9 @@ function renderCards() {
     if (!el) return;
 
     if (customCards === null) loadCustomCards();
-    const set = cardSetFor(d).concat(customFor());
+    const set = wholeSet();
     if (!set.length) {
-        el.innerHTML = '<p style="color:var(--muted);padding:2rem">No drivers in this class yet.</p>';
+        el.innerHTML = '<p style="color:var(--muted);padding:2rem">No drivers yet.</p>';
         return;
     }
 
@@ -1677,10 +1702,9 @@ function renderCards() {
         `<span class="tc-chip" style="--tc:${CARD_TIERS[t].colour}">
            <i></i>${CARD_TIERS[t].label} <b>${counts[t]}</b></span>`).join('') + `</div>`;
 
-    const shop = (econPublic && (econPublic.packs || [])
-        .filter(p => (p.class === 'gt4' ? 'gt4' : 'gt3') === currentClass)) || [];
+    const shop = (econPublic && econPublic.packs) || [];
     const how = `<div class="tc-how">
-        <strong>${set.length} cards in the ${esc(currentClass)} set.</strong>
+        <strong>${set.length} cards in the set — GT3 and GT4 together.</strong>
         Collect them in Discord — <code>/cards pack</code> for a free pack every 8 hours,
         <code>/shop</code> to buy more, <code>/cards collection</code> to see yours.
         Rarity comes from the season: the championship leader is Legendary, the

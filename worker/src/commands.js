@@ -92,19 +92,16 @@ commands.push(
 // Reuses the class picker declared at the top of this file.
 commands.push({
   name: 'cards',
-  description: 'FGE driver trading cards — open packs and build a collection',
+  description: 'FGE trading cards — one set, GT3 and GT4 together',
   options: [
-    { name: 'pack', description: 'Open a pack of 5 driver cards (one free pack every 8 hours)',
-      type: 1, options: [CLASS_OPTION] },
+    { name: 'pack', description: 'Open a free pack of cards (one every 8 hours)', type: 1 },
     { name: 'collection', description: 'See a collection', type: 1, options: [
       { name: 'user', description: 'Whose collection (defaults to yours)', type: 6, required: false },
-      CLASS_OPTION,
     ] },
-    { name: 'card', description: 'Look at one driver’s card', type: 1, options: [
-      { name: 'name', description: 'Driver name', type: 3, required: true },
-      CLASS_OPTION,
+    { name: 'card', description: 'Look at one card', type: 1, options: [
+      { name: 'name', description: 'Driver or card name', type: 3, required: true },
     ] },
-    { name: 'collectors', description: 'Who has collected the most', type: 1, options: [CLASS_OPTION] },
+    { name: 'collectors', description: 'Who has collected the most', type: 1 },
   ],
 });
 
@@ -134,11 +131,7 @@ commands.push(
     ],
   },
   { name: 'rich', description: 'Who has the most credits' },
-  {
-    name: 'shop',
-    description: 'Packs you can buy',
-    options: [CLASS_OPTION],
-  },
+  { name: 'shop', description: 'Packs you can buy' },
   {
     name: 'buy',
     description: 'Buy and open a pack',
@@ -152,7 +145,6 @@ commands.push(
         type: 3, required: false },
       { name: 'amount', description: 'How many copies (defaults to all the spares)',
         type: 4, required: false },
-      CLASS_OPTION,
     ],
   },
 );

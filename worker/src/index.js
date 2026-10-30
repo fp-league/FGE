@@ -600,15 +600,14 @@ async function handleCards(interaction, record, env) {
 
   const opts = (sub && sub.options) || [];
   const pick = n => (opts.find(o => o.name === n) || {}).value;
-  const cls = String(pick('class') || 'gt3').toLowerCase() === 'gt4' ? 'gt4' : 'gt3';
 
   let embed;
   try {
     switch (view) {
-      case 'pack':       embed = await openPack(env, interaction, cls, record); break;
-      case 'collection': embed = await showCollection(env, interaction, cls, record, pick('user')); break;
-      case 'card':       embed = await showCard(env, interaction, cls, record, pick('name')); break;
-      case 'collectors': embed = await showCollectors(env, cls, record); break;
+      case 'pack':       embed = await openPack(env, interaction, record); break;
+      case 'collection': embed = await showCollection(env, interaction, record, pick('user')); break;
+      case 'card':       embed = await showCard(env, interaction, record, pick('name')); break;
+      case 'collectors': embed = await showCollectors(env, record); break;
     }
   } catch (err) {
     // Almost always the tables not existing yet; say so rather than failing silently.
@@ -633,7 +632,6 @@ async function handleEconomy(interaction, record, env) {
 
   const opts = data.options || [];
   const pick = n => (opts.find(o => o.name === n) || {}).value;
-  const cls = String(pick('class') || 'gt3').toLowerCase() === 'gt4' ? 'gt4' : 'gt3';
 
   let embed;
   try {
@@ -643,9 +641,9 @@ async function handleEconomy(interaction, record, env) {
       case 'balance': embed = await showBalance(env, interaction, pick('user')); break;
       case 'pay':     embed = await payUser(env, interaction, pick('user'), pick('amount')); break;
       case 'rich':    embed = await showRich(env); break;
-      case 'shop':    embed = await showShop(env, interaction, cls); break;
+      case 'shop':    embed = await showShop(env, interaction); break;
       case 'buy':     embed = await buyPack(env, interaction, pick('pack'), record); break;
-      case 'sell':    embed = await sellCard(env, interaction, cls, pick('name'),
+      case 'sell':    embed = await sellCard(env, interaction, pick('name'),
                                              pick('amount'), record); break;
       default: return null;
     }
@@ -732,12 +730,12 @@ async function getEcon(request, env) {
 async function getEconPublic(request, env) {
   try {
     const rows = await env.DB.prepare(
-      `SELECT id, class, name, subtitle, rarity, image, blurb
-         FROM custom_card WHERE enabled = 1 ORDER BY class, sort, name`).all();
+      `SELECT id, name, subtitle, rarity, image, blurb
+         FROM custom_card WHERE enabled = 1 ORDER BY sort, name`).all();
     let packs = [];
     try {
       const p = await env.DB.prepare(
-        `SELECT id, name, emoji, blurb, price, size, class, guarantee
+        `SELECT id, name, emoji, blurb, price, size, guarantee
            FROM pack_type WHERE enabled = 1 ORDER BY sort, price`).all();
       packs = p.results || [];
     } catch { /* optional */ }

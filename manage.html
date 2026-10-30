@@ -755,7 +755,8 @@ textarea { resize:vertical; min-height:80px; }
         <div class="form-card">
           <h3>THE SET</h3>
           <p class="bk-note">Rarity comes from the season, so it moves on its own as the
-             championship does. Give a driver card art on their driver page.</p>
+             championship does. Give a driver card art on their driver page. This table shows
+             the class you are currently editing; packs draw from GT3 and GT4 together.</p>
           <div id="cardsSetTable"></div>
         </div>
       </div>
@@ -797,7 +798,8 @@ textarea { resize:vertical; min-height:80px; }
           <h3>PACKS</h3>
           <p class="bk-note">Each pack is a price, a size and its own odds. Leave the odds blank
              to use the house ones. A guarantee means the last card is at least that rarity if
-             nothing better turned up on its own.</p>
+             nothing better turned up on its own. There is one set — GT3, GT4 and custom cards
+             all come out of the same packs.</p>
           <div class="form-grid">
             <div class="form-group">
               <label class="fg-label">NAME</label>
@@ -814,10 +816,6 @@ textarea { resize:vertical; min-height:80px; }
             <div class="form-group">
               <label class="fg-label">CARDS IN IT</label>
               <input id="pkSize" type="number" min="1" max="20" value="5">
-            </div>
-            <div class="form-group">
-              <label class="fg-label">CLASS</label>
-              <select id="pkClass"><option value="gt3">GT3</option><option value="gt4">GT4</option></select>
             </div>
             <div class="form-group">
               <label class="fg-label">GUARANTEE</label>
@@ -855,8 +853,9 @@ textarea { resize:vertical; min-height:80px; }
         <div class="form-card">
           <h3>CUSTOM CARDS</h3>
           <p class="bk-note">Cards that aren't drivers — skins, liveries, one-offs, whatever you
-             like. These sit in the same set and come out of the same packs. Rarity is yours to
-             pick, unlike driver cards where it's earned from the championship.</p>
+             like. These sit in the same set as every driver and come out of the same packs.
+             Rarity is yours to pick, unlike driver cards where it's earned from the
+             championship.</p>
           <div class="form-grid">
             <div class="form-group">
               <label class="fg-label">NAME</label>
@@ -865,10 +864,6 @@ textarea { resize:vertical; min-height:80px; }
             <div class="form-group">
               <label class="fg-label">SUBTITLE</label>
               <input id="ccSubtitle" placeholder="Wave 2 · B Tier">
-            </div>
-            <div class="form-group">
-              <label class="fg-label">CLASS</label>
-              <select id="ccClass"><option value="gt3">GT3</option><option value="gt4">GT4</option></select>
             </div>
             <div class="form-group">
               <label class="fg-label">RARITY</label>
@@ -2630,7 +2625,6 @@ function ecNewPack() {
     document.getElementById('pkEmoji').value = '🃏';
     document.getElementById('pkPrice').value = 400;
     document.getElementById('pkSize').value = 5;
-    document.getElementById('pkClass').value = 'gt3';
     document.getElementById('pkGuarantee').value = '';
     RORDER.forEach(r => { const e = document.getElementById('pkOdds' + r[0].toUpperCase() + r.slice(1)); if (e) e.value = ''; });
     document.getElementById('pkStatus').textContent = '';
@@ -2646,7 +2640,6 @@ function ecEditPack(id) {
     document.getElementById('pkBlurb').value = p.blurb || '';
     document.getElementById('pkPrice').value = p.price;
     document.getElementById('pkSize').value = p.size;
-    document.getElementById('pkClass').value = p.class === 'gt4' ? 'gt4' : 'gt3';
     document.getElementById('pkGuarantee').value = p.guarantee || '';
     let odds = {};
     try { odds = p.odds ? JSON.parse(p.odds) : {}; } catch (e) {}
@@ -2670,7 +2663,6 @@ async function ecSavePack() {
         blurb: document.getElementById('pkBlurb').value.trim(),
         price: parseInt(document.getElementById('pkPrice').value, 10) || 0,
         size:  parseInt(document.getElementById('pkSize').value, 10) || 5,
-        class: document.getElementById('pkClass').value,
         guarantee: document.getElementById('pkGuarantee').value || null,
         odds: packOddsFromForm(),
     };
@@ -2703,7 +2695,7 @@ function renderEconPacks() {
         return `<div class="ec-row${p.enabled ? '' : ' ec-off'}">
             <span style="flex:0 0 1.4rem">${esc(p.emoji || '🃏')}</span>
             <span class="ec-grow">${esc(p.name)}
-              <span class="ec-mono"> · ${String(p.class).toUpperCase()} · ${p.size} cards${esc(g)}${p.enabled ? '' : ' · OFF'}</span></span>
+              <span class="ec-mono"> · ${p.size} cards${esc(g)}${p.enabled ? '' : ' · OFF'}</span></span>
             <span class="ec-mono" style="flex:0 0 80px;text-align:right">${Number(p.price).toLocaleString('en-GB')}</span>
             <div class="td-actions">
               <button class="btn btn-ghost btn-sm" onclick="ecEditPack('${esc(p.id)}')">EDIT</button>
@@ -2720,7 +2712,6 @@ function ecNewCard() {
     ['ccName','ccSubtitle','ccBlurb','ccImage'].forEach(id => {
         const e = document.getElementById(id); if (e) e.value = '';
     });
-    document.getElementById('ccClass').value = 'gt3';
     document.getElementById('ccRarity').value = 'rare';
     syncPreview('ccImage');
     const sz = document.getElementById('ccImageSize'); if (sz) sz.textContent = '';
@@ -2733,7 +2724,6 @@ function ecEditCard(id) {
     editingCard = c.id;
     document.getElementById('ccName').value = c.name || '';
     document.getElementById('ccSubtitle').value = c.subtitle || '';
-    document.getElementById('ccClass').value = c.class === 'gt4' ? 'gt4' : 'gt3';
     document.getElementById('ccRarity').value = c.rarity || 'rare';
     document.getElementById('ccImage').value = c.image || '';
     document.getElementById('ccBlurb').value = c.blurb || '';
@@ -2750,7 +2740,6 @@ async function ecSaveCard() {
         id: editingCard || name,
         name,
         subtitle: document.getElementById('ccSubtitle').value.trim(),
-        class: document.getElementById('ccClass').value,
         rarity: document.getElementById('ccRarity').value,
         image: document.getElementById('ccImage').value.trim(),
         blurb: document.getElementById('ccBlurb').value.trim(),
@@ -2790,7 +2779,7 @@ function renderEconCards() {
       }</div>` + list.map(c => `<div class="ec-row${c.enabled ? '' : ' ec-off'}">
           <span class="rc-dot" style="background:${RTIER[c.rarity] ? RTIER[c.rarity][1] : '#888'}"></span>
           <span class="ec-grow">${esc(c.name)}
-            <span class="ec-mono"> · ${String(c.class).toUpperCase()}${c.subtitle ? ' · ' + esc(c.subtitle) : ''}</span></span>
+            <span class="ec-mono">${c.subtitle ? ' · ' + esc(c.subtitle) : ''}</span></span>
           ${c.image ? `<img src="${esc(c.image)}" class="drv-thumb" alt="" loading="lazy">`
                     : '<span class="drv-thumb"></span>'}
           <div class="td-actions">
