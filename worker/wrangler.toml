@@ -11,12 +11,14 @@ BIN_ID = "6ada83fdac6210605a4a3a74"
 # Set it to a custom domain or r2.dev URL to serve straight from R2.
 IMAGE_BASE_URL = ""
 
-# D1 database. database_id is filled in by:
-#   npx wrangler d1 create fge
+# D1 database. These ids are not secrets - they only identify the resource,
+# and are useless without an API token. Cloudflare's own docs commit them.
+# They were left as placeholders, which meant a deploy from CI could not find
+# the database even with a valid token.
 [[d1_databases]]
 binding = "DB"
 database_name = "fge"
-database_id = "PASTE_DATABASE_ID_HERE"
+database_id = "b355a2f6-42c4-4af2-a20d-7e35794466ce"
 
 # Secrets are NOT set here. Set them once, from the terminal:
 #   npx wrangler secret put BIN_READ_KEY   <- JSONBin read-only key
@@ -28,7 +30,7 @@ database_id = "PASTE_DATABASE_ID_HERE"
 # then paste the id it prints below.
 [[kv_namespaces]]
 binding = "IMAGES_KV"
-id = "PASTE_KV_NAMESPACE_ID_HERE"
+id = "fb32572a6cd54157a4109a48c4dd3060"
 
 # Optional: R2 instead of KV, if you ever enable R2 on the account.
 # Uncomment, create the bucket, redeploy - the Worker prefers R2 when bound.
