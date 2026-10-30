@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://fp-league.github.io/FGE/sitemap.xml
