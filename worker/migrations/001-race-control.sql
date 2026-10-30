@@ -26,3 +26,5 @@ CREATE TABLE race_control (
 );
 
 INSERT INTO race_control (id, mode, status, updated_at) VALUES ('live', 'race', 'idle', 0);
+
+-- Applied via GitHub Actions on first run of the Migrate workflow.
