@@ -207,6 +207,10 @@ textarea { resize:vertical; min-height:80px; }
 .rc-mini.out { font-family:var(--fu); font-size:0.6rem; letter-spacing:0.06em; }
 
 .rc-mini.del { color: #ef9a9a; font-size: 1rem; line-height: 1; }
+
+.rc-btn kbd { display:inline-block; margin-left:0.5rem; padding:0.05rem 0.34rem;
+  font:600 0.66rem/1.5 var(--font-ui,inherit); border-radius:3px;
+  background:rgba(0,0,0,0.35); border:1px solid rgba(255,255,255,0.22); color:#fff; }
 .rc-mini.del:hover { background: rgba(198,40,40,0.25); border-color: #c62828; }
 .rc-delta { font-family: var(--font-ui,inherit); font-size: 0.74rem; color: #9fb8d0;
             min-width: 62px; text-align: right; font-variant-numeric: tabular-nums; }
@@ -609,13 +613,16 @@ textarea { resize:vertical; min-height:80px; }
         <div class="form-card">
           <h3>FLAGS</h3>
           <div class="rc-flags">
-            <button class="rc-btn formation" data-race-only onclick="rcStatus('formation')">FORMATION</button>
-            <button class="rc-btn green"     onclick="rcStatus('green')"><span id="rcGreenLbl">GREEN</span></button>
-            <button class="rc-btn sc"        data-race-only onclick="rcStatus('sc')">SAFETY CAR</button>
-            <button class="rc-btn vsc"       data-race-only onclick="rcStatus('vsc')">VSC</button>
-            <button class="rc-btn red"       onclick="rcStatus('red')">RED FLAG</button>
-            <button class="rc-btn chequered" onclick="rcStatus('chequered')">CHEQUERED</button>
+            <button class="rc-btn formation" data-race-only onclick="rcStatus('formation')">FORMATION<kbd>F</kbd></button>
+            <button class="rc-btn green"     onclick="rcStatus('green')"><span id="rcGreenLbl">GREEN</span><kbd>G</kbd></button>
+            <button class="rc-btn sc"        data-race-only onclick="rcStatus('sc')">SAFETY CAR<kbd>S</kbd></button>
+            <button class="rc-btn vsc"       data-race-only onclick="rcStatus('vsc')">VSC<kbd>V</kbd></button>
+            <button class="rc-btn red"       onclick="rcStatus('red')">RED FLAG<kbd>R</kbd></button>
+            <button class="rc-btn chequered" onclick="rcStatus('chequered')">CHEQUERED<kbd>C</kbd></button>
           </div>
+          <p class="bk-note" style="margin-top:0.6rem">Press the key on its own to throw a flag —
+             no need to find the button mid-incident. Shortcuts are off while you are typing
+             in a box, and RED asks first.</p>
           <div class="form-group" style="margin-top:1rem">
             <label class="fg-label">RACE CONTROL MESSAGE</label>
             <div class="rc-msg-row">
@@ -638,6 +645,8 @@ textarea { resize:vertical; min-height:80px; }
           <div class="form-actions">
             <button class="btn btn-ghost btn-sm" id="rcSortLap"
                     onclick="rcSortByLap()" style="display:none">SORT BY LAP</button>
+            <button class="btn btn-white btn-sm" id="rcGridFromQuali"
+                    onclick="rcGridFromQuali()" style="display:none">USE THIS AS THE RACE GRID</button>
             <button class="btn btn-ghost btn-sm" onclick="rcResetOrder()">RESET TO ENTRY LIST</button>
             <span class="img-size" id="rcSaveState"></span>
           </div>
@@ -1667,6 +1676,8 @@ function rcApplyMode() {
     if (g) g.textContent = quali ? 'TRACK OPEN' : 'GREEN';
     const sortBtn = document.getElementById('rcSortLap');
     if (sortBtn) sortBtn.style.display = quali ? '' : 'none';
+    const gridBtn = document.getElementById('rcGridFromQuali');
+    if (gridBtn) gridBtn.style.display = quali ? '' : 'none';
 }
 
 function rcLoadSession() {
@@ -1776,6 +1787,69 @@ function rcSortByLap() {
     rcQueuePush();
     toast('Sorted by lap time', 'ok');
 }
+
+/**
+ * Carries the qualifying result over as the starting grid, so nobody types
+ * the same order out twice. Sorts by lap first, then switches to race mode
+ * with the laps cleared and everyone un-retired.
+ */
+function rcGridFromQuali() {
+    const list = rcState.running || [];
+    if (!list.length) { toast('No session loaded', 'err'); return; }
+    if (!confirm('Set the race grid from this qualifying order?\n\n' +
+                 'Lap times are cleared and the session switches to RACE.')) return;
+
+    rcSortByLapSilent();
+    rcState.running = rcState.running.map(r => ({ ...r, lap: '', gap: '', out: false }));
+    rcState.mode = 'race';
+
+    const sel = document.getElementById('rcMode');
+    if (sel) sel.value = 'race';
+
+    rcPush({ mode: 'race', status: 'formation', message: '', running: rcState.running });
+    rcApplyMode();
+    rcRenderOrder();
+    toast('Grid set from qualifying — ' + rcState.running.length + ' cars', 'ok');
+}
+
+/** The sort, without the toast or the push — used by rcGridFromQuali. */
+function rcSortByLapSilent() {
+    const rank = r => r.out ? 3 : (lapMs(r.lap) == null ? 2 : 1);
+    rcState.running = (rcState.running || []).slice().sort((a, b) => {
+        const ra = rank(a), rb = rank(b);
+        if (ra !== rb) return ra - rb;
+        if (ra !== 1) return 0;
+        return lapMs(a.lap) - lapMs(b.lap);
+    });
+}
+
+// ── Keyboard shortcuts for the flags ─────────────────────────
+// Only while the RACE CONTROL tab is open, never while typing in a field,
+// and a red flag asks first because it stops the race.
+const RC_KEYS = { f:'formation', g:'green', s:'sc', v:'vsc', r:'red', c:'chequered' };
+
+function rcKeyHandler(e) {
+    if (currentSec !== 'control') return;
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    const t = e.target;
+    const tag = (t && t.tagName || '').toLowerCase();
+    if (tag === 'input' || tag === 'textarea' || tag === 'select' || (t && t.isContentEditable)) return;
+
+    const status = RC_KEYS[e.key.toLowerCase()];
+    if (!status) return;
+    // Quali has no formation lap and no safety car.
+    if (rcMode() === 'quali' && ['formation','sc','vsc'].includes(status)) return;
+    if (!rcState.status || rcState.status === 'idle') {
+        toast('Load a session first', 'err');
+        return;
+    }
+    e.preventDefault();
+    if (status === 'red' && !confirm('Throw a RED FLAG?')) return;
+    rcStatus(status);
+    toast(status.toUpperCase().replace('SC','SAFETY CAR'), 'ok');
+}
+
+document.addEventListener('keydown', rcKeyHandler);
 
 function teamColour(name) {
     const t = (d().teams || []).find(x => x.name === name);
