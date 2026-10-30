@@ -1,0 +1,52 @@
+# Runs a database migration whenever one is added or changed.
+#
+# Separate from the deploy workflow on purpose: a migration changes the
+# database, so it only fires when a file under worker/migrations/ actually
+# changed in the push, never on an ordinary code change.
+#
+# Needs the same CLOUDFLARE_API_TOKEN secret as the deploy workflow.
+
+name: Migrate
+
+on:
+  push:
+    branches: [main]
+    paths: ['worker/migrations/**']
+  workflow_dispatch:
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Prints the account this token can see. If the deploy ever fails with
+      # "No account id found", the id is in this step's log.
+      - name: Who am I
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          workingDirectory: worker
+          command: whoami
+
+      - name: Create the race_control table
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: worker
+          command: d1 execute fge --remote --yes --file=./migrations/001-race-control.sql
+
+      - name: Deploy the Worker on top
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: worker
+          command: deploy
+
+      - name: Check it answers
+        run: |
+          sleep 5
+          curl -sS https://fge-api.benjaminjameswestley.workers.dev/api/live
+          echo

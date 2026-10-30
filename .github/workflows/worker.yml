@@ -46,6 +46,13 @@ jobs:
           workingDirectory: worker
           command: d1 execute fge --remote --file=./migrations/001-race-control.sql
 
+      - name: Who am I
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          workingDirectory: worker
+          command: whoami
+
       - name: Deploy
         uses: cloudflare/wrangler-action@v4
         with:
