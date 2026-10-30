@@ -205,6 +205,29 @@ Mode, then right-click your server → *Copy Server ID*.
 open the generated URL and add it to your server. The bot needs no
 permissions beyond posting, since it only replies to commands.
 
+### Posting results automatically
+
+When you save a result in the admin panel, the Worker can post the
+classification straight to a Discord channel.
+
+Create a webhook in Discord (channel settings → Integrations → Webhooks →
+New Webhook → Copy Webhook URL), then:
+
+```bash
+npx wrangler secret put DISCORD_WEBHOOK_URL
+npx wrangler deploy
+```
+
+(Or add it as a secret in the Cloudflare dashboard if wrangler won't log in.)
+
+The admin panel sends only the class and round number. The Worker reads the
+result out of the league record itself and builds the embed with the same
+code `/results` uses, so the bot can never post a classification that isn't
+actually saved, and the post can never disagree with the site.
+
+There's a tickbox next to SAVE RESULTS if you want to save without posting.
+`/api/health` reports `announce: true` once the webhook is set.
+
 ### Checking it works
 
 `/api/health` reports `discord: true` once the public key is set. In

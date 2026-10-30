@@ -1289,6 +1289,10 @@ function loadResultsForm() {
         <button class="add-row-btn" onclick="addResultRow()">+ Add Row</button>
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:0.9rem;margin-top:1.2rem;align-items:end">
           <div class="form-group"><label class="fg-label">FASTEST LAP</label><select id="flDriver">${flOpts}</select></div>
+          <label class="rc-chk" style="align-self:end;padding:0.55rem 0.4rem">
+            <input type="checkbox" id="announceAfterSave" checked>
+            <span>Post to Discord when saved</span>
+          </label>
           <button class="btn btn-white" onclick="saveResults(${idx})" style="align-self:end">SAVE RESULTS</button>
         </div>
       </div>`;
@@ -1373,7 +1377,37 @@ function saveResults(idx) {
     adminData[c].races[idx].results = results;
     if (fl) adminData[c].races[idx].fastestLap = fl;
     else delete adminData[c].races[idx].fastestLap;
-    saveData('Results saved');
+
+    const race = adminData[c].races[idx];
+    saveData('Results saved').then(okSave => {
+        if (okSave === false) return;
+        if (!results.length) return;
+        if (!document.getElementById('announceAfterSave')?.checked) return;
+        announceResult(race.round ?? idx + 1, race.name || '');
+    });
+}
+
+/**
+ * Asks the Worker to post this classification to Discord. Only the round is
+ * sent — the Worker reads the result from the league record itself, so it
+ * can never announce something that wasn't actually saved.
+ */
+async function announceResult(round, name) {
+    if (!API_BASE) { toast('No API configured — not posted to Discord', 'err'); return; }
+    try {
+        const res = await rcApi('/api/announce', {
+            method: 'POST',
+            body: JSON.stringify({ class: adminClass.toLowerCase(), round }),
+        });
+        const body = await res.json().catch(() => ({}));
+        if (res.ok && body.ok) {
+            toast('Posted to Discord — ' + (body.posted || name), 'ok');
+        } else {
+            toast('Saved, but Discord post failed: ' + (body.error || res.status), 'err');
+        }
+    } catch (e) {
+        toast('Saved, but could not reach the Worker to post to Discord', 'err');
+    }
 }
 
 // ── DOTD ──────────────────────────────────────────────────

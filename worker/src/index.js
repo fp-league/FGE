@@ -14,7 +14,7 @@
  *    never stored
  */
 
-import { verifyRequest, handleCommand } from './discord.js';
+import { verifyRequest, handleCommand, buildResults } from './discord.js';
 
 const MAX_NAME = 24;
 const MAX_IDENT = 64;
@@ -380,6 +380,57 @@ async function getImage(request, env, pathname) {
 
 const LIVE_STATUSES = ['idle','formation','green','sc','vsc','red','chequered','finished'];
 
+/**
+ * POST /api/announce — admin only. Posts a race classification to Discord.
+ *
+ * The admin panel sends only {class, round}; the Worker reads the result out
+ * of the league record itself, so nothing can post a classification that
+ * isn't actually saved, and the embed is built by the same code the
+ * /results command uses. The site and the server can't disagree.
+ */
+async function postAnnounce(request, env) {
+  if (env.ADMIN_TOKEN && request.headers.get('X-Admin-Token') !== env.ADMIN_TOKEN) {
+    return bad('not authorised', request, env, 401);
+  }
+  if (!env.DISCORD_WEBHOOK_URL) {
+    return bad('no Discord webhook configured on the Worker', request, env, 503);
+  }
+
+  let body;
+  try { body = await request.json(); } catch { return bad('invalid JSON body', request, env); }
+  const cls = normClass(body.class);
+  const round = body.round;
+
+  // The admin just wrote to the bin; the cached copy is a few seconds stale.
+  leagueCache = { at: 0, data: null };
+
+  let data;
+  try { data = await league(env); }
+  catch { return bad('could not reach league data, try again', request, env, 503); }
+
+  const cd = data[cls];
+  if (!cd) return bad('unknown class', request, env, 404);
+
+  const embed = buildResults(cd, cls, round);
+  if (!embed || !embed.description) {
+    return bad('no result to post for that round', request, env, 404);
+  }
+
+  const res = await fetch(env.DISCORD_WEBHOOK_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      username: 'FGE',
+      embeds: [{ ...embed, timestamp: new Date().toISOString() }],
+    }),
+  });
+
+  if (!res.ok) {
+    return bad(`Discord rejected the post (${res.status})`, request, env, 502);
+  }
+  return json({ ok: true, posted: embed.title }, null, request, env);
+}
+
 /** GET /api/live — public. The overlay and the site both read this. */
 async function getLive(request, env) {
   let row;
@@ -614,6 +665,10 @@ export default {
           { headers: { 'Content-Type': 'application/json' } });
       }
 
+      if (pathname === '/api/announce' && request.method === 'POST') {
+        return await postAnnounce(request, env);
+      }
+
       if (pathname === '/api/live') {
         if (request.method === 'GET')  return await getLive(request, env);
         if (request.method === 'POST') return await postLive(request, env);
@@ -639,6 +694,7 @@ export default {
           images: imageStore(env) || 'none',
           discord: Boolean(env.DISCORD_PUBLIC_KEY),
           members: Boolean(env.DISCORD_TOKEN && env.DISCORD_GUILD_ID),
+          announce: Boolean(env.DISCORD_WEBHOOK_URL),
         }, null, request, env);
       }
       return bad('not found', request, env, 404);
