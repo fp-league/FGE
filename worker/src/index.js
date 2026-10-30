@@ -17,6 +17,12 @@
 import { verifyRequest, handleCommand, buildResults } from './discord.js';
 import { openPack, showCollection, showCard, showCollectors, grantPacks, CARD_VIEWS } from './cards.js';
 import { COMMANDS } from './commands.js';
+import {
+  doWork, doDaily, showBalance, showRich, payUser, showShop, buyPack, sellCard,
+  payRace, adminConfig, setSettings, savePack, deletePack, saveCustomCard,
+  deleteCustomCard, saveJob, deleteJob, allWallets, adjust, wallet, settings,
+  ECON_COMMANDS,
+} from './economy.js';
 
 const MAX_NAME = 24;
 const MAX_IDENT = 64;
@@ -617,6 +623,133 @@ async function handleCards(interaction, record, env) {
 }
 
 /**
+ * Economy commands. Same shape as handleCards: returns null when the
+ * interaction isn't one of ours so the caller falls through.
+ */
+async function handleEconomy(interaction, record, env) {
+  const data = interaction.data || {};
+  const name = data.name || '';
+  if (!ECON_COMMANDS.includes(name)) return null;
+
+  const opts = data.options || [];
+  const pick = n => (opts.find(o => o.name === n) || {}).value;
+  const cls = String(pick('class') || 'gt3').toLowerCase() === 'gt4' ? 'gt4' : 'gt3';
+
+  let embed;
+  try {
+    switch (name) {
+      case 'work':    embed = await doWork(env, interaction, pick('job')); break;
+      case 'daily':   embed = await doDaily(env, interaction); break;
+      case 'balance': embed = await showBalance(env, interaction, pick('user')); break;
+      case 'pay':     embed = await payUser(env, interaction, pick('user'), pick('amount')); break;
+      case 'rich':    embed = await showRich(env); break;
+      case 'shop':    embed = await showShop(env, interaction, cls); break;
+      case 'buy':     embed = await buyPack(env, interaction, pick('pack'), record); break;
+      case 'sell':    embed = await sellCard(env, interaction, cls, pick('name'),
+                                             pick('amount'), record); break;
+      default: return null;
+    }
+  } catch (err) {
+    // Almost always the economy migration not having run yet. Say which,
+    // rather than leaving a slash command that silently does nothing.
+    return { type: 4, data: { content:
+      'The economy is not set up on the server yet — the wallet tables are missing. ' +
+      'An admin needs to deploy the latest migrations.' } };
+  }
+  if (!embed) return null;
+
+  embed.footer = embed.footer || { text: 'FGE' };
+  embed.footer.text += ' · fp-league.github.io/FGE';
+  return { type: 4, data: { embeds: [embed], allowed_mentions: { parse: [] } } };
+}
+
+/**
+ * Admin economy endpoints. One route with an `action`, because the panel
+ * does a dozen small writes and a dozen near-identical routes would be
+ * worse than one switch.
+ */
+async function postEcon(request, env) {
+  if (env.ADMIN_TOKEN && request.headers.get('X-Admin-Token') !== env.ADMIN_TOKEN) {
+    return bad('not authorised', request, env, 401);
+  }
+  let body;
+  try { body = await request.json(); } catch { return bad('invalid JSON body', request, env); }
+  const action = String(body.action || '');
+
+  try {
+    switch (action) {
+      case 'credit': {
+        const userId = String(body.userId || '').trim();
+        if (!/^\d{5,25}$/.test(userId)) return bad('a Discord user id is required', request, env, 422);
+        const delta = Math.round(Number(body.amount) || 0);
+        if (!delta) return bad('amount must not be zero', request, env, 422);
+        const out = await adjust(env, userId, delta,
+          String(body.reason || (delta > 0 ? 'Admin gift' : 'Admin adjustment')));
+        if (!out) {
+          const w = await wallet(env, userId);
+          return bad(`they only have ${w.balance}`, request, env, 409);
+        }
+        return json({ ok: true, ...out }, null, request, env);
+      }
+      case 'setBalance': {
+        const userId = String(body.userId || '').trim();
+        if (!/^\d{5,25}$/.test(userId)) return bad('a Discord user id is required', request, env, 422);
+        const want = Math.max(0, Math.round(Number(body.amount) || 0));
+        const w = await wallet(env, userId);
+        const out = await adjust(env, userId, want - w.balance, 'Admin set balance');
+        return json({ ok: true, ...(out || w) }, null, request, env);
+      }
+      case 'savePack':   return json({ ok: true, id: await savePack(env, body.pack || {}) }, null, request, env);
+      case 'deletePack': await deletePack(env, body.id); return json({ ok: true }, null, request, env);
+      case 'saveCard':   return json({ ok: true, id: await saveCustomCard(env, body.card || {}) }, null, request, env);
+      case 'deleteCard': await deleteCustomCard(env, body.id); return json({ ok: true }, null, request, env);
+      case 'saveJob':    return json({ ok: true, id: await saveJob(env, body.job || {}) }, null, request, env);
+      case 'deleteJob':  await deleteJob(env, body.id); return json({ ok: true }, null, request, env);
+      case 'settings':   return json({ ok: true, settings: await setSettings(env, body.settings || {}) }, null, request, env);
+      default: return bad('unknown action', request, env, 422);
+    }
+  } catch (err) {
+    return json({ ok: false, error: 'economy tables are not set up on this Worker yet',
+      detail: String(err && err.message || err) }, { status: 503 }, request, env);
+  }
+}
+
+/** GET /api/econ — admin only. Everything the panel needs in one call. */
+async function getEcon(request, env) {
+  if (env.ADMIN_TOKEN && request.headers.get('X-Admin-Token') !== env.ADMIN_TOKEN) {
+    return bad('not authorised', request, env, 401);
+  }
+  try {
+    const cfg = await adminConfig(env);
+    return json({ ok: true, ...cfg, wallets: await allWallets(env) }, null, request, env);
+  } catch (err) {
+    return json({ ok: false, error: 'economy tables are not set up on this Worker yet' },
+      { status: 503 }, request, env);
+  }
+}
+
+/** GET /api/econ/public — no auth. The site reads custom cards from here. */
+async function getEconPublic(request, env) {
+  try {
+    const rows = await env.DB.prepare(
+      `SELECT id, class, name, subtitle, rarity, image, blurb
+         FROM custom_card WHERE enabled = 1 ORDER BY class, sort, name`).all();
+    let packs = [];
+    try {
+      const p = await env.DB.prepare(
+        `SELECT id, name, emoji, blurb, price, size, class, guarantee
+           FROM pack_type WHERE enabled = 1 ORDER BY sort, price`).all();
+      packs = p.results || [];
+    } catch { /* optional */ }
+    return json({ ok: true, cards: rows.results || [], packs,
+                  settings: await settings(env) }, null, request, env);
+  } catch {
+    // Not an error for the site — it just means there are no custom cards.
+    return json({ ok: true, cards: [], packs: [] }, null, request, env);
+  }
+}
+
+/**
  * POST /api/announce — admin only. Posts a race classification to Discord.
  *
  * The admin panel sends only {class, round}; the Worker reads the result out
@@ -683,7 +816,24 @@ async function postAnnounce(request, env) {
       detail: detail.slice(0, 300), via: viaBot ? 'bot' : 'webhook' },
       { status: 502 }, request, env);
   }
-  return json({ ok: true, posted: embed.title, via: viaBot ? 'bot' : 'webhook' },
+  // Prize money, once the post has actually gone out. Only drivers with a
+  // Discord account linked on their driver page can be paid; the rest is
+  // nobody's money. Paying is idempotent per round, so re-announcing a
+  // result doesn't pay the field twice.
+  let prize = null;
+  if (body.prize !== false) {
+    try {
+      // Mirror buildResults: no round given means the latest race that has
+      // a classification, not "no race".
+      const scored = (cd.races || []).filter(r => (r.results || []).length);
+      const race = round != null ? findRace(data, cls, round) : scored[scored.length - 1];
+      if (race) prize = await payRace(env, cls, race, cd.drivers || []);
+    } catch (err) {
+      prize = { ok: false, error: String(err && err.message || err) };
+    }
+  }
+
+  return json({ ok: true, posted: embed.title, via: viaBot ? 'bot' : 'webhook', prize },
     null, request, env);
 }
 
@@ -921,6 +1071,13 @@ export default {
             });
           }
 
+          const econReply = await handleEconomy(interaction, record, env);
+          if (econReply) {
+            return new Response(JSON.stringify(econReply), {
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+
           return new Response(JSON.stringify(handleCommand(interaction, record)), {
             headers: { 'Content-Type': 'application/json' },
           });
@@ -936,6 +1093,14 @@ export default {
 
       if (pathname === '/api/cards/grant' && request.method === 'POST') {
         return await postGrantPacks(request, env);
+      }
+
+      if (pathname === '/api/econ') {
+        if (request.method === 'GET')  return await getEcon(request, env);
+        if (request.method === 'POST') return await postEcon(request, env);
+      }
+      if (pathname === '/api/econ/public' && request.method === 'GET') {
+        return await getEconPublic(request, env);
       }
 
       if (pathname === '/api/discord/channels' && request.method === 'GET') {
@@ -980,6 +1145,10 @@ export default {
                       env.ANNOUNCE_CHANNEL_ID))),
           cards: await (async () => {
             try { await env.DB.prepare('SELECT 1 FROM card_collection LIMIT 1').first(); return true; }
+            catch { return false; }
+          })(),
+          economy: await (async () => {
+            try { await env.DB.prepare('SELECT 1 FROM wallet LIMIT 1').first(); return true; }
             catch { return false; }
           })(),
         }, null, request, env);

@@ -211,6 +211,22 @@ textarea { resize:vertical; min-height:80px; }
 .tc-chip-adm { display:inline-flex; align-items:center; gap:0.4rem; background:rgba(255,255,255,0.06);
   border:1px solid rgba(255,255,255,0.12); border-radius:999px; padding:0.24rem 0.65rem;
   font-size:0.64rem; letter-spacing:0.09em; color:#cfcfcf; }
+/* Economy: odds / sell-value rows. A dot of the rarity colour next to each
+   field, so the five numbers read as five tiers rather than five boxes. */
+.ec-odds { display:flex; flex-wrap:wrap; gap:0.6rem; }
+.ec-odds label { display:flex; align-items:center; gap:0.4rem; font-size:0.72rem;
+  letter-spacing:0.06em; text-transform:uppercase; color:var(--grey); }
+.ec-odds label i { width:9px; height:9px; border-radius:50%; background:var(--tc,#888);
+  display:inline-block; flex:0 0 auto; }
+.ec-odds input { width:82px; }
+.ec-row { display:flex; align-items:center; gap:0.7rem; padding:0.45rem 0.6rem;
+  border-bottom:1px solid rgba(255,255,255,0.07); }
+.ec-row:hover { background:rgba(255,255,255,0.03); }
+.ec-row .ec-grow { flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis;
+  white-space:nowrap; }
+.ec-row .ec-mono { font-variant-numeric:tabular-nums; color:var(--grey); font-size:0.8rem; }
+.ec-off { opacity:0.45; }
+
 .tc-chip-adm i { width:8px; height:8px; border-radius:50%; background:var(--tc); }
 .tc-chip-adm b { color:#fff; }
 
@@ -362,6 +378,7 @@ textarea { resize:vertical; min-height:80px; }
       <button class="snav-item"       onclick="showSec('dotd')"><span class="snav-icon">⭐</span>DOTD</button>
       <button class="snav-item"       onclick="showSec('control')"><span class="snav-icon">🏁</span>Race Control</button>
       <button class="snav-item"       onclick="showSec('cards')"><span class="snav-icon">🃏</span>Cards</button>
+      <button class="snav-item"       onclick="showSec('economy')"><span class="snav-icon">🪙</span>Economy</button>
       <button class="snav-item"       onclick="showSec('availability')"><span class="snav-icon">✅</span>Available</button>
       <button class="snav-item"       onclick="showSec('stewards')"><span class="snav-icon">⚖️</span>Stewards</button>
       <button class="snav-item"       onclick="showSec('season')"><span class="snav-icon">⚙️</span>Season</button>
@@ -743,6 +760,255 @@ textarea { resize:vertical; min-height:80px; }
         </div>
       </div>
 
+      <!-- ECONOMY -->
+      <div class="adm-section" id="sec-economy">
+        <div class="sec-head"><h2>ECONOMY</h2></div>
+
+        <div class="form-card">
+          <h3>WALLETS</h3>
+          <p class="bk-note">Credits are earned in Discord with <code>/work</code>, <code>/daily</code>,
+             race prize money and selling duplicates, and spent on packs in <code>/shop</code>.
+             Give or take here when you need to.</p>
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="fg-label">WHO</label>
+              <select id="ecMember" onchange="ecShowBalance()"><option value="">Load members first…</option></select>
+            </div>
+            <div class="form-group">
+              <label class="fg-label">HOW MUCH</label>
+              <input id="ecAmount" type="number" step="50" value="1000">
+            </div>
+            <div class="form-group">
+              <label class="fg-label">BALANCE</label>
+              <input id="ecBalance" value="—" readonly>
+            </div>
+          </div>
+          <div class="form-actions">
+            <button class="btn btn-ghost" onclick="ecLoadMembers()">LOAD MEMBERS</button>
+            <button class="btn btn-white" onclick="ecCredit(1)">GIVE</button>
+            <button class="btn btn-ghost" onclick="ecCredit(-1)">TAKE</button>
+            <button class="btn btn-ghost" onclick="ecSetBalance()">SET TO</button>
+            <span class="img-size" id="ecStatus"></span>
+          </div>
+          <div id="ecWallets" style="margin-top:1rem"></div>
+        </div>
+
+        <div class="form-card">
+          <h3>PACKS</h3>
+          <p class="bk-note">Each pack is a price, a size and its own odds. Leave the odds blank
+             to use the house ones. A guarantee means the last card is at least that rarity if
+             nothing better turned up on its own.</p>
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="fg-label">NAME</label>
+              <input id="pkName" placeholder="Podium Pack">
+            </div>
+            <div class="form-group">
+              <label class="fg-label">EMOJI</label>
+              <input id="pkEmoji" value="🃏" maxlength="4">
+            </div>
+            <div class="form-group">
+              <label class="fg-label">PRICE</label>
+              <input id="pkPrice" type="number" min="0" step="50" value="400">
+            </div>
+            <div class="form-group">
+              <label class="fg-label">CARDS IN IT</label>
+              <input id="pkSize" type="number" min="1" max="20" value="5">
+            </div>
+            <div class="form-group">
+              <label class="fg-label">CLASS</label>
+              <select id="pkClass"><option value="gt3">GT3</option><option value="gt4">GT4</option></select>
+            </div>
+            <div class="form-group">
+              <label class="fg-label">GUARANTEE</label>
+              <select id="pkGuarantee">
+                <option value="">None</option>
+                <option value="uncommon">Uncommon or better</option>
+                <option value="rare">Rare or better</option>
+                <option value="epic">Epic or better</option>
+                <option value="legendary">Legendary</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="fg-label">BLURB</label>
+            <input id="pkBlurb" placeholder="Three cards, one Epic or better.">
+          </div>
+          <label class="fg-label" style="margin-top:0.8rem;display:block">ODDS
+            <span style="color:var(--grey);font-weight:400">— relative weights, 0 means never</span></label>
+          <div class="ec-odds">
+            <label><i style="--tc:#9E9E9E"></i>Common <input id="pkOddsCommon" type="number" min="0" placeholder="50"></label>
+            <label><i style="--tc:#4CAF50"></i>Uncommon <input id="pkOddsUncommon" type="number" min="0" placeholder="28"></label>
+            <label><i style="--tc:#2196F3"></i>Rare <input id="pkOddsRare" type="number" min="0" placeholder="15"></label>
+            <label><i style="--tc:#9C27B0"></i>Epic <input id="pkOddsEpic" type="number" min="0" placeholder="6"></label>
+            <label><i style="--tc:#FFC400"></i>Legendary <input id="pkOddsLegendary" type="number" min="0" placeholder="1"></label>
+          </div>
+          <div id="pkOddsPreview" class="bk-note" style="margin-top:0.5rem"></div>
+          <div class="form-actions">
+            <button class="btn btn-white" onclick="ecSavePack()">SAVE PACK</button>
+            <button class="btn btn-ghost" onclick="ecNewPack()">NEW</button>
+            <span class="img-size" id="pkStatus"></span>
+          </div>
+          <div id="ecPacks" style="margin-top:1rem"></div>
+        </div>
+
+        <div class="form-card">
+          <h3>CUSTOM CARDS</h3>
+          <p class="bk-note">Cards that aren't drivers — skins, liveries, one-offs, whatever you
+             like. These sit in the same set and come out of the same packs. Rarity is yours to
+             pick, unlike driver cards where it's earned from the championship.</p>
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="fg-label">NAME</label>
+              <input id="ccName" placeholder="Peely">
+            </div>
+            <div class="form-group">
+              <label class="fg-label">SUBTITLE</label>
+              <input id="ccSubtitle" placeholder="Wave 2 · B Tier">
+            </div>
+            <div class="form-group">
+              <label class="fg-label">CLASS</label>
+              <select id="ccClass"><option value="gt3">GT3</option><option value="gt4">GT4</option></select>
+            </div>
+            <div class="form-group">
+              <label class="fg-label">RARITY</label>
+              <select id="ccRarity">
+                <option value="common">Common</option>
+                <option value="uncommon">Uncommon</option>
+                <option value="rare" selected>Rare</option>
+                <option value="epic">Epic</option>
+                <option value="legendary">Legendary</option>
+              </select>
+            </div>
+            <div class="form-group img-field">
+              <label class="fg-label">CARD ART</label>
+              <div class="img-pick">
+                <div class="img-prev" id="ccImagePrev"></div>
+                <div class="img-pick-side">
+                  <input type="file" accept="image/*" onchange="handleImage(this,'ccImage','card')">
+                  <div class="img-row">
+                    <span class="img-size" id="ccImageSize"></span>
+                    <button type="button" class="btn btn-ghost btn-sm" onclick="clearImage('ccImage')">REMOVE</button>
+                  </div>
+                </div>
+              </div>
+              <input id="ccImage" placeholder="…or paste an image URL" oninput="syncPreview('ccImage')">
+            </div>
+            <div class="form-group">
+              <label class="fg-label">BLURB</label>
+              <input id="ccBlurb" placeholder="Shown on the card.">
+            </div>
+          </div>
+          <div class="form-actions">
+            <button class="btn btn-white" onclick="ecSaveCard()">SAVE CARD</button>
+            <button class="btn btn-ghost" onclick="ecNewCard()">NEW</button>
+            <span class="img-size" id="ccStatus"></span>
+          </div>
+          <div id="ecCards" style="margin-top:1rem"></div>
+        </div>
+
+        <div class="form-card">
+          <h3>JOBS</h3>
+          <p class="bk-note">What <code>/work</code> offers. Pay is a range so the same job isn't
+             the same number every time, and each job has its own cooldown.</p>
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="fg-label">NAME</label>
+              <input id="jbName" placeholder="Pit crew shift">
+            </div>
+            <div class="form-group">
+              <label class="fg-label">EMOJI</label>
+              <input id="jbEmoji" value="🔧" maxlength="4">
+            </div>
+            <div class="form-group">
+              <label class="fg-label">PAYS FROM</label>
+              <input id="jbMin" type="number" min="0" value="60">
+            </div>
+            <div class="form-group">
+              <label class="fg-label">PAYS UP TO</label>
+              <input id="jbMax" type="number" min="0" value="130">
+            </div>
+            <div class="form-group">
+              <label class="fg-label">COOLDOWN (MINUTES)</label>
+              <input id="jbCooldown" type="number" min="1" value="90">
+            </div>
+            <div class="form-group">
+              <label class="fg-label">BLURB</label>
+              <input id="jbBlurb" placeholder="Wheel gun, four corners, no mistakes.">
+            </div>
+          </div>
+          <div class="form-actions">
+            <button class="btn btn-white" onclick="ecSaveJob()">SAVE JOB</button>
+            <button class="btn btn-ghost" onclick="ecNewJob()">NEW</button>
+            <span class="img-size" id="jbStatus"></span>
+          </div>
+          <div id="ecJobs" style="margin-top:1rem"></div>
+        </div>
+
+        <div class="form-card">
+          <h3>THE NUMBERS</h3>
+          <p class="bk-note">Everything else the economy runs on. Prize money is paid when you
+             announce a result, and only to drivers with a Discord account linked on their
+             driver page.</p>
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="fg-label">STARTING BALANCE</label>
+              <input id="esStart" type="number" min="0">
+            </div>
+            <div class="form-group">
+              <label class="fg-label">DAILY</label>
+              <input id="esDaily" type="number" min="0">
+            </div>
+            <div class="form-group">
+              <label class="fg-label">DAILY STREAK BONUS (PER DAY)</label>
+              <input id="esStreak" type="number" min="0">
+            </div>
+            <div class="form-group">
+              <label class="fg-label">STREAK CAPS AT (DAYS)</label>
+              <input id="esStreakMax" type="number" min="1">
+            </div>
+            <div class="form-group">
+              <label class="fg-label">FASTEST LAP BONUS</label>
+              <input id="esFastest" type="number" min="0">
+            </div>
+            <div class="form-group">
+              <label class="fg-label">ANYONE ELSE WHO FINISHES</label>
+              <input id="esFinish" type="number" min="0">
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="fg-label">PRIZE MONEY BY POSITION
+              <span style="color:var(--grey);font-weight:400">— comma separated, P1 first</span></label>
+            <input id="esPrize" placeholder="1200,900,700,550,450,360,290,230,180,140">
+          </div>
+          <label class="fg-label" style="margin-top:0.8rem;display:block">WHAT A DUPLICATE SELLS FOR</label>
+          <div class="ec-odds">
+            <label><i style="--tc:#9E9E9E"></i>Common <input id="esSellCommon" type="number" min="0"></label>
+            <label><i style="--tc:#4CAF50"></i>Uncommon <input id="esSellUncommon" type="number" min="0"></label>
+            <label><i style="--tc:#2196F3"></i>Rare <input id="esSellRare" type="number" min="0"></label>
+            <label><i style="--tc:#9C27B0"></i>Epic <input id="esSellEpic" type="number" min="0"></label>
+            <label><i style="--tc:#FFC400"></i>Legendary <input id="esSellLegendary" type="number" min="0"></label>
+          </div>
+          <div class="form-actions">
+            <button class="btn btn-white" onclick="ecSaveSettings()">SAVE NUMBERS</button>
+            <span class="img-size" id="esStatus"></span>
+          </div>
+        </div>
+
+        <div class="form-card">
+          <h3>DISCORD COMMANDS</h3>
+          <p class="bk-note">Discord only knows about the commands it has been told about.
+             Press this after the Worker deploys and the new ones
+             (<code>/work</code>, <code>/daily</code>, <code>/shop</code>, <code>/buy</code>,
+             <code>/sell</code>, <code>/balance</code>, <code>/pay</code>, <code>/rich</code>)
+             appear in the server. It is safe to press any number of times.</p>
+          <div class="form-actions">
+            <button class="btn btn-white" onclick="ecRegisterCommands()">REGISTER COMMANDS</button>
+            <span class="img-size" id="ecRegStatus"></span>
+          </div>
+        </div>
+      </div>
+
       <!-- AVAILABILITY -->
       <div class="adm-section" id="sec-availability">
         <div class="sec-head"><h2>WHO'S AVAILABLE</h2></div>
@@ -1054,6 +1320,7 @@ function refreshSec() {
         case 'dotd':    populateDotdSelects(); break;
         case 'control': rcPopulateRaces(); rcPopulateEntry(); rcRefresh(); break;
         case 'cards': renderCardsAdmin(); break;
+        case 'economy': if (!econ) loadEcon(); else renderEconomy(); break;
         case 'availability': avPopulateRaces(); renderAvailability(); break;
         case 'stewards': renderStewards(); break;
         case 'season':  document.getElementById('seasonName').value = d().seasonName||'Season 1'; renderFviPanel(); renderPointsEditor(); renderStorageMeter(); break;
@@ -2186,6 +2453,507 @@ function renderCardsAdmin() {
           </div>`;
     }).join('');
 }
+
+
+// ── ECONOMY ──────────────────────────────────────────────
+// The economy lives entirely in the Worker's D1, not in the league bin, so
+// this section talks to /api/econ rather than touching adminData.
+let econ = null;           // { settings, jobs, packs, cards, wallets }
+let econMembers = [];
+let editingPack = null;    // id being edited, null when the form is a new one
+let editingCard = null;
+let editingJob  = null;
+
+const RTIER = { common:['COMMON','#9E9E9E'], uncommon:['UNCOMMON','#4CAF50'],
+                rare:['RARE','#2196F3'], epic:['EPIC','#9C27B0'], legendary:['LEGENDARY','#FFC400'] };
+const RORDER = ['common','uncommon','rare','epic','legendary'];
+
+function econApi(path) { return `${API_BASE.replace(/\/+$/,'')}${path}`; }
+function econHeaders(json) {
+    return { ...(json ? { 'Content-Type': 'application/json' } : {}),
+             ...(ADMIN_TOKEN ? { 'X-Admin-Token': ADMIN_TOKEN } : {}) };
+}
+
+async function econPost(body, statusEl) {
+    const res = await fetch(econApi('/api/econ'), {
+        method: 'POST', headers: econHeaders(true), body: JSON.stringify(body),
+    });
+    let out = {};
+    try { out = await res.json(); } catch (e) {}
+    if (!res.ok || !out.ok) throw new Error(out.error || `HTTP ${res.status}`);
+    return out;
+}
+
+async function loadEcon(quiet) {
+    if (!API_BASE) { if (!quiet) toast('Worker URL not configured', 'err'); return; }
+    try {
+        const res = await fetch(econApi('/api/econ'), { headers: econHeaders(false) });
+        const body = await res.json();
+        if (!res.ok || !body.ok) throw new Error(body.error || `HTTP ${res.status}`);
+        econ = body;
+        renderEconomy();
+    } catch (e) {
+        econ = null;
+        const box = document.getElementById('ecPacks');
+        if (box) box.innerHTML = `<p class="bk-note">Could not load the economy: ${esc(e.message || 'unknown')}.
+            If this says the tables are missing, push the repo so the Migrate workflow runs.</p>`;
+        if (!quiet) toast('Could not load the economy: ' + (e.message || 'unknown'), 'err');
+    }
+}
+
+function renderEconomy() {
+    renderEconPacks();
+    renderEconCards();
+    renderEconJobs();
+    fillEconSettings();
+    renderEconWallets();
+    ecOddsPreview();
+}
+
+/* ── Wallets ─────────────────────────────────────────── */
+
+async function ecLoadMembers() {
+    const sel = document.getElementById('ecMember');
+    const st  = document.getElementById('ecStatus');
+    if (!API_BASE) { toast('Worker URL not configured', 'err'); return; }
+    st.textContent = 'loading…';
+    try {
+        const res = await fetch(econApi('/api/discord/members'), { headers: econHeaders(false) });
+        const body = await res.json();
+        if (!res.ok || !body.ok) throw new Error(body.error || `HTTP ${res.status}`);
+        econMembers = body.members || [];
+        sel.innerHTML = econMembers.length
+            ? econMembers.map(m => `<option value="${esc(m.id)}">${esc(m.displayName)}</option>`).join('')
+            : '<option value="">No members found</option>';
+        st.textContent = `${econMembers.length} members`;
+        ecShowBalance();
+    } catch (e) {
+        st.textContent = '';
+        toast('Could not load members: ' + (e.message || 'unknown'), 'err');
+    }
+}
+
+function ecShowBalance() {
+    const id = document.getElementById('ecMember').value;
+    const box = document.getElementById('ecBalance');
+    if (!box) return;
+    const w = ((econ && econ.wallets) || []).find(x => String(x.user_id) === String(id));
+    box.value = w ? Number(w.balance).toLocaleString('en-GB') : (id ? 'no wallet yet' : '—');
+}
+
+async function ecCredit(sign) {
+    const userId = document.getElementById('ecMember').value;
+    const amount = Math.abs(parseInt(document.getElementById('ecAmount').value, 10) || 0) * sign;
+    const st = document.getElementById('ecStatus');
+    if (!userId) { toast('Load members and pick someone first', 'err'); return; }
+    if (!amount) { toast('Put an amount in', 'err'); return; }
+
+    const who = (econMembers.find(m => m.id === userId) || {}).displayName || 'them';
+    st.textContent = sign > 0 ? 'giving…' : 'taking…';
+    try {
+        const out = await econPost({ action: 'credit', userId, amount });
+        st.textContent = `${who}: ${Number(out.balance).toLocaleString('en-GB')}`;
+        toast(`${sign > 0 ? 'Gave' : 'Took'} ${Math.abs(amount).toLocaleString('en-GB')} ${sign > 0 ? 'to' : 'from'} ${who}`, 'ok');
+        await loadEcon(true);
+        ecShowBalance();
+    } catch (e) {
+        st.textContent = '';
+        toast('Did not work: ' + (e.message || 'unknown'), 'err');
+    }
+}
+
+async function ecSetBalance() {
+    const userId = document.getElementById('ecMember').value;
+    const amount = Math.max(0, parseInt(document.getElementById('ecAmount').value, 10) || 0);
+    const st = document.getElementById('ecStatus');
+    if (!userId) { toast('Load members and pick someone first', 'err'); return; }
+    st.textContent = 'setting…';
+    try {
+        const out = await econPost({ action: 'setBalance', userId, amount });
+        st.textContent = `now ${Number(out.balance).toLocaleString('en-GB')}`;
+        toast('Balance set', 'ok');
+        await loadEcon(true);
+        ecShowBalance();
+    } catch (e) {
+        st.textContent = '';
+        toast('Did not work: ' + (e.message || 'unknown'), 'err');
+    }
+}
+
+function econName(id) {
+    const m = econMembers.find(x => String(x.id) === String(id));
+    return m ? m.displayName : id;
+}
+
+function renderEconWallets() {
+    const box = document.getElementById('ecWallets');
+    if (!box) return;
+    const list = (econ && econ.wallets) || [];
+    if (!list.length) { box.innerHTML = '<p class="bk-note">Nobody has a wallet yet. One opens the first time someone runs a command.</p>'; return; }
+    const total = list.reduce((n, w) => n + w.balance, 0);
+    box.innerHTML = `<p class="bk-note">${list.length} wallet${list.length !== 1 ? 's' : ''} ·
+        ${total.toLocaleString('en-GB')} in circulation</p>` +
+      list.slice(0, 25).map(w => `<div class="ec-row">
+          <span class="ec-grow">${esc(econName(w.user_id))}</span>
+          <span class="ec-mono">${Number(w.balance).toLocaleString('en-GB')}</span>
+        </div>`).join('') +
+      (list.length > 25 ? `<p class="bk-note">…and ${list.length - 25} more</p>` : '');
+}
+
+/* ── Packs ───────────────────────────────────────────── */
+
+function packOddsFromForm() {
+    const o = {};
+    let any = false;
+    RORDER.forEach(r => {
+        const el = document.getElementById('pkOdds' + r[0].toUpperCase() + r.slice(1));
+        const v = el && el.value.trim();
+        if (v !== '' && v != null) { o[r] = Math.max(0, Number(v) || 0); any = true; }
+    });
+    return any ? o : null;
+}
+
+function ecOddsPreview() {
+    const box = document.getElementById('pkOddsPreview');
+    if (!box) return;
+    const o = packOddsFromForm() || { common:50, uncommon:28, rare:15, epic:6, legendary:1 };
+    const total = RORDER.reduce((n, r) => n + (Number(o[r]) || 0), 0);
+    if (!total) { box.textContent = 'Every tier is zero — the pack would fall back to whatever is left.'; return; }
+    box.innerHTML = 'Roughly ' + RORDER.filter(r => o[r]).map(r =>
+        `<b style="color:${RTIER[r][1]}">${Math.round((o[r] / total) * 100)}%</b> ${RTIER[r][0].toLowerCase()}`
+    ).join(' · ') + ' per card.';
+}
+
+function ecNewPack() {
+    editingPack = null;
+    ['pkName','pkBlurb'].forEach(id => { const e = document.getElementById(id); if (e) e.value = ''; });
+    document.getElementById('pkEmoji').value = '🃏';
+    document.getElementById('pkPrice').value = 400;
+    document.getElementById('pkSize').value = 5;
+    document.getElementById('pkClass').value = 'gt3';
+    document.getElementById('pkGuarantee').value = '';
+    RORDER.forEach(r => { const e = document.getElementById('pkOdds' + r[0].toUpperCase() + r.slice(1)); if (e) e.value = ''; });
+    document.getElementById('pkStatus').textContent = '';
+    ecOddsPreview();
+}
+
+function ecEditPack(id) {
+    const p = ((econ && econ.packs) || []).find(x => x.id === id);
+    if (!p) return;
+    editingPack = p.id;
+    document.getElementById('pkName').value = p.name || '';
+    document.getElementById('pkEmoji').value = p.emoji || '🃏';
+    document.getElementById('pkBlurb').value = p.blurb || '';
+    document.getElementById('pkPrice').value = p.price;
+    document.getElementById('pkSize').value = p.size;
+    document.getElementById('pkClass').value = p.class === 'gt4' ? 'gt4' : 'gt3';
+    document.getElementById('pkGuarantee').value = p.guarantee || '';
+    let odds = {};
+    try { odds = p.odds ? JSON.parse(p.odds) : {}; } catch (e) {}
+    RORDER.forEach(r => {
+        const e = document.getElementById('pkOdds' + r[0].toUpperCase() + r.slice(1));
+        if (e) e.value = (odds && odds[r] != null) ? odds[r] : '';
+    });
+    document.getElementById('pkStatus').textContent = `editing ${p.id}`;
+    ecOddsPreview();
+    document.getElementById('pkName').scrollIntoView({ behavior:'smooth', block:'center' });
+}
+
+async function ecSavePack() {
+    const name = document.getElementById('pkName').value.trim();
+    const st = document.getElementById('pkStatus');
+    if (!name) { toast('Give the pack a name', 'err'); return; }
+    const pack = {
+        id: editingPack || name,
+        name,
+        emoji: document.getElementById('pkEmoji').value.trim() || '🃏',
+        blurb: document.getElementById('pkBlurb').value.trim(),
+        price: parseInt(document.getElementById('pkPrice').value, 10) || 0,
+        size:  parseInt(document.getElementById('pkSize').value, 10) || 5,
+        class: document.getElementById('pkClass').value,
+        guarantee: document.getElementById('pkGuarantee').value || null,
+        odds: packOddsFromForm(),
+    };
+    st.textContent = 'saving…';
+    try {
+        const out = await econPost({ action: 'savePack', pack });
+        editingPack = out.id;
+        st.textContent = `saved as ${out.id}`;
+        toast(`Pack saved — buy it with /buy pack:${out.id}`, 'ok');
+        await loadEcon(true);
+    } catch (e) { st.textContent = ''; toast('Could not save: ' + (e.message || 'unknown'), 'err'); }
+}
+
+async function ecDeletePack(id) {
+    try {
+        await econPost({ action: 'deletePack', id });
+        if (editingPack === id) ecNewPack();
+        toast('Pack deleted', 'ok');
+        await loadEcon(true);
+    } catch (e) { toast('Could not delete: ' + (e.message || 'unknown'), 'err'); }
+}
+
+function renderEconPacks() {
+    const box = document.getElementById('ecPacks');
+    if (!box) return;
+    const list = (econ && econ.packs) || [];
+    if (!list.length) { box.innerHTML = '<p class="bk-note">No packs yet.</p>'; return; }
+    box.innerHTML = list.map(p => {
+        const g = p.guarantee ? ` · ${RTIER[p.guarantee][0]}+` : '';
+        return `<div class="ec-row${p.enabled ? '' : ' ec-off'}">
+            <span style="flex:0 0 1.4rem">${esc(p.emoji || '🃏')}</span>
+            <span class="ec-grow">${esc(p.name)}
+              <span class="ec-mono"> · ${String(p.class).toUpperCase()} · ${p.size} cards${esc(g)}${p.enabled ? '' : ' · OFF'}</span></span>
+            <span class="ec-mono" style="flex:0 0 80px;text-align:right">${Number(p.price).toLocaleString('en-GB')}</span>
+            <div class="td-actions">
+              <button class="btn btn-ghost btn-sm" onclick="ecEditPack('${esc(p.id)}')">EDIT</button>
+              <button class="btn btn-danger btn-sm del-trigger" onclick="showDelConfirm(this, 'ecDeletePack(\\'${esc(p.id)}\\')')">DEL</button>
+            </div>
+          </div>`;
+    }).join('');
+}
+
+/* ── Custom cards ────────────────────────────────────── */
+
+function ecNewCard() {
+    editingCard = null;
+    ['ccName','ccSubtitle','ccBlurb','ccImage'].forEach(id => {
+        const e = document.getElementById(id); if (e) e.value = '';
+    });
+    document.getElementById('ccClass').value = 'gt3';
+    document.getElementById('ccRarity').value = 'rare';
+    syncPreview('ccImage');
+    const sz = document.getElementById('ccImageSize'); if (sz) sz.textContent = '';
+    document.getElementById('ccStatus').textContent = '';
+}
+
+function ecEditCard(id) {
+    const c = ((econ && econ.cards) || []).find(x => x.id === id);
+    if (!c) return;
+    editingCard = c.id;
+    document.getElementById('ccName').value = c.name || '';
+    document.getElementById('ccSubtitle').value = c.subtitle || '';
+    document.getElementById('ccClass').value = c.class === 'gt4' ? 'gt4' : 'gt3';
+    document.getElementById('ccRarity').value = c.rarity || 'rare';
+    document.getElementById('ccImage').value = c.image || '';
+    document.getElementById('ccBlurb').value = c.blurb || '';
+    syncPreview('ccImage');
+    document.getElementById('ccStatus').textContent = `editing ${c.id}`;
+    document.getElementById('ccName').scrollIntoView({ behavior:'smooth', block:'center' });
+}
+
+async function ecSaveCard() {
+    const name = document.getElementById('ccName').value.trim();
+    const st = document.getElementById('ccStatus');
+    if (!name) { toast('Give the card a name', 'err'); return; }
+    const card = {
+        id: editingCard || name,
+        name,
+        subtitle: document.getElementById('ccSubtitle').value.trim(),
+        class: document.getElementById('ccClass').value,
+        rarity: document.getElementById('ccRarity').value,
+        image: document.getElementById('ccImage').value.trim(),
+        blurb: document.getElementById('ccBlurb').value.trim(),
+    };
+    st.textContent = 'saving…';
+    try {
+        const out = await econPost({ action: 'saveCard', card });
+        editingCard = out.id;
+        st.textContent = `saved as ${out.id}`;
+        toast('Card saved — it is in the packs from now on', 'ok');
+        await loadEcon(true);
+    } catch (e) { st.textContent = ''; toast('Could not save: ' + (e.message || 'unknown'), 'err'); }
+}
+
+async function ecDeleteCard(id) {
+    try {
+        await econPost({ action: 'deleteCard', id });
+        if (editingCard === id) ecNewCard();
+        toast('Card deleted, and pulled from everyone who had it', 'ok');
+        await loadEcon(true);
+    } catch (e) { toast('Could not delete: ' + (e.message || 'unknown'), 'err'); }
+}
+
+function renderEconCards() {
+    const box = document.getElementById('ecCards');
+    if (!box) return;
+    const list = (econ && econ.cards) || [];
+    if (!list.length) {
+        box.innerHTML = '<p class="bk-note">No custom cards yet. The set is drivers only.</p>';
+        return;
+    }
+    const counts = {};
+    list.forEach(c => { counts[c.rarity] = (counts[c.rarity] || 0) + 1; });
+    box.innerHTML = `<div class="rc-entry-acts" style="margin-bottom:0.6rem">${
+        RORDER.slice().reverse().filter(t => counts[t]).map(t =>
+          `<span class="tc-chip-adm" style="--tc:${RTIER[t][1]}"><i></i>${RTIER[t][0]} <b>${counts[t]}</b></span>`).join('')
+      }</div>` + list.map(c => `<div class="ec-row${c.enabled ? '' : ' ec-off'}">
+          <span class="rc-dot" style="background:${RTIER[c.rarity] ? RTIER[c.rarity][1] : '#888'}"></span>
+          <span class="ec-grow">${esc(c.name)}
+            <span class="ec-mono"> · ${String(c.class).toUpperCase()}${c.subtitle ? ' · ' + esc(c.subtitle) : ''}</span></span>
+          ${c.image ? `<img src="${esc(c.image)}" class="drv-thumb" alt="" loading="lazy">`
+                    : '<span class="drv-thumb"></span>'}
+          <div class="td-actions">
+            <button class="btn btn-ghost btn-sm" onclick="ecEditCard('${esc(c.id)}')">EDIT</button>
+            <button class="btn btn-danger btn-sm del-trigger" onclick="showDelConfirm(this, 'ecDeleteCard(\\'${esc(c.id)}\\')')">DEL</button>
+          </div>
+        </div>`).join('');
+}
+
+/* ── Jobs ────────────────────────────────────────────── */
+
+function ecNewJob() {
+    editingJob = null;
+    ['jbName','jbBlurb'].forEach(id => { const e = document.getElementById(id); if (e) e.value = ''; });
+    document.getElementById('jbEmoji').value = '🔧';
+    document.getElementById('jbMin').value = 60;
+    document.getElementById('jbMax').value = 130;
+    document.getElementById('jbCooldown').value = 90;
+    document.getElementById('jbStatus').textContent = '';
+}
+
+function ecEditJob(id) {
+    const j = ((econ && econ.jobs) || []).find(x => x.id === id);
+    if (!j) return;
+    editingJob = j.id;
+    document.getElementById('jbName').value = j.name || '';
+    document.getElementById('jbEmoji').value = j.emoji || '🔧';
+    document.getElementById('jbBlurb').value = j.blurb || '';
+    document.getElementById('jbMin').value = j.min_pay;
+    document.getElementById('jbMax').value = j.max_pay;
+    document.getElementById('jbCooldown').value = j.cooldown_min;
+    document.getElementById('jbStatus').textContent = `editing ${j.id}`;
+    document.getElementById('jbName').scrollIntoView({ behavior:'smooth', block:'center' });
+}
+
+async function ecSaveJob() {
+    const name = document.getElementById('jbName').value.trim();
+    const st = document.getElementById('jbStatus');
+    if (!name) { toast('Give the job a name', 'err'); return; }
+    const job = {
+        id: editingJob || name,
+        name,
+        emoji: document.getElementById('jbEmoji').value.trim() || '🔧',
+        blurb: document.getElementById('jbBlurb').value.trim(),
+        min_pay: parseInt(document.getElementById('jbMin').value, 10) || 0,
+        max_pay: parseInt(document.getElementById('jbMax').value, 10) || 0,
+        cooldown_min: parseInt(document.getElementById('jbCooldown').value, 10) || 60,
+    };
+    st.textContent = 'saving…';
+    try {
+        const out = await econPost({ action: 'saveJob', job });
+        editingJob = out.id;
+        st.textContent = `saved as ${out.id}`;
+        toast(`Job saved — /work job:${out.id}`, 'ok');
+        await loadEcon(true);
+    } catch (e) { st.textContent = ''; toast('Could not save: ' + (e.message || 'unknown'), 'err'); }
+}
+
+async function ecDeleteJob(id) {
+    try {
+        await econPost({ action: 'deleteJob', id });
+        if (editingJob === id) ecNewJob();
+        toast('Job deleted', 'ok');
+        await loadEcon(true);
+    } catch (e) { toast('Could not delete: ' + (e.message || 'unknown'), 'err'); }
+}
+
+function fmtCooldown(min) {
+    if (min < 60) return `${min}m`;
+    const h = Math.floor(min / 60), m = min % 60;
+    return `${h}h${m ? ` ${m}m` : ''}`;
+}
+
+function renderEconJobs() {
+    const box = document.getElementById('ecJobs');
+    if (!box) return;
+    const list = (econ && econ.jobs) || [];
+    if (!list.length) { box.innerHTML = '<p class="bk-note">No jobs yet, so /work has nothing to offer.</p>'; return; }
+    box.innerHTML = list.map(j => `<div class="ec-row${j.enabled ? '' : ' ec-off'}">
+        <span style="flex:0 0 1.4rem">${esc(j.emoji || '🔧')}</span>
+        <span class="ec-grow">${esc(j.name)}
+          <span class="ec-mono"> · every ${fmtCooldown(j.cooldown_min)}${j.enabled ? '' : ' · OFF'}</span></span>
+        <span class="ec-mono" style="flex:0 0 110px;text-align:right">${j.min_pay}–${j.max_pay}</span>
+        <div class="td-actions">
+          <button class="btn btn-ghost btn-sm" onclick="ecEditJob('${esc(j.id)}')">EDIT</button>
+          <button class="btn btn-danger btn-sm del-trigger" onclick="showDelConfirm(this, 'ecDeleteJob(\\'${esc(j.id)}\\')')">DEL</button>
+        </div>
+      </div>`).join('');
+}
+
+/* ── The numbers ─────────────────────────────────────── */
+
+function fillEconSettings() {
+    const s = (econ && econ.settings) || {};
+    const set = (id, v) => { const e = document.getElementById(id); if (e) e.value = v; };
+    set('esStart', s.starting_balance ?? '');
+    set('esDaily', s.daily_amount ?? '');
+    set('esStreak', s.daily_streak_bonus ?? '');
+    set('esStreakMax', s.daily_streak_max ?? '');
+    set('esFastest', s.prize_fastest ?? '');
+    set('esFinish', s.prize_finish ?? '');
+    let prize = [];
+    try { prize = JSON.parse(s.prize_table || '[]'); } catch (e) {}
+    set('esPrize', Array.isArray(prize) ? prize.join(',') : '');
+    let sell = {};
+    try { sell = JSON.parse(s.sell_values || '{}'); } catch (e) {}
+    RORDER.forEach(r => set('esSell' + r[0].toUpperCase() + r.slice(1), sell[r] ?? ''));
+}
+
+async function ecSaveSettings() {
+    const st = document.getElementById('esStatus');
+    const val = id => document.getElementById(id).value.trim();
+    const prize = val('esPrize').split(/[,\s]+/).filter(Boolean).map(n => Math.max(0, parseInt(n, 10) || 0));
+    const sell = {};
+    RORDER.forEach(r => {
+        const v = val('esSell' + r[0].toUpperCase() + r.slice(1));
+        if (v !== '') sell[r] = Math.max(0, parseInt(v, 10) || 0);
+    });
+    const settings = {
+        starting_balance: val('esStart'),
+        daily_amount: val('esDaily'),
+        daily_streak_bonus: val('esStreak'),
+        daily_streak_max: val('esStreakMax'),
+        prize_fastest: val('esFastest'),
+        prize_finish: val('esFinish'),
+        prize_table: JSON.stringify(prize.length ? prize : [1200,900,700,550,450,360,290,230,180,140]),
+        sell_values: JSON.stringify(Object.keys(sell).length ? sell
+          : { common:25, uncommon:60, rare:140, epic:350, legendary:900 }),
+    };
+    st.textContent = 'saving…';
+    try {
+        await econPost({ action: 'settings', settings });
+        st.textContent = 'saved';
+        toast('Numbers saved', 'ok');
+        await loadEcon(true);
+    } catch (e) { st.textContent = ''; toast('Could not save: ' + (e.message || 'unknown'), 'err'); }
+}
+
+/** Push the slash command list to Discord using the Worker's own bot token. */
+async function ecRegisterCommands() {
+    const st = document.getElementById('ecRegStatus');
+    if (!API_BASE) { toast('Worker URL not configured', 'err'); return; }
+    st.textContent = 'registering…';
+    try {
+        const res = await fetch(econApi('/api/discord/register'), {
+            method: 'POST', headers: econHeaders(true), body: '{}',
+        });
+        const body = await res.json();
+        if (!res.ok || !body.ok) throw new Error(body.error || `HTTP ${res.status}`);
+        // /api/discord/register answers with the list of names, not a count.
+        const list = Array.isArray(body.registered) ? body.registered : [];
+        st.textContent = list.length ? `${list.length} commands registered` : 'registered';
+        toast('Commands registered — they may take a minute to appear', 'ok');
+    } catch (e) {
+        st.textContent = '';
+        toast('Could not register: ' + (e.message || 'unknown'), 'err');
+    }
+}
+
+// Live odds preview as you type, without an oninput on all five boxes.
+document.addEventListener('input', e => {
+    if (e.target && /^pkOdds/.test(e.target.id)) ecOddsPreview();
+});
 
 // ── WHO'S AVAILABLE ──────────────────────────────────────
 // Stored on the race itself as { driverId: 'in' | 'out' }. Anyone not listed

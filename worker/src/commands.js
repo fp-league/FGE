@@ -108,4 +108,53 @@ commands.push({
   ],
 });
 
+// ── Economy ──────────────────────────────────────────────
+// Top level rather than subcommands of /cards: these are the things people
+// run twenty times a day, and `/work` beats `/cards economy work`.
+commands.push(
+  {
+    name: 'work',
+    description: 'Do a job for credits — run it with no job to see the board',
+    options: [{ name: 'job', description: 'Which job (leave blank to see them all)',
+                type: 3, required: false }],
+  },
+  { name: 'daily', description: 'Claim your daily credits and keep your streak' },
+  {
+    name: 'balance',
+    description: 'Your wallet — balance, rank and what you have been spending',
+    options: [{ name: 'user', description: 'Whose wallet (defaults to yours)',
+                type: 6, required: false }],
+  },
+  {
+    name: 'pay',
+    description: 'Send credits to someone else',
+    options: [
+      { name: 'user',   description: 'Who to pay',  type: 6, required: true },
+      { name: 'amount', description: 'How much',    type: 4, required: true },
+    ],
+  },
+  { name: 'rich', description: 'Who has the most credits' },
+  {
+    name: 'shop',
+    description: 'Packs you can buy',
+    options: [CLASS_OPTION],
+  },
+  {
+    name: 'buy',
+    description: 'Buy and open a pack',
+    options: [{ name: 'pack', description: 'Which pack (see /shop)', type: 3, required: true }],
+  },
+  {
+    name: 'sell',
+    description: 'Sell duplicate cards for credits — your last copy is never sold',
+    options: [
+      { name: 'name',   description: 'Driver or card name, or "all" for every spare',
+        type: 3, required: false },
+      { name: 'amount', description: 'How many copies (defaults to all the spares)',
+        type: 4, required: false },
+      CLASS_OPTION,
+    ],
+  },
+);
+
 export const COMMANDS = commands;

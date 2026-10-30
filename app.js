@@ -1623,12 +1623,48 @@ function cardSetFor(d) {
     });
 }
 
+/**
+ * Cards an admin made in the panel. They live in the Worker's database
+ * rather than the league bin, so the page fetches them once and re-renders.
+ * No Worker, no custom cards, and the driver set still shows — this is a
+ * bonus on top of the set, never a dependency of it.
+ */
+let customCards = null;          // null = not fetched yet, [] = none
+let econPublic = null;
+
+async function loadCustomCards() {
+    if (customCards || !API_BASE) return;
+    try {
+        const res = await fetch(`${API_BASE.replace(/\/+$/, '')}/api/econ/public`);
+        const body = await res.json();
+        customCards = (body && body.cards) || [];
+        econPublic = body || null;
+    } catch (e) {
+        customCards = [];
+    }
+    if (document.getElementById('page-cards')?.classList.contains('active')) renderCards();
+}
+
+/** Custom cards for this class, shaped like the driver entries above. */
+function customFor() {
+    return (customCards || [])
+        .filter(c => (c.class === 'gt4' ? 'gt4' : 'gt3') === currentClass)
+        .map((c, i) => ({
+            drv: { name: c.name, team: c.subtitle || '', number: '',
+                   cardImage: c.image || '', photo: '', nationality: '' },
+            rarity: TIER_ORDER.includes(c.rarity) ? c.rarity : 'rare',
+            position: 0, points: 0, wins: 0, podiums: 0, starts: 0,
+            custom: true, blurb: c.blurb || '',
+        }));
+}
+
 function renderCards() {
     const d = cls();
     const el = document.getElementById('cardsContent');
     if (!el) return;
 
-    const set = cardSetFor(d);
+    if (customCards === null) loadCustomCards();
+    const set = cardSetFor(d).concat(customFor());
     if (!set.length) {
         el.innerHTML = '<p style="color:var(--muted);padding:2rem">No drivers in this class yet.</p>';
         return;
@@ -1641,13 +1677,21 @@ function renderCards() {
         `<span class="tc-chip" style="--tc:${CARD_TIERS[t].colour}">
            <i></i>${CARD_TIERS[t].label} <b>${counts[t]}</b></span>`).join('') + `</div>`;
 
+    const shop = (econPublic && (econPublic.packs || [])
+        .filter(p => (p.class === 'gt4' ? 'gt4' : 'gt3') === currentClass)) || [];
     const how = `<div class="tc-how">
         <strong>${set.length} cards in the ${esc(currentClass)} set.</strong>
         Collect them in Discord — <code>/cards pack</code> for a free pack every 8 hours,
-        <code>/cards collection</code> to see yours.
+        <code>/shop</code> to buy more, <code>/cards collection</code> to see yours.
         Rarity comes from the season: the championship leader is Legendary, the
         championship podium and race winners are Epic, a race podium is Rare.
-      </div>`;
+        Earn credits with <code>/work</code>, <code>/daily</code>, race prize money,
+        and by selling duplicates with <code>/sell</code>.
+      </div>` + (shop.length ? `<div class="tc-how">
+        <strong>On sale.</strong> ${shop.map(p =>
+          `${esc(p.emoji || '')} ${esc(p.name)} — <b>${Number(p.price).toLocaleString('en-GB')}</b>`
+        ).join(' · ')}
+      </div>` : '');
 
     const grid = TIER_ORDER.filter(t => counts[t]).map(t => `
         <h2 class="tc-head" style="--tc:${CARD_TIERS[t].colour}">

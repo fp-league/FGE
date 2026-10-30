@@ -10,9 +10,9 @@
  * moves and a Legendary genuinely means something.
  */
 
-const RARITIES = ['common', 'uncommon', 'rare', 'epic', 'legendary'];
+export const RARITIES = ['common', 'uncommon', 'rare', 'epic', 'legendary'];
 
-const RARITY = {
+export const RARITY = {
   common:    { label: 'Common',    colour: 0x9E9E9E, icon: '⚪', weight: 50 },
   uncommon:  { label: 'Uncommon',  colour: 0x4CAF50, icon: '🟢', weight: 28 },
   rare:      { label: 'Rare',      colour: 0x2196F3, icon: '🔵', weight: 15 },
@@ -51,7 +51,7 @@ function keyOf(res, drivers) {
 /**
  * Every driver in a class with the season record that decides their rarity.
  */
-export function cardSet(cd) {
+export function cardSet(cd, custom) {
   const drivers = cd.drivers || [];
   const cfg = pointsCfg(cd);
   const stat = {};
@@ -80,7 +80,7 @@ export function cardSet(cd) {
 
   const ranked = drivers.slice().sort((a, b) => stat[dKey(b)].points - stat[dKey(a)].points);
 
-  return ranked.map((d, i) => {
+  const driverCards = ranked.map((d, i) => {
     const s = stat[dKey(d)];
     let rarity;
     if (i === 0 && s.points > 0)        rarity = 'legendary';   // championship leader
@@ -93,19 +93,58 @@ export function cardSet(cd) {
       id: dKey(d), name: d.name, team: d.team || '', number: String(d.number ?? ''),
       nationality: d.nationality || '', photo: d.photo || '',
       cardImage: d.cardImage || '',
-      rarity, position: i + 1, ...s,
+      rarity, position: i + 1, custom: false, ...s,
     };
   });
+
+  // Admin-made cards sit in the same set and pull from the same packs. They
+  // have no championship record, so the stat fields are zeroed rather than
+  // absent — everything downstream reads them without checking which kind
+  // of card it is holding.
+  const extras = (custom || [])
+    .filter(c => c && c.id && c.enabled !== 0)
+    .map((c, i) => ({
+      id: String(c.id), name: c.name || 'Untitled', team: c.subtitle || '', number: '',
+      nationality: '', photo: '', cardImage: c.image || '',
+      blurb: c.blurb || '',
+      rarity: RARITIES.includes(c.rarity) ? c.rarity : 'rare',
+      position: driverCards.length + i + 1, custom: true,
+      points: 0, wins: 0, podiums: 0, starts: 0,
+    }));
+
+  return driverCards.concat(extras);
 }
 
-/** Pack odds, falling through to a lower tier when one is empty. */
-function rollRarity(byRarity) {
-  const pool = RARITIES.filter(r => (byRarity[r] || []).length);
+/**
+ * Pack odds, falling through to a lower tier when one is empty.
+ *
+ * `odds` is a pack type's own weights; without one the house weights apply.
+ * A tier weighted 0 is excluded outright rather than made very unlikely,
+ * which is how an admin says "no Commons in this pack" and means it.
+ */
+function rollRarity(byRarity, odds, floor) {
+  const w = r => {
+    const v = odds && odds[r] != null ? Number(odds[r]) : RARITY[r].weight;
+    return Number.isFinite(v) && v > 0 ? v : 0;
+  };
+  const min = floor ? RARITIES.indexOf(floor) : 0;
+  let pool = RARITIES.filter((r, i) => i >= min && (byRarity[r] || []).length && w(r) > 0);
+
+  // A guarantee must be honoured even if the admin weighted that tier to
+  // nothing; fall back to flat odds across whatever qualifies.
+  if (!pool.length && floor) {
+    pool = RARITIES.filter((r, i) => i >= min && (byRarity[r] || []).length);
+    if (pool.length) return pool[Math.floor(Math.random() * pool.length)];
+  }
+  // Every weighted tier is empty — take whatever is left rather than nothing.
+  if (!pool.length) pool = RARITIES.filter(r => (byRarity[r] || []).length);
   if (!pool.length) return null;
-  const total = pool.reduce((n, r) => n + RARITY[r].weight, 0);
+
+  const total = pool.reduce((n, r) => n + w(r), 0);
+  if (total <= 0) return pool[pool.length - 1];
   let roll = Math.random() * total;
   for (const r of pool) {
-    roll -= RARITY[r].weight;
+    roll -= w(r);
     if (roll <= 0) return r;
   }
   return pool[0];
@@ -116,17 +155,36 @@ function rollRarity(byRarity) {
  * pulling one driver three times out of five feels broken rather than
  * unlucky. Duplicates across packs are the whole point and still happen.
  */
-function drawPack(set) {
+export function drawPack(set, opts) {
+  const o = opts || {};
+  const size = Math.max(1, Math.min(20, Number(o.size) || PACK_SIZE));
+
+  // A pack type can restrict itself to a handful of cards. An id in the pool
+  // that no longer exists is ignored; an empty result falls back to the whole
+  // set rather than handing out nothing.
+  let source = set;
+  if (Array.isArray(o.pool) && o.pool.length) {
+    const want = new Set(o.pool.map(String));
+    const narrowed = set.filter(c => want.has(c.id));
+    if (narrowed.length) source = narrowed;
+  }
+
   const taken = new Set();
   const out = [];
 
-  for (let i = 0; i < PACK_SIZE && taken.size < set.length; i++) {
+  for (let i = 0; i < size && taken.size < source.length; i++) {
     // Rebuild the tiers each draw from what is still available, so a tier
     // that runs out stops being rolled rather than yielding nothing.
     const byRarity = {};
-    set.forEach(c => { if (!taken.has(c.id)) (byRarity[c.rarity] ||= []).push(c); });
+    source.forEach(c => { if (!taken.has(c.id)) (byRarity[c.rarity] ||= []).push(c); });
 
-    const r = rollRarity(byRarity);
+    // The guarantee is spent on the last card, and only if nothing already
+    // pulled has met it — so a lucky pack isn't also forced to be a good one.
+    const met = o.guarantee &&
+      out.some(c => RARITIES.indexOf(c.rarity) >= RARITIES.indexOf(o.guarantee));
+    const floor = (o.guarantee && !met && i === size - 1) ? o.guarantee : null;
+
+    const r = rollRarity(byRarity, o.odds, floor);
     if (!r) break;
     const pool = byRarity[r];
     const card = pool[Math.floor(Math.random() * pool.length)];
@@ -137,6 +195,27 @@ function drawPack(set) {
 }
 
 const userOf = i => (i.member && i.member.user) || i.user || {};
+
+/**
+ * Admin-made cards for a class. Returns [] rather than throwing when the
+ * table is missing, so a Worker that hasn't run the economy migration still
+ * serves driver cards instead of erroring.
+ */
+export async function loadCustom(env, cls) {
+  try {
+    const rows = await env.DB.prepare(
+      `SELECT id, name, subtitle, rarity, image, blurb, enabled
+         FROM custom_card WHERE class = ? AND enabled = 1 ORDER BY sort, name`
+    ).bind(cls).all();
+    return rows.results || [];
+  } catch { return []; }
+}
+
+/** The full set for a class: driver cards plus anything an admin added. */
+export async function fullSet(env, cls, record) {
+  const cd = (record && record[cls]) || {};
+  return cardSet(cd, await loadCustom(env, cls));
+}
 
 function fmtLeft(ms) {
   const m = Math.ceil(ms / 60000);
@@ -153,8 +232,7 @@ export async function openPack(env, interaction, cls, record) {
   const user = userOf(interaction);
   if (!user.id) return simple('Who are you?', "Couldn't read your Discord account.", 0x9E9E9E);
 
-  const cd = (record && record[cls]) || {};
-  const set = cardSet(cd);
+  const set = await fullSet(env, cls, record);
   if (!set.length) {
     return simple('No cards yet', `There are no ${classLabel(cls)} drivers to make cards from.`, 0x9E9E9E);
   }
@@ -255,8 +333,7 @@ export async function showCollection(env, interaction, cls, record, targetId) {
   const id = targetId || user.id;
   if (!id) return simple('Who are you?', "Couldn't read your Discord account.", 0x9E9E9E);
 
-  const cd = (record && record[cls]) || {};
-  const set = cardSet(cd);
+  const set = await fullSet(env, cls, record);
   const byId = {};
   set.forEach(c => { byId[c.id] = c; });
 
@@ -302,8 +379,7 @@ export async function showCollection(env, interaction, cls, record, targetId) {
 /* ── /card ─────────────────────────────────────────────── */
 export async function showCard(env, interaction, cls, record, query) {
   const user = userOf(interaction);
-  const cd = (record && record[cls]) || {};
-  const set = cardSet(cd);
+  const set = await fullSet(env, cls, record);
   const q = String(query || '').trim().toLowerCase();
   if (!q) return simple('Which driver?', 'Give me a name, e.g. `/cards card name:Maxi`.', 0x9E9E9E);
 
@@ -322,20 +398,27 @@ export async function showCard(env, interaction, cls, record, query) {
   }
 
   const r = RARITY[card.rarity];
+  // A custom card has no season behind it, so showing P31 / 0 points / 0
+  // starts would be six fields of nothing. It gets its blurb instead.
+  const fields = card.custom
+    ? [{ name: 'In your collection', value: owned ? `Yes ×${owned.copies}` : 'Not yet', inline: true }]
+    : [
+        { name: 'Championship', value: `P${card.position}`, inline: true },
+        { name: 'Points',   value: String(card.points),  inline: true },
+        { name: 'Starts',   value: String(card.starts),  inline: true },
+        { name: 'Wins',     value: String(card.wins),    inline: true },
+        { name: 'Podiums',  value: String(card.podiums), inline: true },
+        { name: 'In your collection',
+          value: owned ? `Yes \u00d7${owned.copies}` : 'Not yet', inline: true },
+      ];
+
   const embed = {
     title: `${r.icon} ${card.name}${card.number ? `  #${card.number}` : ''}`,
     description: `**${r.label}** · ${classLabel(cls)}${card.team ? ` · ${card.team}` : ''}` +
-                 `${card.nationality ? ` · ${card.nationality}` : ''}`,
+                 `${card.nationality ? ` · ${card.nationality}` : ''}` +
+                 `${card.blurb ? `\n\n${card.blurb}` : ''}`,
     color: r.colour,
-    fields: [
-      { name: 'Championship', value: `P${card.position}`, inline: true },
-      { name: 'Points',   value: String(card.points),  inline: true },
-      { name: 'Starts',   value: String(card.starts),  inline: true },
-      { name: 'Wins',     value: String(card.wins),    inline: true },
-      { name: 'Podiums',  value: String(card.podiums), inline: true },
-      { name: 'In your collection',
-        value: owned ? `Yes ×${owned.copies}` : 'Not yet', inline: true },
-    ],
+    fields,
   };
   const art = card.cardImage || card.photo;
   if (art) embed.image = { url: art };
@@ -344,8 +427,7 @@ export async function showCard(env, interaction, cls, record, query) {
 
 /* ── /collectors ───────────────────────────────────────── */
 export async function showCollectors(env, cls, record) {
-  const cd = (record && record[cls]) || {};
-  const total = cardSet(cd).length;
+  const total = (await fullSet(env, cls, record)).length;
 
   const rows = await env.DB.prepare(
     `SELECT user_id, COUNT(*) AS held, SUM(copies) AS cards
