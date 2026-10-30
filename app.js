@@ -23,6 +23,13 @@ let raceFocusIdx  = null;
 let userId = localStorage.getItem('fge_userId') || null;
 let userName = localStorage.getItem('fge_userName') || null;
 
+// Driver of the Day — the real tally, fetched from the Worker. Votes used to
+// live in localStorage, which meant every visitor saw only their own vote and
+// the bar always read 100%.
+let dotdData   = null;     // { races: {round: {driver: n}}, myVotes: {round: driver} }
+let dotdLoaded = false;
+let dotdBusy   = false;
+
 // Live timing, pushed from race control in the admin panel
 let liveState     = { status: 'idle', running: [] };
 let liveSkew      = 0;      // server clock minus ours, so clocks agree
@@ -315,8 +322,11 @@ function switchClass(cls) {
     document.body.classList.toggle('gt4-mode', cls === 'GT4');
     applyThemeColor(cls);
     syncFviNav();
+    syncStewardsNav();
     document.getElementById('csGT3')?.classList.toggle('active', cls === 'GT3');
     document.getElementById('csGT4')?.classList.toggle('active', cls === 'GT4');
+    // Tallies are per class, so the cached one is wrong now.
+    dotdData = null; dotdLoaded = false;
     renderCurrentPage();
 }
 
@@ -365,6 +375,7 @@ function renderCurrentPage() {
         case 'fantasy':    renderFantasy(); break;
         case 'race':       renderRace(); break;
         case 'live':       renderLive(); break;
+        case 'stewards':   renderStewards(); break;
         case 'dotd':       renderDOTD(); break;
     }
 }
@@ -595,6 +606,85 @@ function renderProgressionChart(d) {
       </div>`;
 }
 
+/**
+ * Who can still win the title.
+ *
+ * A driver is still in it if everything left on the table would take them
+ * past the leader's total as it stands — the leader can always score nothing,
+ * so that is the fair test. The leader has clinched when even a perfect run
+ * from second place cannot reach them.
+ */
+function titleRace(d, pts, sorted) {
+    const races = d.races || [];
+    const remaining = races.filter(r => !(r.results || []).length).length;
+    if (!sorted.length) return '';
+
+    const cfg = pointsCfg(d);
+    const perRace = (cfg.table[0] || 0) + (cfg.fastestLap || 0) + (cfg.dotd || 0);
+    const onTable = remaining * perRace;
+
+    const leader     = sorted[0];
+    const leaderPts  = pts[driverKey(leader)] || 0;
+    const runnerUp   = sorted[1];
+    const runnerPts  = runnerUp ? (pts[driverKey(runnerUp)] || 0) : 0;
+
+    if (!remaining) {
+        return `
+          <div class="tr-panel tr-done">
+            <span class="tr-crown">🏆</span>
+            <div>
+              <div class="tr-head">${esc(leader.name)} wins the championship</div>
+              <div class="tr-sub">Season complete — ${leaderPts} points.</div>
+            </div>
+          </div>`;
+    }
+
+    // Clinched: nobody left can reach the leader even with a clean sweep.
+    if (runnerUp && runnerPts + onTable < leaderPts) {
+        return `
+          <div class="tr-panel tr-done">
+            <span class="tr-crown">🏆</span>
+            <div>
+              <div class="tr-head">${esc(leader.name)} has won the championship</div>
+              <div class="tr-sub">Unbeatable with ${remaining} round${remaining !== 1 ? 's' : ''} to go.</div>
+            </div>
+          </div>`;
+    }
+
+    const alive = sorted.filter(drv => (pts[driverKey(drv)] || 0) + onTable >= leaderPts);
+    const out   = sorted.length - alive.length;
+
+    return `
+      <div class="tr-panel">
+        <div class="tr-top">
+          <h3>WHO CAN STILL WIN IT</h3>
+          <span class="tr-meta">${remaining} round${remaining !== 1 ? 's' : ''} left ·
+            up to ${onTable} points still on the table</span>
+        </div>
+        <div class="tr-list">
+          ${alive.map((drv, i) => {
+              const p    = pts[driverKey(drv)] || 0;
+              const gap  = leaderPts - p;
+              const col  = safeHex(colourFor(drv.team, d.teams), '#888888');
+              const need = gap === 0
+                  ? 'Leads the championship'
+                  : (gap > onTable - perRace
+                      ? `${gap} behind — needs help`
+                      : `${gap} behind`);
+              return `
+                <div class="tr-row">
+                  <span class="tr-pos">${i + 1}</span>
+                  <span class="tr-bar" style="background:${col}"></span>
+                  <span class="tr-name">${esc(drv.name)}</span>
+                  <span class="tr-need">${esc(need)}</span>
+                  <span class="tr-max">max ${p + onTable}</span>
+                </div>`;
+          }).join('')}
+        </div>
+        ${out ? `<div class="tr-out">${out} driver${out !== 1 ? 's are' : ' is'} mathematically out.</div>` : ''}
+      </div>`;
+}
+
 function renderStandings() {
     const d = cls();
     const { pts, tpts } = calcStandings(d.races||[], d.drivers||[], d.teams||[]);
@@ -604,7 +694,7 @@ function renderStandings() {
     if (standingsTab === 'drivers') {
         const sorted = [...(d.drivers||[])].sort((a,b) => (pts[driverKey(b)]||0) - (pts[driverKey(a)]||0));
         if (!sorted.length) { el.innerHTML = '<p style="color:var(--muted);padding:2rem">No driver data yet.</p>'; return; }
-        const leader = pts[sorted[0]?.name] || 0;
+        const leader = sorted.length ? (pts[driverKey(sorted[0])] || 0) : 0;
         el.innerHTML = `
           <div class="table-container">
             <table class="standings-table">
@@ -628,7 +718,7 @@ function renderStandings() {
                 }).join('')}
               </tbody>
             </table>
-          </div>` + renderProgressionChart(d);
+          </div>` + titleRace(d, pts, sorted) + renderProgressionChart(d);
     } else {
         const sorted = [...(d.teams||[])].sort((a,b) => (tpts[b.name]||0) - (tpts[a.name]||0));
         if (!sorted.length) { el.innerHTML = '<p style="color:var(--muted);padding:2rem">No team data yet.</p>'; return; }
@@ -864,6 +954,152 @@ function renderTeamProfile(id) {
 }
 
 // ── DRIVERS PAGE ─────────────────────────────────────────
+// ── DRIVER VS DRIVER ─────────────────────────────────────
+// Two drivers side by side, including the head-to-head: how many times each
+// finished ahead of the other in races they both started.
+let compareA = null, compareB = null, compareOpen = false;
+
+function driverStats(drv, d) {
+    const key = driverKey(drv);
+    const { pts } = calcStandings(d.races || [], d.drivers || [], d.teams || []);
+    let starts = 0, wins = 0, podiums = 0, dnfs = 0, finishSum = 0, finishes = 0, best = null;
+
+    (d.races || []).forEach(r => {
+        const idx = (r.results || []).findIndex(res => resultKey(res, d.drivers) === key);
+        if (idx === -1) return;
+        starts++;
+        const res = r.results[idx];
+        const raw = (typeof res === 'object' && res.pos != null) ? res.pos : idx + 1;
+        if (String(raw).toUpperCase() === 'DNF') { dnfs++; return; }
+        const pos = Number(raw);
+        if (!Number.isFinite(pos)) return;
+        finishes++; finishSum += pos;
+        if (pos === 1) wins++;
+        if (pos <= 3) podiums++;
+        if (best == null || pos < best) best = pos;
+    });
+
+    return {
+        starts, wins, podiums, dnfs, best,
+        avg: finishes ? (finishSum / finishes) : null,
+        points: pts[key] || 0,
+    };
+}
+
+/** Races both drivers started: how many each finished ahead. */
+function headToHead(a, b, d) {
+    const ka = driverKey(a), kb = driverKey(b);
+    let aWins = 0, bWins = 0;
+    const order = res => {
+        const raw = (typeof res === 'object' && res.pos != null) ? res.pos : null;
+        if (raw == null) return null;
+        if (String(raw).toUpperCase() === 'DNF') return Infinity;   // a finish beats a DNF
+        const n = Number(raw);
+        return Number.isFinite(n) ? n : null;
+    };
+    (d.races || []).forEach(r => {
+        const ra = (r.results || []).find(res => resultKey(res, d.drivers) === ka);
+        const rb = (r.results || []).find(res => resultKey(res, d.drivers) === kb);
+        if (!ra || !rb) return;
+        const ia = (r.results || []).indexOf(ra), ib = (r.results || []).indexOf(rb);
+        const pa = order(ra) ?? ia + 1, pb = order(rb) ?? ib + 1;
+        if (pa === pb) return;                      // both out, or unscored
+        if (pa < pb) aWins++; else bWins++;
+    });
+    return { aWins, bWins };
+}
+
+function toggleCompare() {
+    compareOpen = !compareOpen;
+    renderDrivers();
+}
+
+function setCompare(which, id) {
+    if (which === 'a') compareA = id || null; else compareB = id || null;
+    renderDrivers();
+}
+
+function renderCompareBox(d) {
+    const drivers = d.drivers || [];
+    if (drivers.length < 2) return '';
+
+    if (!compareOpen) {
+        return `<button class="cmp-open" onclick="toggleCompare()">⇄ COMPARE TWO DRIVERS</button>`;
+    }
+
+    const opt = (sel) => drivers.map(x =>
+        `<option value="${esc(driverKey(x))}"${driverKey(x) === sel ? ' selected' : ''}>${esc(x.name)}</option>`
+    ).join('');
+
+    const a = drivers.find(x => driverKey(x) === compareA) || drivers[0];
+    const b = drivers.find(x => driverKey(x) === compareB) || drivers[1];
+
+    let body = '';
+    if (a && b && driverKey(a) === driverKey(b)) {
+        body = '<p class="cmp-note">Pick two different drivers.</p>';
+    } else if (a && b) {
+        const sa = driverStats(a, d), sb = driverStats(b, d);
+        const h2h = headToHead(a, b, d);
+        const ca = safeHex(colourFor(a.team, d.teams), '#888888');
+        const cb = safeHex(colourFor(b.team, d.teams), '#888888');
+        const num = v => (v == null ? '—' : v);
+        const avg = v => (v == null ? '—' : v.toFixed(1));
+
+        const row = (label, va, vb, higherWins) => {
+            const na = typeof va === 'number' ? va : null;
+            const nb = typeof vb === 'number' ? vb : null;
+            let aw = false, bw = false;
+            if (na != null && nb != null && na !== nb) {
+                aw = higherWins ? na > nb : na < nb;
+                bw = !aw;
+            }
+            return `<div class="cmp-row">
+                <span class="cmp-v${aw ? ' win' : ''}">${esc(String(va))}</span>
+                <span class="cmp-l">${esc(label)}</span>
+                <span class="cmp-v${bw ? ' win' : ''}">${esc(String(vb))}</span>
+              </div>`;
+        };
+
+        body = `
+          <div class="cmp-heads">
+            <div class="cmp-head" style="--tc:${ca}">
+              <span class="cmp-bar"></span>
+              <strong>${esc(a.name)}</strong><span>${esc(a.team || '')}</span>
+            </div>
+            <div class="cmp-vs">V</div>
+            <div class="cmp-head cmp-right" style="--tc:${cb}">
+              <span class="cmp-bar"></span>
+              <strong>${esc(b.name)}</strong><span>${esc(b.team || '')}</span>
+            </div>
+          </div>
+          <div class="cmp-h2h">
+            <span class="cmp-h2h-n${h2h.aWins > h2h.bWins ? ' win' : ''}">${h2h.aWins}</span>
+            <span class="cmp-h2h-l">FINISHED AHEAD</span>
+            <span class="cmp-h2h-n${h2h.bWins > h2h.aWins ? ' win' : ''}">${h2h.bWins}</span>
+          </div>
+          <div class="cmp-table">
+            ${row('POINTS',   sa.points,  sb.points,  true)}
+            ${row('RACES',    sa.starts,  sb.starts,  true)}
+            ${row('WINS',     sa.wins,    sb.wins,    true)}
+            ${row('PODIUMS',  sa.podiums, sb.podiums, true)}
+            ${row('BEST FINISH', num(sa.best), num(sb.best), false)}
+            ${row('AVERAGE FINISH', avg(sa.avg), avg(sb.avg), false)}
+            ${row('DNFs',     sa.dnfs,    sb.dnfs,    false)}
+          </div>`;
+    }
+
+    return `
+      <div class="cmp-box">
+        <div class="cmp-picks">
+          <select aria-label="First driver" onchange="setCompare('a', this.value)">${opt(driverKey(a || {}))}</select>
+          <span class="cmp-vs-sm">vs</span>
+          <select aria-label="Second driver" onchange="setCompare('b', this.value)">${opt(driverKey(b || {}))}</select>
+          <button class="cmp-close" onclick="toggleCompare()" aria-label="Close comparison">&times;</button>
+        </div>
+        ${body}
+      </div>`;
+}
+
 function renderDrivers() {
     const d = cls();
     const el = document.getElementById('driversContent');
@@ -871,9 +1107,10 @@ function renderDrivers() {
     if (driverFocusId) { renderDriverProfile(driverFocusId); driverFocusId = null; return; }
     const { pts } = calcStandings(d.races||[], d.drivers||[], d.teams||[]);
     if (!d.drivers?.length) { el.innerHTML = '<p style="color:var(--muted);padding:2rem">No drivers registered yet.</p>'; return; }
+    const compare = renderCompareBox(d);
     // Ranked by points so the grid reads as a championship order
     const ranked = [...d.drivers].sort((a,b) => (pts[driverKey(b)]||0) - (pts[driverKey(a)]||0));
-    el.innerHTML = `<div class="f1-drivers-grid">` + ranked.map((drv, i) => {
+    el.innerHTML = compare + `<div class="f1-drivers-grid">` + ranked.map((drv, i) => {
         const col = colourFor(drv.team, d.teams);
         const [r,g,b] = [parseInt(col.slice(1,3),16),parseInt(col.slice(3,5),16),parseInt(col.slice(5,7),16)];
         const names = (drv.name||'').trim().split(/\s+/);
@@ -1206,61 +1443,191 @@ function renderFantasy() {
     `;
 }
 
+async function loadDotd() {
+    try {
+        const r = await fetch(`${API_BASE}/api/dotd?class=${currentClass.toLowerCase()}`,
+                              { cache: 'no-store' });
+        const body = await r.json();
+        if (body && body.ok) dotdData = body;
+    } catch (e) {
+        // Leave dotdData null — the page explains itself rather than
+        // silently showing a tally of zero.
+    }
+    dotdLoaded = true;
+}
+
+/** Key a race the same way the Worker does, so tallies line up. */
+function dotdRaceKey(race) { return String(race.round ?? race.name ?? ''); }
+
 function renderDOTD() {
     const d = cls();
     const el = document.getElementById('dotdContent');
     if (!el) return;
-    const races = (d.races||[]).filter(r=>r.results?.length).slice().reverse();
-    if (!races.length) { el.innerHTML = '<p style="color:var(--muted);padding:2rem">No completed races yet.</p>'; return; }
-    el.innerHTML = races.map(race => {
-        const drivers = (race.results||[]).map(res => typeof res === 'string' ? res : res.driver).filter(Boolean);
-        const voteKey = `${currentClass}_dotd_${race.round||race.name}`;
-        let myVote = null;
-        try { myVote = localStorage.getItem(voteKey); } catch(e) {}
-        const votes = {};
-        try {
-            const stored = JSON.parse(localStorage.getItem(`${voteKey}_counts`) || '{}');
-            Object.assign(votes, stored);
-        } catch(e) {}
-        const totalVotes = Object.values(votes).reduce((a,b)=>a+b,0);
+
+    const races = (d.races || []).filter(r => r.results?.length).slice().reverse();
+    if (!races.length) {
+        el.innerHTML = '<p style="color:var(--muted);padding:2rem">No completed races yet.</p>';
+        return;
+    }
+
+    if (!dotdLoaded) {
+        el.innerHTML = '<p style="color:var(--muted);padding:2rem">Loading votes…</p>';
+        loadDotd().then(() => { if (currentPage === 'dotd') renderDOTD(); });
+        return;
+    }
+
+    const offline = !dotdData;
+
+    el.innerHTML = (offline
+        ? `<div class="dotd-offline">Voting is offline at the moment — the results below
+             are still correct, but no new votes can be counted.</div>`
+        : '') + races.map(race => {
+        const key     = dotdRaceKey(race);
+        const votes   = (dotdData && dotdData.races && dotdData.races[key]) || {};
+        const myVote  = (dotdData && dotdData.myVotes && dotdData.myVotes[key]) || null;
+        const total   = Object.values(votes).reduce((a, b) => a + b, 0);
+        const winner  = race.dotdWinner ? resultName(race.dotdWinner, d.drivers) : null;
+
+        // Once a vote is in, show the standings. Before that, keep them hidden
+        // so the first few voters don't anchor everyone else.
+        const reveal = Boolean(myVote) || Boolean(winner);
+        const names  = (race.results || []).map(res => resultName(res, d.drivers)).filter(Boolean);
+
         return `
           <div class="dotd-race-block">
             <div class="dotd-race-header">
-              <h2>${race.name} — Round ${race.round||'?'}</h2>
-              <span class="dotd-date">${fmtDate(race.date)}</span>
+              <h2>${esc(race.name || '')} — Round ${esc(String(race.round || '?'))}</h2>
+              <span class="dotd-date">${esc(fmtDate(race.date))}</span>
             </div>
-            <div class="dotd-hint">Vote for your Driver of the Day</div>
+            <div class="dotd-hint">${
+                offline ? 'Voting unavailable'
+              : myVote ? 'Thanks for voting — one vote each.'
+              : 'Vote for your Driver of the Day'}</div>
             <div class="dotd-grid">
-              ${drivers.map(name => {
-                  const col = colourFor(d.drivers?.find(x=>x.name===name)?.team, d.teams);
-                  const voteCount = votes[name] || 0;
-                  const pct = totalVotes ? Math.round(voteCount/totalVotes*100) : 0;
-                  const isVoted = myVote === name;
-                  return `<div class="dotd-card ${isVoted?'dotd-voted':''}" style="${isVoted?`--tc:${col}`:''}" onclick="voteDOTD('${name}','${voteKey}')">
-                    <div class="dotd-name">${name}</div>
-                    <div class="dotd-team">${d.drivers?.find(x=>x.name===name)?.team||''}</div>
-                    ${myVote ? `<div class="dotd-bar-wrap"><div class="dotd-bar" style="width:${pct}%;background:${col}"></div></div>
-                    <div class="dotd-pct">${pct}%</div>` : ''}
-                    ${isVoted ? '<div class="dotd-check">✓ YOUR VOTE</div>' : ''}
+              ${names.map(name => {
+                  const drv = (d.drivers || []).find(x => x.name === name);
+                  const col = safeHex(colourFor(drv?.team, d.teams), '#888888');
+                  const n   = votes[name] || 0;
+                  const pct = total ? Math.round(n / total * 100) : 0;
+                  const mine = myVote === name;
+                  const won  = winner === name;
+                  return `<div class="dotd-card${mine ? ' dotd-voted' : ''}${won ? ' dotd-winner' : ''}"
+                               style="${mine ? `--tc:${col}` : ''}"
+                               ${offline || myVote ? '' : `onclick="voteDOTD('${esc(name).replace(/'/g, "\\'")}')"`}
+                               ${offline || myVote ? '' : 'role="button" tabindex="0"'}>
+                    <div class="dotd-name">${esc(name)}</div>
+                    <div class="dotd-team">${esc(drv?.team || '')}</div>
+                    ${reveal ? `<div class="dotd-bar-wrap"><div class="dotd-bar" style="width:${pct}%;background:${col}"></div></div>
+                      <div class="dotd-pct">${pct}%${n ? ` · ${n}` : ''}</div>` : ''}
+                    ${mine ? '<div class="dotd-check">✓ YOUR VOTE</div>' : ''}
+                    ${won && !mine ? '<div class="dotd-check">★ DRIVER OF THE DAY</div>' : ''}
                   </div>`;
               }).join('')}
             </div>
-            ${myVote ? `<div class="dotd-total">${totalVotes} vote${totalVotes!==1?'s':''}</div>` : ''}
+            ${reveal ? `<div class="dotd-total">${total} vote${total !== 1 ? 's' : ''}</div>` : ''}
           </div>`;
     }).join('');
 }
 
-function voteDOTD(name, key) {
-    let existing = null;
-    try { existing = localStorage.getItem(key); } catch(e) {}
-    if (existing) return; // already voted
+async function voteDOTD(name) {
+    if (dotdBusy) return;
+    const d = cls();
+    const race = (d.races || []).filter(r => r.results?.length).slice().reverse()
+        .find(r => (r.results || []).some(res => resultName(res, d.drivers) === name));
+    if (!race) return;
+
+    dotdBusy = true;
     try {
-        localStorage.setItem(key, name);
-        const counts = JSON.parse(localStorage.getItem(`${key}_counts`) || '{}');
-        counts[name] = (counts[name]||0) + 1;
-        localStorage.setItem(`${key}_counts`, JSON.stringify(counts));
-    } catch(e) {}
+        const r = await fetch(`${API_BASE}/api/dotd`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                class: currentClass.toLowerCase(),
+                race: dotdRaceKey(race),
+                driver: name,
+            }),
+        });
+        const body = await r.json();
+        if (body && body.ok) {
+            // The response carries the fresh tally and whatever this person
+            // had already voted for, so fold it straight in.
+            dotdData = dotdData || { races: {}, myVotes: {} };
+            dotdData.races = dotdData.races || {};
+            dotdData.myVotes = dotdData.myVotes || {};
+            dotdData.races[dotdRaceKey(race)] = body.votes || {};
+            if (body.myVote) dotdData.myVotes[dotdRaceKey(race)] = body.myVote;
+        } else if (body && body.error) {
+            console.warn('DOTD vote rejected:', body.error);
+        }
+    } catch (e) {
+        console.error('DOTD vote failed', e);
+    }
+    dotdBusy = false;
     renderDOTD();
+}
+
+// ── STEWARDS' DECISIONS ──────────────────────────────────
+// Hidden until there is something to show, so the nav doesn't carry an
+// empty page around for the first half of a season.
+function syncStewardsNav() {
+    const li = document.getElementById('navStewards');
+    if (!li) return;
+    const any = ['gt3','gt4'].some(k => ((rawData && rawData[k] && rawData[k].stewards) || []).length);
+    li.style.display = any ? '' : 'none';
+}
+
+/** Harsher penalties read as more serious at a glance. */
+function penaltyClass(p) {
+    const t = String(p || '').toLowerCase();
+    if (/disqualif/.test(t))                  return 'dq';
+    if (/no further action/.test(t))          return 'nfa';
+    if (/warning/.test(t))                    return 'warn';
+    return 'pen';
+}
+
+function renderStewards() {
+    const d = cls();
+    const el = document.getElementById('stewardsContent');
+    if (!el) return;
+
+    const list = (d.stewards || []).slice();
+    if (!list.length) {
+        el.innerHTML = `<div class="news-empty">
+            <div class="news-empty-icon">⚖️</div>
+            <p>No decisions this season.</p>
+            <p class="lv-note">Clean racing, or a quiet stewards' room.</p>
+          </div>`;
+        return;
+    }
+
+    // Newest round first, and newest decision first inside a round.
+    list.sort((a, b) => (Number(b.round) || 0) - (Number(a.round) || 0) || (b.at || 0) - (a.at || 0));
+
+    const races = d.races || [];
+    const raceName = rnd => (races.find(r => String(r.round) === String(rnd)) || {}).name || '';
+
+    let lastRound = null;
+    el.innerHTML = `<div class="stw-list">` + list.map(dec => {
+        const drv = (d.drivers || []).find(x => (x.id || x.name) === dec.driverId);
+        const name = drv ? drv.name : (dec.driverId || 'Unknown');
+        const col = safeHex(colourFor(drv?.team, d.teams), '#888888');
+        const head = String(dec.round) !== String(lastRound)
+            ? `<div class="stw-round">ROUND ${esc(String(dec.round || '?'))}${
+                 raceName(dec.round) ? ` — ${esc(raceName(dec.round))}` : ''}</div>` : '';
+        lastRound = dec.round;
+        return head + `
+          <div class="stw-card">
+            <span class="stw-bar" style="background:${col}"></span>
+            <div class="stw-body">
+              <div class="stw-top">
+                <span class="stw-driver">${esc(name)}</span>
+                <span class="stw-pen stw-${penaltyClass(dec.penalty)}">${esc(dec.penalty || '')}</span>
+              </div>
+              <div class="stw-reason">${esc(dec.reason || '')}</div>
+              ${dec.incident ? `<div class="stw-inc">${esc(dec.incident)}</div>` : ''}
+            </div>
+          </div>`;
+    }).join('') + `</div>`;
 }
 
 // ── LIVE TIMING ───────────────────────────────────────────
@@ -1624,6 +1991,7 @@ async function init() {
     // A failed fetch must not stop the page from rendering
     try { await fetchData(); } catch(e) { console.error('fetchData failed', e); }
     try { syncFviNav(); } catch(e) {}
+    try { syncStewardsNav(); } catch(e) {}
     try { navigate('home'); } catch(e) { console.error('navigate failed', e); }
     try { startCountdownTick(); } catch(e) {}
     try { pollLive(); } catch(e) {}

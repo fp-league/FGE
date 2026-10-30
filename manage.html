@@ -211,6 +211,14 @@ textarea { resize:vertical; min-height:80px; }
 .rc-btn kbd { display:inline-block; margin-left:0.5rem; padding:0.05rem 0.34rem;
   font:600 0.66rem/1.5 var(--font-ui,inherit); border-radius:3px;
   background:rgba(0,0,0,0.35); border:1px solid rgba(255,255,255,0.22); color:#fff; }
+
+.av-row { grid-template-columns: 14px 1fr 54px auto auto !important; }
+.av-state { font-family: var(--fu,inherit); font-size: 0.66rem; letter-spacing: 0.08em;
+  text-align: right; color: #7a7a7a; }
+.av-state.av-in  { color: #7ED38A; }
+.av-state.av-out { color: #ef9a9a; }
+.rc-mini.av-in.on  { background: rgba(46,125,50,0.35); border-color: #2e7d32; color: #cdebd1; }
+.rc-mini.av-out.on { background: rgba(198,40,40,0.3); border-color: #c62828; color: #f3c7c7; }
 .rc-mini.del:hover { background: rgba(198,40,40,0.25); border-color: #c62828; }
 .rc-delta { font-family: var(--font-ui,inherit); font-size: 0.74rem; color: #9fb8d0;
             min-width: 62px; text-align: right; font-variant-numeric: tabular-nums; }
@@ -340,6 +348,8 @@ textarea { resize:vertical; min-height:80px; }
       <button class="snav-item"       onclick="showSec('results')"><span class="snav-icon">🏁</span>Results</button>
       <button class="snav-item"       onclick="showSec('dotd')"><span class="snav-icon">⭐</span>DOTD</button>
       <button class="snav-item"       onclick="showSec('control')"><span class="snav-icon">🏁</span>Race Control</button>
+      <button class="snav-item"       onclick="showSec('availability')"><span class="snav-icon">✅</span>Available</button>
+      <button class="snav-item"       onclick="showSec('stewards')"><span class="snav-icon">⚖️</span>Stewards</button>
       <button class="snav-item"       onclick="showSec('season')"><span class="snav-icon">⚙️</span>Season</button>
     </aside>
 
@@ -570,7 +580,7 @@ textarea { resize:vertical; min-height:80px; }
           <div class="form-grid">
             <div class="form-group">
               <label class="fg-label">RACE</label>
-              <select id="rcRace"></select>
+              <select id="rcRace" onchange="rcPopulateEntry()"></select>
             </div>
             <div class="form-group">
               <label class="fg-label">SESSION TYPE</label>
@@ -650,6 +660,81 @@ textarea { resize:vertical; min-height:80px; }
             <button class="btn btn-ghost btn-sm" onclick="rcResetOrder()">RESET TO ENTRY LIST</button>
             <span class="img-size" id="rcSaveState"></span>
           </div>
+        </div>
+      </div>
+
+      <!-- AVAILABILITY -->
+      <div class="adm-section" id="sec-availability">
+        <div class="sec-head"><h2>WHO'S AVAILABLE</h2></div>
+        <div class="form-card">
+          <h3>ROUND</h3>
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="fg-label">RACE</label>
+              <select id="avRace" onchange="renderAvailability()"></select>
+            </div>
+          </div>
+          <p class="bk-note">Mark who is in or out for this round. Race control's entry
+             list ticks itself from this, so on race day you load the session and go.</p>
+          <div class="rc-entry-acts" style="margin-bottom:0.8rem">
+            <button class="btn btn-ghost btn-sm" onclick="setAllAvailability('in')">ALL IN</button>
+            <button class="btn btn-ghost btn-sm" onclick="setAllAvailability('')">CLEAR</button>
+            <span class="img-size" id="avCount"></span>
+          </div>
+          <div id="avList" class="rc-order"></div>
+          <div class="form-actions">
+            <button class="btn btn-white" onclick="saveAvailability()">SAVE</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- STEWARDS -->
+      <div class="adm-section" id="sec-stewards">
+        <div class="sec-head"><h2>STEWARDS' DECISIONS</h2></div>
+        <div class="form-card">
+          <h3>LOG A DECISION</h3>
+          <p class="bk-note">Every decision here shows on the public Stewards page with the
+             reason. Drivers arguing about a penalty is usually drivers not knowing why.</p>
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="fg-label">ROUND</label>
+              <select id="stRace"></select>
+            </div>
+            <div class="form-group">
+              <label class="fg-label">DRIVER</label>
+              <select id="stDriver"></select>
+            </div>
+            <div class="form-group">
+              <label class="fg-label">DECISION</label>
+              <select id="stPenalty">
+                <option>No further action</option>
+                <option>Warning</option>
+                <option>5 second penalty</option>
+                <option>10 second penalty</option>
+                <option>Drive-through</option>
+                <option>Grid penalty</option>
+                <option>Lap time deleted</option>
+                <option>Disqualified</option>
+                <option>Points deducted</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="fg-label">INCIDENT (optional)</label>
+              <input id="stIncident" placeholder="Lap 14, turn 9">
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="fg-label">REASON</label>
+            <input id="stReason" placeholder="Causing a collision with car 12">
+          </div>
+          <div class="form-actions">
+            <button class="btn btn-white" onclick="saveSteward()">ADD DECISION</button>
+            <button class="btn btn-ghost" onclick="clearStewardForm()" id="stCancel" style="display:none">CANCEL EDIT</button>
+          </div>
+        </div>
+        <div class="form-card">
+          <h3>LOGGED DECISIONS</h3>
+          <div id="stewardsTable"></div>
         </div>
       </div>
 
@@ -888,6 +973,8 @@ function refreshSec() {
         case 'results': populateResultsSelect(); break;
         case 'dotd':    populateDotdSelects(); break;
         case 'control': rcPopulateRaces(); rcPopulateEntry(); rcRefresh(); break;
+        case 'availability': avPopulateRaces(); renderAvailability(); break;
+        case 'stewards': renderStewards(); break;
         case 'season':  document.getElementById('seasonName').value = d().seasonName||'Season 1'; renderFviPanel(); renderPointsEditor(); renderStorageMeter(); break;
     }
 }
@@ -1645,9 +1732,14 @@ function rcPopulateEntry() {
     if (!box) return;
     const drivers = d().drivers || [];
     if (!drivers.length) { box.innerHTML = '<p class="bk-note">No drivers in this class.</p>'; return; }
+    // Pre-tick from the availability tracker. Only an explicit "out" unticks
+    // someone — not having replied is not the same as not turning up.
+    const idx = parseInt(document.getElementById('rcRace')?.value, 10);
+    const av = (Number.isFinite(idx) ? ((d().races || [])[idx] || {}).availability : null) || {};
+
     box.innerHTML = drivers.map((drv, i) => `
         <label class="rc-chk">
-          <input type="checkbox" data-entry="${i}" checked onchange="rcEntryCount()">
+          <input type="checkbox" data-entry="${i}"${av[drv.id || drv.name] === 'out' ? '' : ' checked'} onchange="rcEntryCount()">
           <span class="rc-dot" style="background:${esc(teamColour(drv.team))}"></span>
           <span>${esc(drv.name)}</span>
           ${drv.number ? `<em>#${esc(String(drv.number))}</em>` : ''}
@@ -1884,6 +1976,179 @@ function rcKeyHandler(e) {
 }
 
 document.addEventListener('keydown', rcKeyHandler);
+
+// ── WHO'S AVAILABLE ──────────────────────────────────────
+// Stored on the race itself as { driverId: 'in' | 'out' }. Anyone not listed
+// is simply unknown, which is different from "out" — unknown still gets
+// ticked on race day, because not replying usually means turning up.
+function avPopulateRaces() {
+    const sel = document.getElementById('avRace');
+    if (!sel) return;
+    const races = d().races || [];
+    const keep = sel.value;
+    sel.innerHTML = races.length
+        ? races.map((r, i) => `<option value="${i}">R${r.round || i + 1} — ${esc(r.name || '')}</option>`).join('')
+        : '<option value="">No races in this class</option>';
+    // Default to the next race without results rather than the first of the season.
+    if (keep && sel.querySelector(`option[value="${keep}"]`)) { sel.value = keep; return; }
+    const next = races.findIndex(r => !(r.results || []).length);
+    if (next >= 0) sel.value = String(next);
+}
+
+function avRace() {
+    const idx = parseInt(document.getElementById('avRace')?.value, 10);
+    return Number.isFinite(idx) ? (d().races || [])[idx] : null;
+}
+
+function renderAvailability() {
+    const box = document.getElementById('avList');
+    if (!box) return;
+    const race = avRace();
+    const drivers = d().drivers || [];
+    if (!race)          { box.innerHTML = '<p class="bk-note">Pick a race.</p>'; avCount(); return; }
+    if (!drivers.length){ box.innerHTML = '<p class="bk-note">No drivers in this class.</p>'; avCount(); return; }
+
+    const av = race.availability || {};
+    box.innerHTML = drivers.map(drv => {
+        const id = drv.id || drv.name;
+        const st = av[id] || '';
+        return `<div class="rc-row av-row" data-av="${esc(id)}">
+            <span class="rc-dot" style="background:${esc(teamColour(drv.team))}"></span>
+            <span class="rc-name">${esc(drv.name)}</span>
+            <span class="av-state av-${st || 'unknown'}">${st === 'in' ? 'IN' : st === 'out' ? 'OUT' : '—'}</span>
+            <button class="rc-mini av-in${st === 'in' ? ' on' : ''}"  onclick="setAvailability('${esc(id)}','in')">IN</button>
+            <button class="rc-mini av-out${st === 'out' ? ' on' : ''}" onclick="setAvailability('${esc(id)}','out')">OUT</button>
+          </div>`;
+    }).join('');
+    avCount();
+}
+
+function setAvailability(id, state) {
+    const race = avRace();
+    if (!race) return;
+    race.availability = race.availability || {};
+    // Pressing the same button again clears it back to unknown.
+    if (race.availability[id] === state) delete race.availability[id];
+    else race.availability[id] = state;
+    renderAvailability();
+}
+
+function setAllAvailability(state) {
+    const race = avRace();
+    if (!race) return;
+    if (!state) { delete race.availability; renderAvailability(); return; }
+    race.availability = {};
+    (d().drivers || []).forEach(drv => { race.availability[drv.id || drv.name] = state; });
+    renderAvailability();
+}
+
+function avCount() {
+    const el = document.getElementById('avCount');
+    if (!el) return;
+    const race = avRace();
+    const av = (race && race.availability) || {};
+    const vals = Object.values(av);
+    const inN  = vals.filter(v => v === 'in').length;
+    const outN = vals.filter(v => v === 'out').length;
+    const total = (d().drivers || []).length;
+    el.textContent = `${inN} in · ${outN} out · ${total - inN - outN} not said`;
+}
+
+function saveAvailability() {
+    saveData('Availability saved');
+}
+
+// ── STEWARDS' DECISIONS ──────────────────────────────────
+let stewardEditIdx = null;
+
+function stewardList() {
+    const c = adminClass.toLowerCase();
+    if (!adminData[c].stewards) adminData[c].stewards = [];
+    return adminData[c].stewards;
+}
+
+function renderStewards() {
+    const raceSel = document.getElementById('stRace');
+    const drvSel  = document.getElementById('stDriver');
+    if (raceSel) {
+        const races = d().races || [];
+        raceSel.innerHTML = races.length
+            ? races.map((r, i) => `<option value="${r.round || i + 1}">R${r.round || i + 1} — ${esc(r.name || '')}</option>`).join('')
+            : '<option value="">No races yet</option>';
+    }
+    if (drvSel) {
+        const drivers = d().drivers || [];
+        drvSel.innerHTML = drivers.length
+            ? drivers.map(x => `<option value="${esc(x.id || x.name)}">${esc(x.name)}</option>`).join('')
+            : '<option value="">No drivers yet</option>';
+    }
+
+    const box = document.getElementById('stewardsTable');
+    if (!box) return;
+    const list = stewardList();
+    if (!list.length) { box.innerHTML = '<p class="bk-note">Nothing logged yet.</p>'; return; }
+
+    const drivers = d().drivers || [];
+    const nameOf = id => (drivers.find(x => (x.id || x.name) === id) || {}).name || id;
+
+    box.innerHTML = list.slice().reverse().map((dec) => {
+        const i = list.indexOf(dec);
+        return `<div class="rc-row">
+            <span class="rc-pos">R${esc(String(dec.round || '?'))}</span>
+            <span class="rc-name">${esc(nameOf(dec.driverId))}</span>
+            <span class="rc-name" style="color:var(--accent)">${esc(dec.penalty || '')}</span>
+            <span class="rc-name" style="flex:2;color:var(--grey)">${esc(dec.reason || '')}</span>
+            <button class="rc-mini" onclick="editSteward(${i})" title="Edit">✎</button>
+            <button class="rc-mini del" onclick="deleteSteward(${i})" title="Delete">&times;</button>
+          </div>`;
+    }).join('');
+}
+
+function saveSteward() {
+    const round   = document.getElementById('stRace').value;
+    const driverId= document.getElementById('stDriver').value;
+    const penalty = document.getElementById('stPenalty').value;
+    const incident= document.getElementById('stIncident').value.trim();
+    const reason  = document.getElementById('stReason').value.trim();
+    if (!driverId) { toast('Pick a driver', 'err'); return; }
+    if (!reason)   { toast('A decision without a reason is the thing drivers argue about', 'err'); return; }
+
+    const entry = { round: Number(round) || round, driverId, penalty, incident, reason, at: Date.now() };
+    const list = stewardList();
+    if (stewardEditIdx !== null) list[stewardEditIdx] = { ...list[stewardEditIdx], ...entry };
+    else list.push(entry);
+
+    saveData(stewardEditIdx !== null ? 'Decision updated' : 'Decision logged');
+    clearStewardForm();
+    renderStewards();
+}
+
+function editSteward(i) {
+    const dec = stewardList()[i];
+    if (!dec) return;
+    stewardEditIdx = i;
+    document.getElementById('stRace').value     = dec.round || '';
+    document.getElementById('stDriver').value   = dec.driverId || '';
+    document.getElementById('stPenalty').value  = dec.penalty || 'Warning';
+    document.getElementById('stIncident').value = dec.incident || '';
+    document.getElementById('stReason').value   = dec.reason || '';
+    document.getElementById('stCancel').style.display = '';
+    window.scrollTo(0, 0);
+}
+
+function deleteSteward(i) {
+    if (!confirm('Delete this decision?')) return;
+    stewardList().splice(i, 1);
+    saveData('Decision deleted');
+    renderStewards();
+}
+
+function clearStewardForm() {
+    stewardEditIdx = null;
+    ['stIncident','stReason'].forEach(id => { const e = document.getElementById(id); if (e) e.value = ''; });
+    const c = document.getElementById('stCancel');
+    if (c) c.style.display = 'none';
+}
 
 function teamColour(name) {
     const t = (d().teams || []).find(x => x.name === name);
