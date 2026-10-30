@@ -16,6 +16,7 @@
 
 import { verifyRequest, handleCommand, buildResults } from './discord.js';
 import { openPack, showCollection, showCard, showCollectors, CARD_VIEWS } from './cards.js';
+import { COMMANDS } from './commands.js';
 
 const MAX_NAME = 24;
 const MAX_IDENT = 64;
@@ -382,6 +383,57 @@ async function getImage(request, env, pathname) {
 const LIVE_STATUSES = ['idle','formation','green','sc','vsc','red','chequered','finished'];
 
 /**
+ * POST /api/discord/register — admin only.
+ *
+ * Registers the slash commands using the bot token the Worker already holds.
+ * The token is deliberately a Worker secret and nothing else, so without
+ * this the only way to update commands is from whichever machine happens to
+ * have a copy of it — which stops being true the moment you change PC.
+ */
+async function postRegisterCommands(request, env) {
+  if (env.ADMIN_TOKEN && request.headers.get('X-Admin-Token') !== env.ADMIN_TOKEN) {
+    return bad('not authorised', request, env, 401);
+  }
+  if (!env.DISCORD_TOKEN) {
+    return bad('no DISCORD_TOKEN secret on this Worker', request, env, 503);
+  }
+
+  const auth = { Authorization: `Bot ${env.DISCORD_TOKEN}` };
+
+  // The application id is not stored anywhere; the token identifies it.
+  const meRes = await fetch('https://discord.com/api/v10/applications/@me', { headers: auth });
+  if (!meRes.ok) {
+    return bad(`Discord rejected the bot token (${meRes.status})`, request, env, 502);
+  }
+  const me = await meRes.json();
+
+  // A guild registration appears instantly; global can take an hour.
+  const guild = new URL(request.url).searchParams.get('guild') || env.DISCORD_GUILD_ID;
+  const url = guild
+    ? `https://discord.com/api/v10/applications/${me.id}/guilds/${guild}/commands`
+    : `https://discord.com/api/v10/applications/${me.id}/commands`;
+
+  const res = await fetch(url, {
+    method: 'PUT',
+    headers: { ...auth, 'Content-Type': 'application/json' },
+    body: JSON.stringify(COMMANDS),
+  });
+
+  const body = await res.json();
+  if (!res.ok) {
+    return json({ ok: false, error: 'Discord refused the command list', detail: body },
+      { status: 502 }, request, env);
+  }
+
+  return json({
+    ok: true,
+    app: me.name,
+    scope: guild ? `guild ${guild}` : 'global (up to an hour to appear)',
+    registered: body.map(c => '/' + c.name),
+  }, null, request, env);
+}
+
+/**
  * Trading cards. Returns null when the interaction is not a card command, so
  * the caller falls through to the ordinary synchronous commands.
  */
@@ -709,6 +761,10 @@ export default {
 
         return new Response(JSON.stringify({ type: 4, data: { content: 'Unsupported interaction.' } }),
           { headers: { 'Content-Type': 'application/json' } });
+      }
+
+      if (pathname === '/api/discord/register' && request.method === 'POST') {
+        return await postRegisterCommands(request, env);
       }
 
       if (pathname === '/api/announce' && request.method === 'POST') {

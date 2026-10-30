@@ -187,11 +187,27 @@ correctly.
 
 **4. Register the commands**
 
+Easiest, and needs nothing installed — the Worker already has the bot token,
+so ask it to do the registering:
+
+```bash
+curl -X POST https://fge-api.<your-subdomain>.workers.dev/api/discord/register \
+  -H "X-Admin-Token: YOUR_ADMIN_TOKEN"
+```
+
+It replies with the commands it registered. Add `?guild=SERVER_ID` to
+override the server; otherwise it uses the `DISCORD_GUILD_ID` secret.
+
+The old way still works if you have the bot token on the machine in front of
+you, and does not need the Worker deployed:
+
 ```powershell
 $env:DISCORD_APP_ID="your application id"
 $env:DISCORD_TOKEN="your bot token"
 node register-commands.mjs YOUR_SERVER_ID
 ```
+
+Both read the same list from `src/commands.js`, so they cannot disagree.
 
 Passing your server id makes the commands appear instantly. Leave it off to
 register globally, which can take up to an hour.
