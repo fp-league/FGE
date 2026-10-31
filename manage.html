@@ -241,6 +241,10 @@ textarea { resize:vertical; min-height:80px; }
 .watch-preview.picking { cursor:crosshair; outline:2px solid #FFC400; }
 .watch-preview { width:100%; max-width:320px; border:1px solid var(--line2); border-radius:3px;
   margin-top:0.7rem; display:block; }
+.watch-diag { margin-top:0.7rem; padding:0.7rem 0.8rem; border:1px solid var(--line2);
+  border-radius:3px; background:rgba(0,0,0,0.25); font-size:0.68rem; line-height:1.5;
+  white-space:pre-wrap; word-break:break-word; max-height:340px; overflow:auto;
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
 .rc-pen { width:52px; flex:0 0 52px; text-align:center; font-variant-numeric:tabular-nums;
   opacity:0.45; }
 .rc-pen:focus { opacity:1; }
@@ -832,14 +836,17 @@ textarea { resize:vertical; min-height:80px; }
                 </label>
                 <span class="watch-dot" id="watchDot"></span>
                 <span class="img-size" id="watchStatus">Not watching.</span>
+                <span class="img-size" id="watchBuild" style="opacity:.55">reader loading…</span>
               </div>
               <div class="rc-entry-acts" id="watchTools" style="display:none">
                 <button class="btn btn-ghost btn-sm" id="watchPickBtn"
                         onclick="watchPickArea()">PICK THE BOARD AREA</button>
                 <button class="btn btn-ghost btn-sm" onclick="watchClearArea()">USE THE WHOLE SCREEN</button>
                 <button class="btn btn-ghost btn-sm" onclick="watchSaveFrame()">SAVE WHAT IT SEES</button>
+                <button class="btn btn-white btn-sm" onclick="watchDiag()">WHAT DO YOU SEE?</button>
                 <span class="img-size" id="watchArea">looking at the whole screen</span>
               </div>
+              <pre id="watchDiagOut" class="watch-diag" style="display:none"></pre>
               <p class="bk-note">Share the window you are spectating in and it reads the board
                  by itself — order and gaps, straight onto the timing page and the overlay.
                  Nobody types anything. You can still drag, edit or stop at any moment.</p>
@@ -2909,17 +2916,32 @@ async function watchTick() {
     try {
         watchSay('reading…', true);
         if (!watchVideo.videoWidth) throw new Error('no picture yet');
-        const { canvas, full } = watchFrame(watchVideo);
+        let { canvas, full } = watchFrame(watchVideo);
+        let usingRegion = !!watchRegion;
+
+        let table = window.ocrFindTable(canvas);
+
+        // A box that clips the top row, or sits a little off, used to mean
+        // "no rows" and nothing else. The whole frame reads too, so try it
+        // before giving up — a roughly-drawn box should cost accuracy on
+        // the gaps, not the whole read.
+        if (!table && usingRegion) {
+            const t2 = window.ocrFindTable(full);
+            if (t2) { table = t2; canvas = full; usingRegion = false; }
+        }
         const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
-        const table = window.ocrFindTable(canvas);
         if (!table) {
             watchSay(watchRegion
-                ? 'no rows in that box — try PICK THE BOARD AREA again'
+                ? 'no rows in that box or on the screen — press SAVE WHAT IT SEES and send me the PNG'
                 : 'cannot find the board — press PICK THE BOARD AREA and drag a box round it');
             watchPreview(full, null);
             return;
         }
+        if (usingRegion !== !!watchRegion) watchCols = null;  // different frame, different columns
+        const frameOff = usingRegion
+            ? { x: watchRegion.x, y: watchRegion.y }
+            : { x: 0, y: 0 };
 
         // Headers once. They do not move, and reading seven cells every
         // pass to learn the same thing would be most of the budget.
@@ -2962,7 +2984,7 @@ async function watchTick() {
         }
 
         const named = read.filter(r => r.name);
-        if (!named.length) { watchSay('could not read any names'); watchPreview(full, table); return; }
+        if (!named.length) { watchSay('could not read any names'); watchPreview(full, table, frameOff); return; }
 
         const matched = window.ocrMatchAll(named.map(r => r.name), d().drivers || []);
         const order = window.watchBuildOrder(named, matched);
@@ -2971,7 +2993,7 @@ async function watchTick() {
         if (sure < Math.ceil(order.length / 2)) {
             watchSay(`only matched ${sure} of ${order.length} — not pushing` +
                      (watchRegion ? '' : ' · try PICK THE BOARD AREA'));
-            watchPreview(full, table);
+            watchPreview(full, table, frameOff);
             return;
         }
 
@@ -2989,7 +3011,7 @@ async function watchTick() {
         } else {
             watchSay(`${sure} drivers · no change`);
         }
-        watchPreview(full, table);
+        watchPreview(full, table, frameOff);
     } catch (e) {
         watchSay('hiccup: ' + (e.message || 'could not read that frame'));
     } finally {
@@ -3009,7 +3031,7 @@ async function watchTick() {
  * thing you need to see is where your box is sitting relative to the
  * board — and a picture of the inside of the box cannot show you that.
  */
-function watchPreview(full, table) {
+function watchPreview(full, table, rowOffset) {
     const el = document.getElementById('watchPreview');
     if (!el || !full || !full.width) return;
     const W = 320, scale = W / full.width;
@@ -3021,7 +3043,11 @@ function watchPreview(full, table) {
 
     // Row boxes are in the crop's coordinates; shift them by where the
     // crop sits in the frame.
-    const off = watchRegion ? { x: watchRegion.x, y: watchRegion.y } : { x: 0, y: 0 };
+    // Where the rows were found. Usually the box, but the reader falls back
+    // to the whole frame when a box finds nothing, and then the rows are in
+    // frame coordinates — drawing them shifted by the box would put the
+    // green boxes somewhere the rows are not.
+    const off = rowOffset || (watchRegion ? { x: watchRegion.x, y: watchRegion.y } : { x: 0, y: 0 });
     if (watchRegion) {
         ctx.strokeStyle = '#FFC400';
         ctx.lineWidth = 1;
@@ -3059,6 +3085,161 @@ function watchSaveFrame() {
     if (watchRegion) setTimeout(() => save(canvas, 'box'), 400);
     toast(watchRegion ? 'Saved two files — the whole screen and the box'
                       : 'Saved the screen', 'ok');
+}
+
+/**
+ * One pass, out loud.
+ *
+ * "Not working" can mean any of six different things — stale code, a frame
+ * that is all black, no rows found, rows found but the wrong ones, names
+ * read as gibberish, or names read fine and matched to nobody. The status
+ * line has room for one of those. This prints all of them, so a failure
+ * names itself instead of costing another round of guessing.
+ *
+ * Deliberately separate from watchTick: it ignores the caches and the
+ * push rules, because both of those hide things we want to see.
+ */
+async function watchDiag() {
+    const out = document.getElementById('watchDiagOut');
+    out.style.display = '';
+    const L = [];
+    const say = t => { L.push(t); out.textContent = L.join('\n'); };
+
+    say('reader build : ' + (window.FGE_BUILD || 'UNKNOWN — modules did not load'));
+    say('page loaded  : ' + new Date(performance.timeOrigin).toLocaleTimeString());
+
+    for (const n of ['ocrFindTable', 'ocrCellCanvas', 'ocrPlayerColumn', 'ocrMatchAll', 'watchCellHash']) {
+        if (typeof window[n] !== 'function') { say('MISSING     : window.' + n); }
+    }
+
+    if (!watchOn || !watchVideo) { say('\nNot watching. Press WATCH THE SCREEN first.'); return; }
+    if (!watchVideo.videoWidth) { say('\nNo picture yet — the share has not started sending frames.'); return; }
+
+    say('');
+    say('shared frame : ' + watchVideo.videoWidth + '×' + watchVideo.videoHeight);
+    say('reading      : ' + (watchRegion
+        ? `box ${Math.round(watchRegion.x)},${Math.round(watchRegion.y)} `
+          + `${Math.round(watchRegion.w)}×${Math.round(watchRegion.h)}`
+        : 'the whole screen'));
+
+    let canvas, full, ctx;
+    try {
+        ({ canvas, full } = watchFrame(watchVideo));
+        ctx = canvas.getContext('2d', { willReadFrequently: true });
+    } catch (e) { say('\nGrabbing the frame threw: ' + e.message); return; }
+
+    // A frame that is entirely one colour is a black or paused capture, and
+    // no amount of detector tuning fixes that.
+    try {
+        const px = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+        let lo = 255, hi = 0, sum = 0, n = 0;
+        for (let i = 0; i < px.length; i += 4 * 97) {
+            const v = (px[i] * 299 + px[i + 1] * 587 + px[i + 2] * 114) / 1000;
+            if (v < lo) lo = v; if (v > hi) hi = v; sum += v; n++;
+        }
+        say(`brightness   : ${Math.round(lo)}–${Math.round(hi)}, mean ${Math.round(sum / n)}`);
+        if (hi - lo < 12) say('  ⚠ the frame is nearly all one colour — is the share actually showing the game?');
+    } catch (e) { say('brightness   : could not sample (' + e.message + ')'); }
+
+    let table = window.ocrFindTable(canvas);
+    let where = watchRegion ? 'inside the box' : 'the whole screen';
+    if (!table && watchRegion) {
+        const t2 = window.ocrFindTable(full);
+        if (t2) { table = t2; canvas = full; ctx = canvas.getContext('2d', { willReadFrequently: true });
+                  where = 'the whole screen (the box found nothing)'; }
+    }
+    const frameOff = (where === 'inside the box')
+        ? { x: watchRegion.x, y: watchRegion.y } : { x: 0, y: 0 };
+    say('');
+    if (!table) {
+        say('findTable    : FOUND NOTHING, in the box or on the screen');
+        say('');
+        say('The detector got a frame and no rows out of it. Press SAVE WHAT IT');
+        say('SEES and send me the PNG — that is the frame it failed on, and I can');
+        say('run the detector against it directly.');
+        watchPreview(full, null);
+        return;
+    }
+    say(`found in     : ${where}`);
+    say(`findTable    : ${table.rows.length} rows, ${table.cols.length} columns`);
+    say(`  header y   : ${Math.round(table.header[0])}–${Math.round(table.header[1])}`);
+    say('  rows y     : ' + table.rows.map(r => Math.round(r[0]) + '-' + Math.round(r[1])).join(', '));
+    say('  cols x     : ' + table.cols.map(c => Math.round(c[0]) + '-' + Math.round(c[1])).join(', '));
+
+    if (!watchWorker) { say('\nOCR engine is not up yet — give it a few seconds and press again.'); return; }
+
+    say('');
+    say('reading the header…');
+    const heads = [];
+    for (const [x0, x1] of table.cols) {
+        const c = window.ocrCellCanvas(canvas, x0, table.header[0], x1, table.header[1], 3);
+        heads.push(((await watchWorker.recognize(c)).data.text || '').replace(/\s+/g, ' ').trim());
+    }
+    say('header text  : ' + heads.map(h => JSON.stringify(h)).join(' | '));
+
+    const pc = window.ocrPlayerColumn(heads, table.cols);
+    say(`name column  : #${pc} (x ${Math.round(table.cols[pc][0])}-${Math.round(table.cols[pc][1])})`);
+
+    say('');
+    say('reading the names…');
+    const names = [];
+    for (const [y0, y1] of table.rows) {
+        const [px0, px1] = table.cols[pc];
+        const c = window.ocrCellCanvas(canvas, px0, y0, px1, y1, 3);
+        names.push(((await watchWorker.recognize(c)).data.text || '').replace(/\s+/g, ' ').trim());
+    }
+    names.forEach((n, i) => say(`  row ${i + 1}      : ${JSON.stringify(n)}`));
+
+    const drivers = (d().drivers || []);
+    say('');
+    say(`drivers here : ${drivers.length} in ${String(adminClass || '?').toUpperCase()}`);
+    if (!drivers.length) {
+        say('  ⚠ no drivers in this class — there is nothing for it to match names to.');
+        watchPreview(full, table, frameOff);
+        return;
+    }
+
+    const live = names.filter(Boolean);
+    if (!live.length) {
+        say('  ⚠ every name came back empty. The rows are in the wrong place, or the');
+        say('    name column is not the one being read.');
+        watchPreview(full, table, frameOff);
+        return;
+    }
+
+    const matched = window.ocrMatchAll(live, drivers);
+    say('');
+    say('matching     :');
+    live.forEach((n, i) => {
+        const m = matched[i];
+        if (m && m.driver) {
+            say(`  ${JSON.stringify(n)} → ${m.driver.name} ${m.confidence.toFixed(2)}` +
+                (m.certain ? '' : '  ⚠ not certain'));
+        } else {
+            // Say what it nearly was. "Matched nobody" is not actionable;
+            // "nearly Ben, 0.61, needs 0.66" tells you to set a Fortnite name.
+            let best = null;
+            for (const dr of drivers) {
+                const sc = window.ocrScore(n, dr);
+                if (!best || sc > best.sc) best = { dr, sc };
+            }
+            say(`  ${JSON.stringify(n)} → nobody` +
+                (best ? ` · closest ${best.dr.name} ${best.sc.toFixed(2)} (needs 0.66)` : ''));
+        }
+    });
+
+    const sure = matched.filter(m => m && m.driver).length;
+    say('');
+    say(`result       : ${sure} of ${live.length} matched · ` +
+        (sure >= Math.ceil(live.length / 2)
+            ? 'enough to push'
+            : 'NOT enough to push (needs half)'));
+    if (sure < live.length) {
+        say('');
+        say('Unmatched names are usually a Fortnite name the driver has not got set.');
+        say('Open the driver in DRIVERS and put their in-game name in "Fortnite name".');
+    }
+    watchPreview(full, table, frameOff);
 }
 
 /** Preview pixels → the shared video's own pixels. */
@@ -5495,23 +5676,37 @@ document.addEventListener('DOMContentLoaded', () => {
   // The table-finding and name-matching live in ./ocr/ so they can be
   // tested outside a browser. The rest of this page is a classic script,
   // so they come in here and go on window.
-  import { findTable, cellCanvas, playerColumn } from './ocr/read-board.js';
-  import { matchAll, score } from './ocr/match.js';
-  window.ocrFindTable = findTable;
-  window.ocrCellCanvas = cellCanvas;
-  window.ocrPlayerColumn = playerColumn;
-  window.ocrMatchAll = matchAll;
-  window.ocrScore = score;
-  const season = await import('./lib/season.js');
+  //
+  // Every import carries BUILD as a query. GitHub Pages serves these with
+  // max-age=600, and a browser that already has read-board.js will happily
+  // keep using yesterday's copy for ten minutes after a deploy — which has
+  // already cost us one wrong diagnosis. A changed query is a different URL,
+  // so a deploy lands the moment the page does. Bump it with every change in
+  // ./ocr or ./lib.
+  const BUILD = '2026-10-31b';
+  const V = '?v=' + BUILD;
+  const [rb, mt, season, watch, pen] = await Promise.all([
+    import('./ocr/read-board.js' + V),
+    import('./ocr/match.js' + V),
+    import('./lib/season.js' + V),
+    import('./lib/watch.js' + V),
+    import('./lib/penalties.js' + V),
+  ]);
+  window.FGE_BUILD = BUILD;
+  window.ocrFindTable = rb.findTable;
+  window.ocrCellCanvas = rb.cellCanvas;
+  window.ocrPlayerColumn = rb.playerColumn;
+  window.ocrMatchAll = mt.matchAll;
+  window.ocrScore = mt.score;
   window.seasonSummary = season.seasonSummary;
-  const watch = await import('./lib/watch.js');
   window.watchCellHash = watch.cellHash;
   window.watchBuildOrder = watch.buildOrder;
   window.watchShouldPush = watch.shouldPush;
-  const pen = await import('./lib/penalties.js');
   window.applyPenalties = pen.applyPenalties;
   window.gapSeconds = pen.gapSeconds;
   window.penLabel = pen.penLabel;
+  const stamp = document.getElementById('watchBuild');
+  if (stamp) stamp.textContent = 'reader ' + BUILD;
 </script>
 </body>
 </html>
