@@ -837,6 +837,7 @@ textarea { resize:vertical; min-height:80px; }
                 <button class="btn btn-ghost btn-sm" id="watchPickBtn"
                         onclick="watchPickArea()">PICK THE BOARD AREA</button>
                 <button class="btn btn-ghost btn-sm" onclick="watchClearArea()">USE THE WHOLE SCREEN</button>
+                <button class="btn btn-ghost btn-sm" onclick="watchSaveFrame()">SAVE WHAT IT SEES</button>
                 <span class="img-size" id="watchArea">looking at the whole screen</span>
               </div>
               <p class="bk-note">Share the window you are spectating in and it reads the board
@@ -2968,7 +2969,8 @@ async function watchTick() {
 
         const sure = order.filter(r => r.driver).length;
         if (sure < Math.ceil(order.length / 2)) {
-            watchSay(`only matched ${sure} of ${order.length} — not pushing`);
+            watchSay(`only matched ${sure} of ${order.length} — not pushing` +
+                     (watchRegion ? '' : ' · try PICK THE BOARD AREA'));
             watchPreview(full, table);
             return;
         }
@@ -3033,6 +3035,30 @@ function watchPreview(full, table) {
         ctx.strokeRect((off.x + cx0) * scale, (off.y + y0) * scale,
                        (cx1 - cx0) * scale, (y1 - y0) * scale);
     });
+}
+
+/**
+ * Download the exact frame it is working from, full resolution.
+ *
+ * The preview is 320px wide, which is fine for aiming a box and useless
+ * for working out why a board will not read. This saves what the detector
+ * actually sees, so a failure can be looked at rather than guessed at.
+ */
+function watchSaveFrame() {
+    if (!watchVideo || !watchVideo.videoWidth) { toast('Nothing being watched', 'err'); return; }
+    const { canvas, full } = watchFrame(watchVideo);
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const save = (c, suffix) => c.toBlob(blob => {
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `fge-watch-${stamp}-${suffix}.png`;
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    }, 'image/png');
+    save(full, 'screen');
+    if (watchRegion) setTimeout(() => save(canvas, 'box'), 400);
+    toast(watchRegion ? 'Saved two files — the whole screen and the box'
+                      : 'Saved the screen', 'ok');
 }
 
 /** Preview pixels → the shared video's own pixels. */
