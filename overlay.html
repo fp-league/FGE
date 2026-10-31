@@ -16,6 +16,53 @@ html,body { width:1920px; height:1080px; background:transparent; overflow:hidden
 
 .hidden { display:none !important; }
 
+/* ── lower third ──
+   Bottom left, clear of the tower. Slides in rather than appearing, because
+   a graphic that pops is a graphic that looks like a glitch. */
+#lower { position:absolute; left:46px; bottom:46px; opacity:0; transform:translateY(18px);
+  transition:opacity .28s ease, transform .28s cubic-bezier(.2,.8,.2,1); pointer-events:none; }
+#lower.on { opacity:1; transform:none; }
+.lw-card { display:flex; align-items:stretch; background:rgba(14,15,18,.94);
+  border-left:5px solid var(--cls,#E10600); border-radius:3px; overflow:hidden;
+  box-shadow:0 10px 36px rgba(0,0,0,.55); }
+.lw-photo { width:92px; background:#1b1d22 center/cover no-repeat; flex:0 0 92px; }
+.lw-text { padding:13px 20px 13px 16px; display:flex; flex-direction:column; justify-content:center; }
+.lw-top { display:flex; align-items:baseline; gap:10px; }
+.lw-num { font-size:19px; font-weight:800; color:var(--cls,#E10600); font-variant-numeric:tabular-nums; }
+.lw-name { font-size:27px; font-weight:800; letter-spacing:.01em; line-height:1.05; }
+.lw-team { font-size:13px; color:#9aa0aa; letter-spacing:.06em; text-transform:uppercase; margin-top:3px; }
+.lw-stats { display:flex; align-items:center; gap:20px; padding:0 22px; background:rgba(255,255,255,.05); }
+.lw-stat { text-align:center; }
+.lw-stat b { display:block; font-size:21px; font-weight:800; font-variant-numeric:tabular-nums; }
+.lw-stat span { font-size:9.5px; letter-spacing:.14em; color:#9aa0aa; }
+
+/* ── fastest lap flash ── */
+#flash { position:absolute; left:50%; top:112px; transform:translate(-50%,-12px);
+  display:flex; align-items:center; gap:14px; padding:11px 24px; border-radius:4px;
+  background:linear-gradient(100deg,#8B2FD6,#B14BFF); opacity:0;
+  transition:opacity .25s ease, transform .25s cubic-bezier(.2,.8,.2,1);
+  box-shadow:0 10px 34px rgba(139,47,214,.5); white-space:nowrap; }
+#flash.on { opacity:1; transform:translate(-50%,0); }
+.fl-tag { font-size:11px; font-weight:800; letter-spacing:.16em; }
+.fl-name { font-size:21px; font-weight:800; }
+.fl-time { font-size:21px; font-weight:800; font-variant-numeric:tabular-nums; color:#F3E3FF; }
+
+/* ── battle box ── */
+#battle { position:absolute; right:46px; top:46px; width:290px; opacity:0;
+  transform:translateX(14px); transition:opacity .28s ease, transform .28s ease;
+  background:rgba(14,15,18,.94); border-radius:3px; overflow:hidden;
+  box-shadow:0 10px 36px rgba(0,0,0,.55); }
+#battle.on { opacity:1; transform:none; }
+.bt-head { background:var(--cls,#E10600); font-size:10.5px; font-weight:800;
+  letter-spacing:.14em; padding:5px 12px; }
+.bt-pair { padding:10px 12px 12px; }
+.bt-car { display:flex; align-items:center; gap:9px; padding:5px 0; }
+.bt-car i { width:5px; height:19px; border-radius:1px; background:#888; flex:0 0 5px; }
+.bt-pos { font-size:14px; font-weight:800; color:#9aa0aa; width:20px; font-variant-numeric:tabular-nums; }
+.bt-name { font-size:17px; font-weight:700; }
+.bt-gap { text-align:center; font-size:25px; font-weight:800; color:#FFC400;
+  font-variant-numeric:tabular-nums; padding:3px 0; }
+
 /* ── timing tower ── */
 #tower { position:absolute; top:46px; left:46px; width:410px; }
 .tw-head {
@@ -160,6 +207,35 @@ html,body { width:1920px; height:1080px; background:transparent; overflow:hidden
   <div id="champ">
     <div class="ch-head">CHAMPIONSHIP AFTER THIS ROUND</div>
     <div id="chRows"></div>
+  </div>
+
+  <!-- Lower third: who the camera is on. -->
+  <div id="lower">
+    <div class="lw-card">
+      <div class="lw-photo" id="lwPhoto"></div>
+      <div class="lw-text">
+        <div class="lw-top"><span class="lw-num" id="lwNum"></span><span class="lw-name" id="lwName"></span></div>
+        <div class="lw-team" id="lwTeam"></div>
+      </div>
+      <div class="lw-stats" id="lwStats"></div>
+    </div>
+  </div>
+
+  <!-- Fastest lap. Purple, because that is what purple means. -->
+  <div id="flash">
+    <span class="fl-tag" id="flTag">FASTEST LAP</span>
+    <span class="fl-name" id="flName"></span>
+    <span class="fl-time" id="flTime"></span>
+  </div>
+
+  <!-- Two cars and the gap between them. -->
+  <div id="battle">
+    <div class="bt-head">BATTLE FOR <span id="btFor">P2</span></div>
+    <div class="bt-pair">
+      <div class="bt-car" id="btA"><i></i><span class="bt-pos"></span><span class="bt-name"></span></div>
+      <div class="bt-gap" id="btGap">+0.0</div>
+      <div class="bt-car" id="btB"><i></i><span class="bt-pos"></span><span class="bt-name"></span></div>
+    </div>
   </div>
 
   <div id="msg"><span class="lbl">RACE CONTROL</span><span class="txt" id="msgTxt"></span></div>
@@ -343,6 +419,143 @@ function champRows() {
   });
 }
 
+/**
+ * The three stream graphics. All driven from race control, all off by
+ * default — an overlay is mostly a timing tower and nothing else.
+ *
+ * Everything is looked up from the running order and the league data the
+ * overlay already holds, so race control sends an id rather than a bundle
+ * of text that could disagree with the tower beside it.
+ */
+const FLASH_MS = 9000;          // how long a fastest lap stays up
+
+function driverRow(id) {
+  return (state.running || []).find(r => r.driverId === id) || null;
+}
+
+function driverRecord(id) {
+  const cd = (league && league[state.class || 'gt3']) || {};
+  return (cd.drivers || []).find(d => (d.id || d.name) === id) || null;
+}
+
+function renderGraphics() {
+  const g = state.graphics || {};
+
+  // The name card shows a season record, so the league has to be loaded
+  // during the race rather than only after the flag, which is when the
+  // championship panel used to be the only thing that wanted it.
+  if (g.lower && g.lower.driverId && !leagueTried) { loadLeague().then(render); }
+
+  // ── lower third ──
+  const lw = g.lower && g.lower.driverId ? g.lower.driverId : null;
+  const row = lw ? driverRow(lw) : null;
+  const drv = lw ? driverRecord(lw) : null;
+  if (lw && (row || drv)) {
+    const name = (drv && drv.name) || (row && row.name) || '';
+    const num  = String((drv && drv.number) ?? (row && row.number) ?? '').trim();
+    const team = (drv && drv.team) || (row && row.team) || '';
+    $('lwName').textContent = name;
+    $('lwNum').textContent  = num ? '#' + num : '';
+    $('lwTeam').textContent = team;
+    const photo = drv && (drv.photo || drv.cardImage);
+    $('lwPhoto').style.backgroundImage = photo ? `url("${String(photo).replace(/"/g, '\\"')}")` : '';
+    $('lwPhoto').style.display = photo ? '' : 'none';
+
+    const st = seasonStat(lw, name);
+    $('lwStats').innerHTML = st
+      ? `<div class="lw-stat"><b>P${st.pos}</b><span>CHAMP</span></div>
+         <div class="lw-stat"><b>${st.points}</b><span>PTS</span></div>
+         <div class="lw-stat"><b>${st.wins}</b><span>WINS</span></div>`
+      : '';
+    $('lower').className = 'on';
+  } else {
+    $('lower').className = '';
+  }
+
+  // ── fastest lap ──
+  // Timed from when race control sent it, not from when this overlay first
+  // saw it: a browser source reloaded mid-race must not replay an old flash.
+  const fl = g.flash;
+  const fresh = fl && fl.at && (now() - fl.at) < FLASH_MS;
+  if (fresh) {
+    $('flTag').textContent  = fl.kind === 'lap' ? 'FASTEST LAP' : String(fl.kind || '').toUpperCase();
+    $('flName').textContent = fl.name || '';
+    $('flTime').textContent = fl.time || '';
+    $('flash').className = 'on';
+    // Take it down on its own rather than waiting for the next poll.
+    clearTimeout(flashTimer);
+    flashTimer = setTimeout(() => { $('flash').className = ''; }, FLASH_MS - (now() - fl.at));
+  } else if (!fl) {
+    $('flash').className = '';
+  }
+
+  // ── battle box ──
+  const bt = g.battle;
+  const a = bt && bt.a ? driverRow(bt.a) : null;
+  const b = bt && bt.b ? driverRow(bt.b) : null;
+  if (a && b) {
+    const order = (state.running || []).filter(r => !r.out && !r.dsq);
+    const pa = order.indexOf(a) + 1, pb = order.indexOf(b) + 1;
+    const fill = (el, r, pos) => {
+      el.querySelector('i').style.background = hex(r.colour);
+      el.querySelector('.bt-pos').textContent = pos > 0 ? 'P' + pos : '';
+      el.querySelector('.bt-name').textContent = r.name || '';
+    };
+    fill($('btA'), a, pa);
+    fill($('btB'), b, pb);
+    $('btFor').textContent = pa > 0 ? 'P' + Math.min(pa, pb || pa) : '';
+    // The gap between two cars is the difference of their gaps to the
+    // leader, which is the only thing the tower actually knows.
+    const ga = gapSec(a.gap), gb = gapSec(b.gap);
+    $('btGap').textContent = (ga == null || gb == null)
+      ? '' : '+' + Math.abs(gb - ga).toFixed(1);
+    $('battle').className = 'on';
+  } else {
+    $('battle').className = '';
+  }
+}
+
+let flashTimer = null;
+
+/**
+ * Championship position, points and wins for one driver.
+ *
+ * Built from standingsOf, which is the same sum the championship panel
+ * uses — a name card saying a different points total from the panel two
+ * seconds later would be worse than showing nothing.
+ */
+function seasonStat(driverId, fallbackName) {
+  const cd = (league && league[state.class || 'gt3']) || {};
+  const drivers = cd.drivers || [];
+  const key = rosterKey({ driverId, name: fallbackName }, drivers);
+  if (!key) return null;
+
+  const { pts } = standingsOf(cd);
+  const ranked = Object.keys(pts).sort((a, b) => pts[b] - pts[a]);
+  const pos = ranked.indexOf(key) + 1;
+  if (!pos) return null;
+
+  let wins = 0;
+  (cd.races || []).forEach(r => {
+    (r.results || []).forEach((res, i) => {
+      const p = (typeof res === 'object' && res.pos != null) ? res.pos : i + 1;
+      if (Number(p) === 1 && keyOf(res, drivers) === key) wins++;
+    });
+  });
+  return { pos, points: pts[key] || 0, wins };
+}
+
+/** "+1.234" → 1.234. Mirrors gapSeconds in lib/penalties.js. */
+function gapSec(raw) {
+  const v = String(raw == null ? '' : raw).trim().toUpperCase();
+  if (!v || v === 'LEADER' || v === '-') return 0;
+  if (/LAPS?\b/.test(v)) return null;
+  const clock = /^\+?\s*(\d+):(\d+(?:\.\d+)?)$/.exec(v);
+  if (clock) return Number(clock[1]) * 60 + Number(clock[2]);
+  const plain = /^\+?\s*(\d+(?:\.\d+)?)\s*S?$/.exec(v);
+  return plain ? Number(plain[1]) : null;
+}
+
 function renderChamp() {
   // Only after the flag, and only once there is an order to score.
   const show = ['chequered', 'finished'].includes(state.status) && (state.running || []).length;
@@ -418,6 +631,7 @@ function render() {
 
   // championship impact, after the flag
   renderChamp();
+  renderGraphics();
 
   // race control message
   const m = (state.message || '').trim();

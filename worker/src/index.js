@@ -958,6 +958,20 @@ async function postAnnounce(request, env) {
     null, request, env);
 }
 
+/**
+ * The stream graphics row. Returns nulls rather than throwing when the
+ * table has not been migrated yet, so an overlay on an older Worker keeps
+ * showing the timing tower instead of going blank.
+ */
+async function graphicsRow(env) {
+  try {
+    const g = await env.DB.prepare(
+      `SELECT lower, flash, battle FROM race_graphics WHERE id = 'live'`).first();
+    const parse = v => { try { return v ? JSON.parse(v) : null; } catch { return null; } };
+    return { lower: parse(g && g.lower), flash: parse(g && g.flash), battle: parse(g && g.battle) };
+  } catch { return { lower: null, flash: null, battle: null }; }
+}
+
 /** GET /api/live — public. The overlay and the site both read this. */
 async function getLive(request, env) {
   let row;
@@ -987,9 +1001,48 @@ async function getLive(request, env) {
     lightsOut: row.lights_out || null,
     durationMin: row.duration_min || null,
     running,
+    graphics: await graphicsRow(env),
     updatedAt: row.updated_at || 0,
     now: Date.now(),                 // lets clients correct for clock drift
   }, null, request, env);
+}
+
+/**
+ * POST /api/live/graphics — admin only. Sets the lower third, the fastest
+ * lap flash or the battle box.
+ *
+ * A field left out is untouched; a field sent as null turns that graphic
+ * off. Same shape as race control's other writes, so "leave it alone" and
+ * "clear it" stay different things.
+ */
+async function postGraphics(request, env) {
+  if (env.ADMIN_TOKEN && request.headers.get('X-Admin-Token') !== env.ADMIN_TOKEN) {
+    return bad('not authorised', request, env, 401);
+  }
+  let body;
+  try { body = await request.json(); } catch { return bad('invalid JSON body', request, env); }
+
+  const str = v => (v == null ? null : JSON.stringify(v).slice(0, 600));
+  const has = k => Object.prototype.hasOwnProperty.call(body, k);
+
+  try {
+    await env.DB.prepare(
+      `UPDATE race_graphics SET
+         lower  = CASE WHEN ?1 THEN ?2 ELSE lower  END,
+         flash  = CASE WHEN ?3 THEN ?4 ELSE flash  END,
+         battle = CASE WHEN ?5 THEN ?6 ELSE battle END,
+         updated_at = ?7
+       WHERE id = 'live'`
+    ).bind(
+      has('lower')  ? 1 : 0, str(body.lower),
+      has('flash')  ? 1 : 0, str(body.flash),
+      has('battle') ? 1 : 0, str(body.battle),
+      Date.now()
+    ).run();
+  } catch (err) {
+    return bad('stream graphics are not set up on this Worker yet', request, env, 503);
+  }
+  return json({ ok: true, graphics: await graphicsRow(env) }, null, request, env);
 }
 
 /** POST /api/live — admin only. Partial updates: send only what changed. */
@@ -1067,6 +1120,14 @@ async function resetLive(request, env) {
   if (env.ADMIN_TOKEN && request.headers.get('X-Admin-Token') !== env.ADMIN_TOKEN) {
     return bad('not authorised', request, env, 401);
   }
+  // Clearing the session clears the graphics with it. A name card left on
+  // screen after the chequered flag is how an overlay ends up showing a
+  // driver from last week's race.
+  try {
+    await env.DB.prepare(
+      `UPDATE race_graphics SET lower = NULL, flash = NULL, battle = NULL, updated_at = ?
+        WHERE id = 'live'`).bind(Date.now()).run();
+  } catch { /* not migrated yet; the reset itself still matters */ }
   await env.DB.prepare(
     `UPDATE race_control SET class=NULL, round=NULL, race_name=NULL, track=NULL,
        status='idle', message='', lights_out=NULL, duration_min=NULL,
@@ -1277,6 +1338,9 @@ export default {
       if (pathname === '/api/live') {
         if (request.method === 'GET')  return await getLive(request, env);
         if (request.method === 'POST') return await postLive(request, env);
+      }
+      if (pathname === '/api/live/graphics' && request.method === 'POST') {
+        return await postGraphics(request, env);
       }
       if (pathname === '/api/live/reset' && request.method === 'POST') {
         return await resetLive(request, env);

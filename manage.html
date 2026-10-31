@@ -730,6 +730,64 @@ textarea { resize:vertical; min-height:80px; }
           <div id="rcOrder" class="rc-order"></div>
 
           <div class="bulk-box" style="margin-top:1.1rem">
+            <h4>STREAM GRAPHICS</h4>
+            <p class="bk-note">Three things you can put on the overlay during a race. Each one
+               stays up until you take it down, except the fastest lap, which clears itself
+               after nine seconds. Ending the session clears all of them.</p>
+
+            <div class="form-grid">
+              <div class="form-group">
+                <label class="fg-label">NAME CARD</label>
+                <select id="gxLower"><option value="">— nobody —</option></select>
+              </div>
+              <div class="form-group">
+                <label class="fg-label">&nbsp;</label>
+                <div class="rc-entry-acts">
+                  <button class="btn btn-white btn-sm" onclick="gxShowLower()">SHOW</button>
+                  <button class="btn btn-ghost btn-sm" onclick="gxHideLower()">HIDE</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="form-grid">
+              <div class="form-group">
+                <label class="fg-label">FASTEST LAP</label>
+                <select id="gxFlDriver"><option value="">— pick a driver —</option></select>
+              </div>
+              <div class="form-group">
+                <label class="fg-label">TIME</label>
+                <input id="gxFlTime" placeholder="1:42.391">
+              </div>
+              <div class="form-group">
+                <label class="fg-label">&nbsp;</label>
+                <div class="rc-entry-acts">
+                  <button class="btn btn-white btn-sm" onclick="gxFlash()">FLASH IT</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="form-grid">
+              <div class="form-group">
+                <label class="fg-label">BATTLE — AHEAD</label>
+                <select id="gxBattleA"><option value="">— nobody —</option></select>
+              </div>
+              <div class="form-group">
+                <label class="fg-label">BATTLE — BEHIND</label>
+                <select id="gxBattleB"><option value="">— nobody —</option></select>
+              </div>
+              <div class="form-group">
+                <label class="fg-label">&nbsp;</label>
+                <div class="rc-entry-acts">
+                  <button class="btn btn-white btn-sm" onclick="gxShowBattle()">SHOW</button>
+                  <button class="btn btn-ghost btn-sm" onclick="gxHideBattle()">HIDE</button>
+                  <button class="btn btn-ghost btn-sm" onclick="gxClosest()">CLOSEST PAIR</button>
+                </div>
+              </div>
+            </div>
+            <span class="img-size" id="gxStatus"></span>
+          </div>
+
+          <div class="bulk-box" style="margin-top:1.1rem">
             <h4>READ THE ORDER FROM A SCREENSHOT</h4>
             <p class="bk-note">Drop in a screenshot of the Fortnite leaderboard — the round
                results screen or the live board — and it reads the finishing order off it.
@@ -2559,6 +2617,110 @@ function renderCardsAdmin() {
 
 
 
+
+// ── STREAM GRAPHICS ──────────────────────────────────────
+// The overlay reads these from the same /api/live poll it already makes, so
+// nothing here needs its own connection. Race control sends driver ids
+// rather than text, so a name card can never disagree with the tower
+// sitting next to it.
+
+async function gxPush(patch) {
+    const st = document.getElementById('gxStatus');
+    if (!API_BASE) { toast('Worker URL not configured', 'err'); return; }
+    try {
+        const res = await fetch(`${API_BASE.replace(/\/+$/,'')}/api/live/graphics`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json',
+                       ...(ADMIN_TOKEN ? { 'X-Admin-Token': ADMIN_TOKEN } : {}) },
+            body: JSON.stringify(patch),
+        });
+        const body = await res.json();
+        if (!res.ok || !body.ok) throw new Error(body.error || `HTTP ${res.status}`);
+        return body.graphics;
+    } catch (e) {
+        if (st) st.textContent = '';
+        toast('Could not update the overlay: ' + (e.message || 'unknown'), 'err');
+        throw e;
+    }
+}
+
+/** The pickers list whoever is in the session, not the whole roster. */
+function gxPopulate() {
+    const list = (rcState.running || []).filter(r => !r.out && !r.dsq);
+    const opts = none => [`<option value="">— ${none} —</option>`].concat(
+        list.map(r => `<option value="${esc(r.driverId)}">${esc(r.name)}</option>`)).join('');
+    [['gxLower','nobody'], ['gxFlDriver','pick a driver'],
+     ['gxBattleA','nobody'], ['gxBattleB','nobody']].forEach(([id, none]) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        const keep = el.value;
+        el.innerHTML = opts(none);
+        if (keep && list.some(r => r.driverId === keep)) el.value = keep;
+    });
+}
+
+async function gxShowLower() {
+    const id = document.getElementById('gxLower').value;
+    if (!id) { toast('Pick a driver first', 'err'); return; }
+    await gxPush({ lower: { driverId: id } });
+    const who = (rcState.running || []).find(r => r.driverId === id);
+    document.getElementById('gxStatus').textContent = `name card: ${who ? who.name : id}`;
+}
+
+async function gxHideLower() {
+    await gxPush({ lower: null });
+    document.getElementById('gxStatus').textContent = 'name card off';
+}
+
+async function gxFlash() {
+    const id = document.getElementById('gxFlDriver').value;
+    const time = document.getElementById('gxFlTime').value.trim();
+    if (!id) { toast('Pick who set it', 'err'); return; }
+    const who = (rcState.running || []).find(r => r.driverId === id);
+    // `at` is the server's business to compare against, but the overlay
+    // measures freshness from it — so a reloaded browser source does not
+    // replay a flash from ten minutes ago.
+    await gxPush({ flash: { kind: 'lap', name: who ? who.name : '', time, at: Date.now() } });
+    document.getElementById('gxStatus').textContent =
+        `flashed ${who ? who.name : ''} ${time}`.trim();
+}
+
+async function gxShowBattle() {
+    const a = document.getElementById('gxBattleA').value;
+    const b = document.getElementById('gxBattleB').value;
+    if (!a || !b) { toast('Pick both cars', 'err'); return; }
+    if (a === b) { toast('That is the same driver twice', 'err'); return; }
+    await gxPush({ battle: { a, b } });
+    document.getElementById('gxStatus').textContent = 'battle box on';
+}
+
+async function gxHideBattle() {
+    await gxPush({ battle: null });
+    document.getElementById('gxStatus').textContent = 'battle box off';
+}
+
+/**
+ * Fill the battle pickers with the two closest cars on track.
+ *
+ * Mid-race you want the fight, not a menu. This reads the gaps already in
+ * the running order and picks the smallest difference between neighbours.
+ */
+function gxClosest() {
+    const list = (rcState.running || []).filter(r => !r.out && !r.dsq);
+    let best = null;
+    for (let i = 0; i < list.length - 1; i++) {
+        const a = window.gapSeconds(list[i].gap), b = window.gapSeconds(list[i + 1].gap);
+        if (a == null || b == null) continue;
+        const d = Math.abs(b - a);
+        if (best == null || d < best.d) best = { d, a: list[i], b: list[i + 1] };
+    }
+    if (!best) { toast('No readable gaps to compare', 'err'); return; }
+    document.getElementById('gxBattleA').value = best.a.driverId;
+    document.getElementById('gxBattleB').value = best.b.driverId;
+    document.getElementById('gxStatus').textContent =
+        `closest: ${best.a.name} and ${best.b.name}, ${best.d.toFixed(1)}s apart`;
+}
+
 // ── READ A LEADERBOARD SCREENSHOT ────────────────────────
 // Epic publishes no race data, so the positions come off the spectator's
 // screen. The table-finding and the name-matching live in ./ocr/ as modules
@@ -3775,6 +3937,7 @@ function rcRenderOrder() {
     const anyPen = list.some(r => (Number(r.pen) || 0) > 0);
     const btn = document.getElementById('rcApplyPen');
     if (btn) btn.style.display = (!quali && anyPen) ? '' : 'none';
+    gxPopulate();
     if (quali) rcRenderLapDeltas();
 }
 
