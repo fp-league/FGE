@@ -238,6 +238,7 @@ textarea { resize:vertical; min-height:80px; }
 .watch-dot.on { background:#7BD88F; animation:watch-pulse 1.6s ease-in-out infinite; }
 .watch-dot.busy { background:#FFC400; }
 @keyframes watch-pulse { 0%,100% { opacity:1 } 50% { opacity:0.35 } }
+.watch-preview.picking { cursor:crosshair; outline:2px solid #FFC400; }
 .watch-preview { width:100%; max-width:320px; border:1px solid var(--line2); border-radius:3px;
   margin-top:0.7rem; display:block; }
 .rc-pen { width:52px; flex:0 0 52px; text-align:center; font-variant-numeric:tabular-nums;
@@ -832,9 +833,18 @@ textarea { resize:vertical; min-height:80px; }
                 <span class="watch-dot" id="watchDot"></span>
                 <span class="img-size" id="watchStatus">Not watching.</span>
               </div>
+              <div class="rc-entry-acts" id="watchTools" style="display:none">
+                <button class="btn btn-ghost btn-sm" id="watchPickBtn"
+                        onclick="watchPickArea()">PICK THE BOARD AREA</button>
+                <button class="btn btn-ghost btn-sm" onclick="watchClearArea()">USE THE WHOLE SCREEN</button>
+                <span class="img-size" id="watchArea">looking at the whole screen</span>
+              </div>
               <p class="bk-note">Share the window you are spectating in and it reads the board
                  by itself — order and gaps, straight onto the timing page and the overlay.
                  Nobody types anything. You can still drag, edit or stop at any moment.</p>
+              <p class="bk-note">If it says it cannot find the board, press <b>PICK THE BOARD
+                 AREA</b> and drag a box around the leaderboard on the preview. It remembers
+                 that box, so you only do it once.</p>
               <canvas id="watchPreview" class="watch-preview" style="display:none"></canvas>
             </div>
           </div>
@@ -2748,6 +2758,79 @@ let watchNameCache = new Map();   // cell hash → name already read from it
 let watchCols = null;             // header text, measured once
 let watchLastPush = 0;
 let watchLastOrder = null;
+let watchRegion = null;           // {x,y,w,h} in the shared video's own pixels
+let watchPicking = false;
+let watchDrag = null;
+
+/**
+ * Remember the box between races.
+ *
+ * The spectator window is in the same place on the screen every week, so
+ * being asked to draw it again every time would be the main annoyance of
+ * the whole feature.
+ */
+function watchLoadRegion() {
+    try {
+        const raw = localStorage.getItem('fge.watchRegion');
+        watchRegion = raw ? JSON.parse(raw) : null;
+    } catch (e) { watchRegion = null; }
+    watchSayArea();
+}
+
+function watchSaveRegion() {
+    try {
+        if (watchRegion) localStorage.setItem('fge.watchRegion', JSON.stringify(watchRegion));
+        else localStorage.removeItem('fge.watchRegion');
+    } catch (e) { /* private mode; it just will not persist */ }
+    watchSayArea();
+}
+
+function watchSayArea() {
+    const el = document.getElementById('watchArea');
+    if (!el) return;
+    el.textContent = watchRegion
+        ? `reading a ${Math.round(watchRegion.w)}×${Math.round(watchRegion.h)} box`
+        : 'looking at the whole screen';
+}
+
+function watchPickArea() {
+    watchPicking = true;
+    const c = document.getElementById('watchPreview');
+    if (c) c.classList.add('picking');
+    const btn = document.getElementById('watchPickBtn');
+    if (btn) btn.textContent = 'DRAG A BOX ON THE PREVIEW';
+    watchSay('drag a box around the leaderboard');
+}
+
+function watchClearArea() {
+    watchRegion = null;
+    watchSaveRegion();
+    toast('Back to reading the whole screen', 'ok');
+}
+
+/**
+ * The frame to actually read.
+ *
+ * Without a box this is the whole shared screen, which only works when the
+ * board fills most of it — the row detector looks for bands of brightness,
+ * and a game world behind the board drowns them out. With a box it is just
+ * the board, which is the condition it was built for.
+ */
+function watchFrame(video) {
+    const full = document.createElement('canvas');
+    full.width = video.videoWidth;
+    full.height = video.videoHeight;
+    full.getContext('2d', { willReadFrequently: true }).drawImage(video, 0, 0);
+    if (!watchRegion) return { canvas: full, full };
+
+    const r = watchRegion;
+    const c = document.createElement('canvas');
+    c.width = Math.max(1, Math.round(r.w));
+    c.height = Math.max(1, Math.round(r.h));
+    c.getContext('2d', { willReadFrequently: true })
+     .drawImage(full, r.x, r.y, r.w, r.h, 0, 0, c.width, c.height);
+    return { canvas: c, full };
+}
 
 function watchSay(msg, busy) {
     const el = document.getElementById('watchStatus');
@@ -2788,6 +2871,8 @@ async function watchStart() {
     document.getElementById('watchGo').style.display = 'none';
     document.getElementById('watchStop').style.display = '';
     document.getElementById('watchPreview').style.display = '';
+    document.getElementById('watchTools').style.display = '';
+    watchLoadRegion();
     watchSay('starting…');
 
     const T = await ocrEngine();
@@ -2807,6 +2892,10 @@ function watchStop() {
     if (stop) stop.style.display = 'none';
     const prev = document.getElementById('watchPreview');
     if (prev) prev.style.display = 'none';
+    const tools = document.getElementById('watchTools');
+    if (tools) tools.style.display = 'none';
+    watchPicking = false; watchDrag = null;
+    if (prev) prev.classList.remove('picking');
     watchSay('Not watching.');
 }
 
@@ -2818,17 +2907,16 @@ async function watchTick() {
 
     try {
         watchSay('reading…', true);
-        const canvas = document.createElement('canvas');
-        canvas.width = watchVideo.videoWidth;
-        canvas.height = watchVideo.videoHeight;
-        if (!canvas.width || !canvas.height) throw new Error('no picture yet');
+        if (!watchVideo.videoWidth) throw new Error('no picture yet');
+        const { canvas, full } = watchFrame(watchVideo);
         const ctx = canvas.getContext('2d', { willReadFrequently: true });
-        ctx.drawImage(watchVideo, 0, 0);
 
         const table = window.ocrFindTable(canvas);
         if (!table) {
-            watchSay('no leaderboard on screen');
-            watchPreview(canvas, null);
+            watchSay(watchRegion
+                ? 'no rows in that box — try PICK THE BOARD AREA again'
+                : 'cannot find the board — press PICK THE BOARD AREA and drag a box round it');
+            watchPreview(full, null);
             return;
         }
 
@@ -2873,7 +2961,7 @@ async function watchTick() {
         }
 
         const named = read.filter(r => r.name);
-        if (!named.length) { watchSay('could not read any names'); watchPreview(canvas, table); return; }
+        if (!named.length) { watchSay('could not read any names'); watchPreview(full, table); return; }
 
         const matched = window.ocrMatchAll(named.map(r => r.name), d().drivers || []);
         const order = window.watchBuildOrder(named, matched);
@@ -2881,7 +2969,7 @@ async function watchTick() {
         const sure = order.filter(r => r.driver).length;
         if (sure < Math.ceil(order.length / 2)) {
             watchSay(`only matched ${sure} of ${order.length} — not pushing`);
-            watchPreview(canvas, table);
+            watchPreview(full, table);
             return;
         }
 
@@ -2899,7 +2987,7 @@ async function watchTick() {
         } else {
             watchSay(`${sure} drivers · no change`);
         }
-        watchPreview(canvas, table);
+        watchPreview(full, table);
     } catch (e) {
         watchSay('hiccup: ' + (e.message || 'could not read that frame'));
     } finally {
@@ -2911,24 +2999,78 @@ async function watchTick() {
     }
 }
 
-/** A small picture of what it is looking at, with the rows it found. */
-function watchPreview(canvas, table) {
+/**
+ * A small picture of the whole shared screen, with the box it is reading
+ * and the rows it found drawn on it.
+ *
+ * Always the full frame, never the crop. When it is finding nothing, the
+ * thing you need to see is where your box is sitting relative to the
+ * board — and a picture of the inside of the box cannot show you that.
+ */
+function watchPreview(full, table) {
     const el = document.getElementById('watchPreview');
-    if (!el) return;
-    const W = 320, scale = W / canvas.width;
+    if (!el || !full || !full.width) return;
+    const W = 320, scale = W / full.width;
     el.width = W;
-    el.height = Math.max(1, Math.round(canvas.height * scale));
+    el.height = Math.max(1, Math.round(full.height * scale));
+    el.dataset.scale = String(scale);
     const ctx = el.getContext('2d');
-    ctx.drawImage(canvas, 0, 0, el.width, el.height);
+    ctx.drawImage(full, 0, 0, el.width, el.height);
+
+    // Row boxes are in the crop's coordinates; shift them by where the
+    // crop sits in the frame.
+    const off = watchRegion ? { x: watchRegion.x, y: watchRegion.y } : { x: 0, y: 0 };
+    if (watchRegion) {
+        ctx.strokeStyle = '#FFC400';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(off.x * scale, off.y * scale, watchRegion.w * scale, watchRegion.h * scale);
+    }
     if (!table) return;
     ctx.strokeStyle = '#7BD88F';
     ctx.lineWidth = 1;
+    const cx0 = table.cols[0][0], cx1 = table.cols[table.cols.length - 1][1];
     table.rows.forEach(([y0, y1]) => {
-        ctx.strokeRect(table.cols[0][0] * scale, y0 * scale,
-                       (table.cols[table.cols.length - 1][1] - table.cols[0][0]) * scale,
-                       (y1 - y0) * scale);
+        ctx.strokeRect((off.x + cx0) * scale, (off.y + y0) * scale,
+                       (cx1 - cx0) * scale, (y1 - y0) * scale);
     });
 }
+
+/** Preview pixels → the shared video's own pixels. */
+function watchPreviewXY(e) {
+    const el = document.getElementById('watchPreview');
+    const r = el.getBoundingClientRect();
+    // The canvas is laid out at a CSS width that need not match its pixel
+    // width, so go through the rect rather than assuming they agree.
+    const sx = el.width / r.width, sy = el.height / r.height;
+    const scale = Number(el.dataset.scale) || 1;
+    return { x: (e.clientX - r.left) * sx / scale, y: (e.clientY - r.top) * sy / scale };
+}
+
+document.addEventListener('mousedown', e => {
+    if (!watchPicking || e.target.id !== 'watchPreview') return;
+    e.preventDefault();
+    watchDrag = watchPreviewXY(e);
+});
+
+document.addEventListener('mouseup', e => {
+    if (!watchPicking || !watchDrag) return;
+    const b = watchPreviewXY(e);
+    const x = Math.min(watchDrag.x, b.x), y = Math.min(watchDrag.y, b.y);
+    const w = Math.abs(b.x - watchDrag.x), h = Math.abs(b.y - watchDrag.y);
+    watchDrag = null;
+    watchPicking = false;
+    const c = document.getElementById('watchPreview');
+    if (c) c.classList.remove('picking');
+    const btn = document.getElementById('watchPickBtn');
+    if (btn) btn.textContent = 'PICK THE BOARD AREA';
+
+    // A stray click is not a box, and a tiny one could not hold a
+    // leaderboard. Treat both as a miss rather than a selection.
+    if (w < 40 || h < 30) { watchSay('that box was too small — try again'); return; }
+    watchRegion = { x, y, w, h };
+    watchSaveRegion();
+    toast('Reading that box from now on', 'ok');
+});
 
 // Sharing a window and then leaving the tab is a good way to forget it is
 // running; stop cleanly when the page goes.
