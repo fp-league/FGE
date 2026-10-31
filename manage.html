@@ -452,6 +452,9 @@ textarea { resize:vertical; min-height:80px; }
             <div class="form-group"><label class="fg-label">NUMBER</label><input id="dNumber" type="number" placeholder="44"></div>
             <div class="form-group"><label class="fg-label">NATIONALITY</label><input id="dNat" placeholder="British"></div>
             <div class="form-group"><label class="fg-label">TEAM</label><select id="dTeam"><option value="">— Select Team —</option></select></div>
+            <div class="form-group"><label class="fg-label">FORTNITE NAME
+              <span style="color:var(--grey);font-weight:400">(for reading screenshots)</span></label>
+              <input id="dFortnite" placeholder="Cainep8"></div>
             <div class="form-group img-field">
               <label class="fg-label">DRIVER PHOTO</label>
               <div class="img-pick">
@@ -719,6 +722,20 @@ textarea { resize:vertical; min-height:80px; }
           <p class="bk-note">Drag a driver, or use the arrows. Changes go live immediately.
              Mark a retirement with OUT.</p>
           <div id="rcOrder" class="rc-order"></div>
+
+          <div class="bulk-box" style="margin-top:1.1rem">
+            <h4>READ THE ORDER FROM A SCREENSHOT</h4>
+            <p class="bk-note">Drop in a screenshot of the Fortnite leaderboard — the round
+               results screen or the live board — and it reads the finishing order off it.
+               Paste with Ctrl+V or pick a file. It matches each name to a driver; anything it
+               is unsure about is flagged for you to pick, and whatever you confirm is
+               remembered so the next one is easier.</p>
+            <input type="file" id="ocrFile" accept="image/*" onchange="ocrPick(this.files[0])">
+            <div class="form-actions">
+              <span class="img-size" id="ocrStatus">Nothing loaded.</span>
+            </div>
+            <div id="ocrResult"></div>
+          </div>
           <div class="rc-add-row">
             <select id="rcAddDriver"></select>
             <button class="btn btn-ghost btn-sm" onclick="rcAddDriver()">ADD DRIVER</button>
@@ -1524,6 +1541,7 @@ function editDriver(i) {
     document.getElementById('driverFormTitle').textContent = 'EDIT DRIVER';
     document.getElementById('dName').value   = drv.name||'';
     document.getElementById('dNumber').value = drv.number||'';
+    document.getElementById('dFortnite').value = drv.fortniteName||'';
     document.getElementById('dNat').value    = drv.nationality||'';
     document.getElementById('dPhoto').value  = drv.photo||'';
     document.getElementById('dCardImage').value = drv.cardImage||'';
@@ -1543,6 +1561,7 @@ function saveDriver() {
         id:          (prev && prev.id) || newId(),
         name:        document.getElementById('dName').value.trim(),
         number:      document.getElementById('dNumber').value,
+        fortniteName: document.getElementById('dFortnite').value.trim(),
         nationality: document.getElementById('dNat').value.trim(),
         team:        document.getElementById('dTeam').value,
         photo:       document.getElementById('dPhoto').value.trim(),
@@ -2527,6 +2546,184 @@ function renderCardsAdmin() {
             ${art ? `<img src="${esc(art)}" class="drv-thumb" alt="" loading="lazy">` : '<span class="drv-thumb"></span>'}
           </div>`;
     }).join('');
+}
+
+
+
+// ── READ A LEADERBOARD SCREENSHOT ────────────────────────
+// Epic publishes no race data, so the positions come off the spectator's
+// screen. The table-finding and the name-matching live in ./ocr/ as modules
+// so they can be tested outside a browser; this is the part that drives
+// them and shows the result.
+
+let ocrRows = null;          // [{ read, driver, confidence, certain }]
+let ocrBusy = false;
+
+/** tesseract.js, fetched the first time it is needed and not before. */
+function ocrEngine() {
+    if (window.Tesseract) return Promise.resolve(window.Tesseract);
+    if (window.__ocrLoading) return window.__ocrLoading;
+    window.__ocrLoading = new Promise((res, rej) => {
+        const t = document.createElement('script');
+        t.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.0/dist/tesseract.min.js';
+        t.onload = () => res(window.Tesseract);
+        t.onerror = () => rej(new Error('could not load the text reader'));
+        document.head.appendChild(t);
+    });
+    return window.__ocrLoading;
+}
+
+function ocrSay(msg) {
+    const el = document.getElementById('ocrStatus');
+    if (el) el.textContent = msg;
+}
+
+/** Ctrl+V anywhere in race control, which is how people move screenshots. */
+document.addEventListener('paste', e => {
+    if (currentSec !== 'control') return;
+    const item = [...(e.clipboardData?.items || [])].find(i => i.type.startsWith('image/'));
+    if (!item) return;
+    e.preventDefault();
+    ocrPick(item.getAsFile());
+});
+
+async function ocrPick(file) {
+    if (!file || ocrBusy) return;
+    if (!/^image\//.test(file.type)) { toast('That is not an image', 'err'); return; }
+    ocrBusy = true;
+    document.getElementById('ocrResult').innerHTML = '';
+    ocrSay('reading…');
+
+    try {
+        const bmp = await createImageBitmap(file);
+        const canvas = document.createElement('canvas');
+        canvas.width = bmp.width; canvas.height = bmp.height;
+        canvas.getContext('2d', { willReadFrequently: true }).drawImage(bmp, 0, 0);
+
+        const table = window.ocrFindTable(canvas);
+        if (!table) throw new Error('could not find a leaderboard in that picture');
+
+        const T = await ocrEngine();
+        ocrSay(`found ${table.rows.length} rows — reading the names…`);
+        const worker = await T.createWorker('eng');
+
+        // The header tells us which column holds the names; without it we
+        // fall back to the widest, which is the same column in practice.
+        const heads = [];
+        for (const [x0, x1] of table.cols) {
+            const c = window.ocrCellCanvas(canvas, x0, table.header[0], x1, table.header[1], 3);
+            heads.push(((await worker.recognize(c)).data.text || '').trim());
+        }
+        const pc = window.ocrPlayerColumn(heads, table.cols);
+        const [px0, px1] = table.cols[pc];
+
+        const names = [];
+        for (let i = 0; i < table.rows.length; i++) {
+            const [y0, y1] = table.rows[i];
+            const c = window.ocrCellCanvas(canvas, px0, y0, px1, y1, 3);
+            const txt = ((await worker.recognize(c)).data.text || '')
+                .replace(/\s+/g, ' ').trim();
+            names.push(txt);
+            ocrSay(`reading… ${i + 1} of ${table.rows.length}`);
+        }
+        await worker.terminate();
+
+        const drivers = (d().drivers || []);
+        ocrRows = window.ocrMatchAll(names.filter(Boolean), drivers);
+        renderOcr();
+        const sure = ocrRows.filter(r => r.certain).length;
+        ocrSay(`${ocrRows.length} read · ${sure} matched${sure < ocrRows.length
+                 ? ` · ${ocrRows.length - sure} need a pick` : ''}`);
+    } catch (e) {
+        ocrSay('');
+        document.getElementById('ocrResult').innerHTML =
+            `<p class="bk-note">${esc(e.message || 'could not read that')}</p>`;
+        toast(e.message || 'Could not read that screenshot', 'err');
+    } finally {
+        ocrBusy = false;
+        const f = document.getElementById('ocrFile'); if (f) f.value = '';
+    }
+}
+
+function renderOcr() {
+    const box = document.getElementById('ocrResult');
+    if (!box) return;
+    if (!ocrRows || !ocrRows.length) { box.innerHTML = ''; return; }
+
+    const drivers = d().drivers || [];
+    box.innerHTML = ocrRows.map((r, i) => {
+        const chosen = r.driver ? (r.driver.id || r.driver.name) : '';
+        const opts = ['<option value="">— nobody —</option>'].concat(
+            drivers.map(dr => {
+                const v = dr.id || dr.name;
+                return `<option value="${esc(v)}"${v === chosen ? ' selected' : ''}>${esc(dr.name)}</option>`;
+            })).join('');
+        return `<div class="ec-row${r.certain ? '' : ' ec-off'}">
+            <span class="rc-pos">${i + 1}</span>
+            <span class="ec-grow"><span class="ec-mono">${esc(r.read)}</span></span>
+            <span style="flex:0 0 1.2rem">${r.certain ? '→' : '?'}</span>
+            <select onchange="ocrSetDriver(${i}, this.value)"
+                    style="flex:0 0 180px">${opts}</select>
+          </div>`;
+    }).join('') + `
+      <div class="form-actions">
+        <button class="btn btn-white" onclick="ocrApply()">USE THIS ORDER</button>
+        <button class="btn btn-ghost" onclick="ocrClear()">DISCARD</button>
+        <span class="img-size">Anything you correct is saved to that driver.</span>
+      </div>`;
+}
+
+function ocrSetDriver(i, value) {
+    const drivers = d().drivers || [];
+    const picked = drivers.find(x => (x.id || x.name) === value) || null;
+    ocrRows[i].driver = picked;
+    // A hand-picked row is certain by definition — a person just said so.
+    ocrRows[i].certain = Boolean(picked);
+    ocrRows[i].corrected = true;
+    renderOcr();
+}
+
+function ocrClear() {
+    ocrRows = null;
+    document.getElementById('ocrResult').innerHTML = '';
+    ocrSay('Nothing loaded.');
+}
+
+/**
+ * Apply the order, and remember the names.
+ *
+ * Saving what the screenshot called each driver is the part that makes this
+ * worth having: the first read needs half the rows picking by hand, and
+ * every one after that needs none.
+ */
+async function ocrApply() {
+    const rows = (ocrRows || []).filter(r => r.driver);
+    if (!rows.length) { toast('Nothing matched to apply', 'err'); return; }
+
+    // Learn the name, but never overwrite one that is already there unless
+    // the person just corrected that row by hand. Otherwise a single noisy
+    // read replaces a name someone typed correctly, and the match gets
+    // worse every time it is used rather than better.
+    let learned = 0;
+    rows.forEach(r => {
+        const live = (d().drivers || []).find(x => (x.id || x.name) === (r.driver.id || r.driver.name));
+        if (!live || !r.read || live.fortniteName === r.read) return;
+        if (live.fortniteName && !r.corrected) return;
+        live.fortniteName = r.read;
+        learned++;
+    });
+
+    // rcEntryFor is what builds every other running-order row, so the
+    // screenshot path produces exactly the same shape as the entry list —
+    // driverId and all. A hand-rolled object here would be subtly wrong in
+    // a way that only shows up when the result is saved.
+    rcState.running = rows.map(r => rcEntryFor(r.driver));
+    rcRenderOrder();
+    rcQueuePush();
+    ocrClear();
+
+    if (learned) { try { await saveData(null); } catch (e) {} }
+    toast(`Order set from the screenshot${learned ? ` · learned ${learned} name${learned !== 1 ? 's' : ''}` : ''}`, 'ok');
 }
 
 
@@ -4320,6 +4517,18 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('tColor').addEventListener('input', function(){ document.getElementById('tColorHex').value = this.value; });
     document.getElementById('tColorHex').addEventListener('input', function(){ if(/^#[0-9a-f]{6}$/i.test(this.value)) document.getElementById('tColor').value = this.value; });
 });
+</script>
+<script type="module">
+  // The table-finding and name-matching live in ./ocr/ so they can be
+  // tested outside a browser. The rest of this page is a classic script,
+  // so they come in here and go on window.
+  import { findTable, cellCanvas, playerColumn } from './ocr/read-board.js';
+  import { matchAll, score } from './ocr/match.js';
+  window.ocrFindTable = findTable;
+  window.ocrCellCanvas = cellCanvas;
+  window.ocrPlayerColumn = playerColumn;
+  window.ocrMatchAll = matchAll;
+  window.ocrScore = score;
 </script>
 </body>
 </html>
