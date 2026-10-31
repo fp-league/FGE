@@ -1020,6 +1020,13 @@ async function postLive(request, env) {
       gap:      String(r.gap || '').slice(0, 16),
       lap:      String(r.lap || '').slice(0, 16),
       out:      Boolean(r.out),
+      // A time penalty in seconds, and why. Both ride along in the running
+      // order rather than in their own table: a penalty only means anything
+      // next to the position it applies to, and the overlay already reads
+      // this row every second.
+      pen:      Math.max(0, Math.min(600, Number(r.pen) || 0)),
+      penNote:  String(r.penNote || '').slice(0, 40),
+      dsq:      Boolean(r.dsq),
     })));
   }
 

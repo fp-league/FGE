@@ -2049,8 +2049,13 @@ function renderLive() {
 
     let pos = 0;
     const tower = rows.map(r => {
-        if (!r.out) pos++;
-        const cls = r.out ? 'out' : (pos <= 3 ? 'p' + pos : '');
+        if (!r.out && !r.dsq) pos++;
+        const cls = (r.out || r.dsq) ? 'out' : (pos <= 3 ? 'p' + pos : '');
+        // A penalty people cannot see is a note. It sits next to the name.
+        const pen = r.dsq ? '' : (Number(r.pen) > 0
+            ? `<span class="lv-pen" title="${esc(r.penNote || 'Time penalty')}">+${
+                 Number.isInteger(Number(r.pen)) ? Number(r.pen) : Number(r.pen).toFixed(1)}s</span>`
+            : '');
         const num = String(r.number || '').trim();
         let timeCells;
         if (quali) {
@@ -2064,10 +2069,10 @@ function renderLive() {
         }
         return `
           <div class="lv-row ${cls}">
-            <span class="lv-pos">${r.out ? 'OUT' : pos}</span>
+            <span class="lv-pos">${r.dsq ? 'DSQ' : r.out ? 'OUT' : pos}</span>
             <span class="lv-bar" style="background:${esc(safeHex(r.colour, '#888888'))}"></span>
             <span class="lv-num">${num ? '#' + esc(num) : ''}</span>
-            <span class="lv-name">${esc(r.name || '')}</span>
+            <span class="lv-name">${esc(r.name || '')}${pen}</span>
             <span class="lv-team">${esc(r.team || '')}</span>
             ${timeCells}
           </div>`;

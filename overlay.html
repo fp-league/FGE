@@ -37,6 +37,11 @@ html,body { width:1920px; height:1080px; background:transparent; overflow:hidden
 }
 .row:last-child { border-bottom:none; }
 .row.out { opacity:.38; }
+/* A live penalty, on the stream. Amber because it is a sanction, not a
+   retirement, and inline with the name so it reads as "this driver, +5s". */
+.pen { margin-left:8px; padding:1px 5px; border-radius:2px; background:#FFC400;
+  color:#111; font-size:11px; font-weight:800; letter-spacing:.04em;
+  vertical-align:middle; }
 .pos  { font-weight:700; font-size:17px; color:#fff; text-align:center; font-variant-numeric:tabular-nums; }
 .row.out .pos { font-size:10px; letter-spacing:.08em; color:#ff9d9d; }
 .bar  { width:5px; height:21px; border-radius:1px; }
@@ -440,8 +445,12 @@ function render() {
     const pole = quali ? poleMs(rows) : null;
     let pos = 0;
     $('rows').innerHTML = rows.slice(0, MAX_ROWS).map(r => {
-      if (!r.out) pos++;
-      const cls = r.out ? 'out' : (pos <= 3 ? 'p' + pos : '');
+      if (!r.out && !r.dsq) pos++;
+      const cls = (r.out || r.dsq) ? 'out' : (pos <= 3 ? 'p' + pos : '');
+      // A penalty on the stream is the whole point of giving one live.
+      const penN = Number(r.pen) || 0;
+      const pen = (!r.dsq && penN > 0)
+        ? `<span class="pen">+${Number.isInteger(penN) ? penN : penN.toFixed(1)}s</span>` : '';
       const num = String(r.number || '').trim();
       let cells;
       if (quali) {
@@ -455,10 +464,10 @@ function render() {
         cells = `<span class="gap">${esc(r.gap || '')}</span>`;
       }
       return `<div class="row ${cls}">
-          <span class="pos">${r.out ? 'OUT' : pos}</span>
+          <span class="pos">${r.dsq ? 'DSQ' : r.out ? 'OUT' : pos}</span>
           <span class="bar" style="background:${hex(r.colour)}"></span>
           <span class="num">${num ? '#' + esc(num) : ''}</span>
-          <span class="name">${esc(r.name)}</span>
+          <span class="name">${esc(r.name)}${pen}</span>
           ${cells}
         </div>`;
     }).join('');

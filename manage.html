@@ -226,6 +226,12 @@ textarea { resize:vertical; min-height:80px; }
   white-space:nowrap; }
 .ec-row .ec-mono { font-variant-numeric:tabular-nums; color:var(--grey); font-size:0.8rem; }
 .ec-off { opacity:0.45; }
+/* The penalty box sits beside the gap. Dim until it holds something, so a
+   row of empty boxes does not read as a row of penalties. */
+.rc-pen { width:52px; flex:0 0 52px; text-align:center; font-variant-numeric:tabular-nums;
+  opacity:0.45; }
+.rc-pen:focus { opacity:1; }
+.rc-pen.has-pen { opacity:1; color:#FFC400; border-color:#FFC400; font-weight:700; }
 .form-card.is-editing { box-shadow:inset 3px 0 0 var(--accent,#E10600); }
 .form-card.is-editing h3::after { content:' — EDITING'; color:var(--accent,#E10600); font-size:0.7rem; letter-spacing:0.1em; }
 .bulk-box { margin-top:1.1rem; padding:0.9rem 1rem; border:1px dashed var(--line2);
@@ -745,6 +751,8 @@ textarea { resize:vertical; min-height:80px; }
                     onclick="rcSortByLap()" style="display:none">SORT BY LAP</button>
             <button class="btn btn-white btn-sm" id="rcGridFromQuali"
                     onclick="rcGridFromQuali()" style="display:none">USE THIS AS THE RACE GRID</button>
+            <button class="btn btn-white btn-sm" id="rcApplyPen"
+                    onclick="rcApplyPenalties()" style="display:none">APPLY PENALTIES</button>
             <button class="btn btn-ghost btn-sm" onclick="rcResetOrder()">RESET TO ENTRY LIST</button>
             <span class="img-size" id="rcSaveState"></span>
           </div>
@@ -2222,6 +2230,7 @@ function rcEntryFor(drv) {
         colour: teamColour(drv.team),
         number: String(drv.number ?? ''),
         gap: '', lap: '', out: false,
+        pen: 0, penNote: '', dsq: false,
     };
 }
 
@@ -3680,6 +3689,43 @@ function rcMove(i, delta) {
     rcQueuePush();
 }
 
+/** Seconds added to this driver's race time. Blank or 0 means no penalty. */
+function rcSetPen(i, v) {
+    const n = Math.max(0, Math.min(600, parseFloat(v) || 0));
+    rcState.running[i].pen = n;
+    const el = document.querySelector(`#rcOrder .rc-row:nth-child(${i + 1}) .rc-pen`);
+    if (el) el.classList.toggle('has-pen', n > 0);
+    rcQueuePush();
+}
+
+/**
+ * Re-order by corrected time: each driver's gap plus their penalty.
+ *
+ * Done on a button rather than as you type, because a penalty typed into
+ * the wrong row would otherwise reshuffle the board under your hands
+ * mid-race. You see what it did, and can undo it by fixing the number.
+ */
+function rcApplyPenalties() {
+    const out = window.applyPenalties(rcState.running || []);
+    if (!out.usable) {
+        toast('No readable gaps to work from — type the gaps first', 'err');
+        return;
+    }
+    if (!out.moved.length) { toast('Penalties change nothing — order already correct', 'ok'); return; }
+    rcState.running = out.running;
+    rcRenderOrder();
+    rcQueuePush();
+    const who = out.moved.filter(m => m.pen > 0)
+        .map(m => `${m.name} P${m.from}→P${m.to}`).join(', ');
+    toast(who || `${out.moved.length} positions changed`, 'ok');
+}
+
+function rcToggleDsq(i) {
+    rcState.running[i].dsq = !rcState.running[i].dsq;
+    rcRenderOrder();
+    rcQueuePush();
+}
+
 function rcToggleOut(i) {
     rcState.running[i].out = !rcState.running[i].out;
     rcRenderOrder();
@@ -3701,26 +3747,34 @@ function rcRenderOrder() {
     const quali = rcMode() === 'quali';
     let pos = 0;
     box.innerHTML = list.map((r, i) => {
-        if (!r.out) pos++;
+        if (!r.out && !r.dsq) pos++;
         const timeField = quali
             ? `<input class="rc-gap" value="${esc(r.lap || '')}" placeholder="1:42.391"
                       oninput="rcSetLap(${i}, this.value)">
                <span class="rc-delta" data-delta="${i}"></span>`
             : `<input class="rc-gap" value="${esc(r.gap || '')}" placeholder="+0.0"
                       oninput="rcSetGap(${i}, this.value)">`;
-        return `<div class="rc-row${r.out ? ' is-out' : ''}${quali ? ' is-quali' : ''}" draggable="true"
+        return `<div class="rc-row${r.out || r.dsq ? ' is-out' : ''}${quali ? ' is-quali' : ''}" draggable="true"
                      ondragstart="rcDragStart(event,${i})" ondragover="event.preventDefault()"
                      ondrop="rcDrop(event,${i})">
-            <span class="rc-pos">${r.out ? 'OUT' : pos}</span>
+            <span class="rc-pos">${r.dsq ? 'DSQ' : r.out ? 'OUT' : pos}</span>
             <span class="rc-dot" style="background:${esc(safeColour(r.colour))}"></span>
             <span class="rc-name">${esc(r.name)}</span>
             ${timeField}
+            ${quali ? '' : `<input class="rc-pen${r.pen ? ' has-pen' : ''}" value="${r.pen || ''}"
+                    placeholder="pen" title="Time penalty in seconds"
+                    oninput="rcSetPen(${i}, this.value)">`}
             <button class="rc-mini" onclick="rcMove(${i},-1)" title="Up">▲</button>
             <button class="rc-mini" onclick="rcMove(${i},1)" title="Down">▼</button>
             <button class="rc-mini out" onclick="rcToggleOut(${i})" title="${r.out ? 'Back in' : 'Retire'}">OUT</button>
+            <button class="rc-mini out" onclick="rcToggleDsq(${i})"
+                    title="${r.dsq ? 'Reinstate' : 'Disqualify'}">DSQ</button>
             <button class="rc-mini del" onclick="rcRemoveDriver(${i})" title="Not racing">&times;</button>
           </div>`;
     }).join('');
+    const anyPen = list.some(r => (Number(r.pen) || 0) > 0);
+    const btn = document.getElementById('rcApplyPen');
+    if (btn) btn.style.display = (!quali && anyPen) ? '' : 'none';
     if (quali) rcRenderLapDeltas();
 }
 
@@ -4529,6 +4583,10 @@ document.addEventListener('DOMContentLoaded', () => {
   window.ocrPlayerColumn = playerColumn;
   window.ocrMatchAll = matchAll;
   window.ocrScore = score;
+  const pen = await import('./lib/penalties.js');
+  window.applyPenalties = pen.applyPenalties;
+  window.gapSeconds = pen.gapSeconds;
+  window.penLabel = pen.penLabel;
 </script>
 </body>
 </html>
