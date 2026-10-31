@@ -1039,3 +1039,84 @@ export async function closeTrade(env, interaction, id, how) {
 }
 
 export const TRADE_VIEWS = ['offer', 'list', 'accept', 'decline', 'cancel'];
+
+/* ── Card seasons ──────────────────────────────────────── */
+
+/**
+ * Ending a card season.
+ *
+ * Rarity comes from the championship, so archiving a racing season
+ * re-rates the whole set to Common on its own. What happens to people's
+ * collections is a separate decision and nobody had made it, so this makes
+ * it one: archive and keep, or archive and clear.
+ *
+ * Either way a snapshot is taken first. Clearing without one would be the
+ * single most destructive thing in the admin panel.
+ */
+const csSlug = s => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-')
+  .replace(/^-+|-+$/g, '').slice(0, 48) || `cs${Date.now().toString(36)}`;
+
+export async function endCardSeason(env, { name, clear }) {
+  const label = String(name || '').trim() || 'Card season';
+  const id = csSlug(label);
+  const now = Date.now();
+
+  const rows = await env.DB.prepare(
+    `SELECT user_id, driver_id, rarity, copies FROM card_collection WHERE class = ?`
+  ).bind(SET).all();
+  const held = rows.results || [];
+  if (!held.length) throw new Error('nobody holds any cards — nothing to archive');
+
+  const byUser = {};
+  held.forEach(r => { byUser[r.user_id] = (byUser[r.user_id] || 0) + r.copies; });
+  const top = Object.entries(byUser)
+    .map(([user_id, cards]) => ({
+      user_id, cards,
+      unique: held.filter(h => h.user_id === user_id).length,
+    }))
+    .sort((a, b) => b.unique - a.unique || b.cards - a.cards)
+    .slice(0, 10);
+
+  // Snapshot in batches: a season's holdings can be thousands of rows and
+  // D1 will not take them in one statement.
+  const CHUNK = 50;
+  for (let i = 0; i < held.length; i += CHUNK) {
+    await env.DB.batch(held.slice(i, i + CHUNK).map(r => env.DB.prepare(
+      `INSERT INTO card_season_holding (season_id, user_id, driver_id, rarity, copies)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT (season_id, user_id, driver_id) DO UPDATE SET
+         rarity = excluded.rarity, copies = excluded.copies`
+    ).bind(id, r.user_id, r.driver_id, r.rarity, r.copies)));
+  }
+
+  await env.DB.prepare(
+    `INSERT INTO card_season (id, name, ended_at, cleared, holders, cards, top)
+     VALUES (?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT (id) DO UPDATE SET
+       name = excluded.name, ended_at = excluded.ended_at, cleared = excluded.cleared,
+       holders = excluded.holders, cards = excluded.cards, top = excluded.top`
+  ).bind(id, label, now, clear ? 1 : 0, Object.keys(byUser).length,
+         held.reduce((n, r) => n + r.copies, 0), JSON.stringify(top)).run();
+
+  // Only now, with the snapshot written, is it safe to wipe anything.
+  if (clear) {
+    await env.DB.prepare(`DELETE FROM card_collection WHERE class = ?`).bind(SET).run();
+    await env.DB.prepare(`DELETE FROM card_packs`).run();
+  }
+
+  return { id, name: label, cleared: Boolean(clear),
+           holders: Object.keys(byUser).length,
+           cards: held.reduce((n, r) => n + r.copies, 0) };
+}
+
+export async function listCardSeasons(env) {
+  try {
+    const rows = await env.DB.prepare(
+      `SELECT id, name, ended_at, cleared, holders, cards, top
+         FROM card_season ORDER BY ended_at DESC`).all();
+    return (rows.results || []).map(r => ({
+      ...r,
+      top: (() => { try { return JSON.parse(r.top); } catch { return []; } })(),
+    }));
+  } catch { return []; }
+}

@@ -1921,6 +1921,45 @@ function cardHTML(c, d) {
 // Hidden until there is something to show, so the nav doesn't carry an
 // empty page around for the first half of a season.
 
+// ── SIGNUP ───────────────────────────────────────────────
+// Goes to the Worker and sits in a queue. Nothing here puts anyone on the
+// grid; an admin reads it and decides.
+
+async function submitSignup(e) {
+    e.preventDefault();
+    const form = e.target;
+    const btn = document.getElementById('suSubmit');
+    const st = document.getElementById('suStatus');
+    if (!API_BASE) { st.textContent = 'Signups are not switched on yet.'; st.className = 'su-status err'; return; }
+
+    const data = Object.fromEntries(new FormData(form).entries());
+    btn.disabled = true;
+    st.className = 'su-status';
+    st.textContent = 'sending…';
+
+    try {
+        const res = await fetch(`${API_BASE.replace(/\/+$/, '')}/api/signup`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+        });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok || !body.ok) throw new Error(body.error || `something went wrong (${res.status})`);
+
+        // Replace the form rather than clearing it — a cleared form looks
+        // like it failed, and people send it again.
+        form.outerHTML = `<div class="su-done">
+            <strong>That's in.</strong><br>
+            We'll message you on Discord. If you're not in the server yet, join it —
+            that's where everything happens.
+          </div>`;
+    } catch (err) {
+        btn.disabled = false;
+        st.className = 'su-status err';
+        st.textContent = err.message || 'Could not send that.';
+    }
+}
+
 // ── RECORDS AND PAST SEASONS ─────────────────────────────
 // Past seasons live on the Worker, not in the league file. The page adds
 // the season still running to whatever is archived, which is the only way

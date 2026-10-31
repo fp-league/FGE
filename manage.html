@@ -393,6 +393,7 @@ textarea { resize:vertical; min-height:80px; }
       <button class="snav-item"       onclick="showSec('control')"><span class="snav-icon">🏁</span>Race Control</button>
       <button class="snav-item"       onclick="showSec('cards')"><span class="snav-icon">🃏</span>Cards</button>
       <button class="snav-item"       onclick="showSec('economy')"><span class="snav-icon">🪙</span>Economy</button>
+      <button class="snav-item"       onclick="showSec('signups')"><span class="snav-icon">📝</span>Signups</button>
       <button class="snav-item"       onclick="showSec('availability')"><span class="snav-icon">✅</span>Available</button>
       <button class="snav-item"       onclick="showSec('stewards')"><span class="snav-icon">⚖️</span>Stewards</button>
       <button class="snav-item"       onclick="showSec('season')"><span class="snav-icon">⚙️</span>Season</button>
@@ -1144,6 +1145,30 @@ textarea { resize:vertical; min-height:80px; }
         </div>
 
         <div class="form-card">
+          <h3>END THE CARD SEASON</h3>
+          <p class="bk-note">Rarity comes from the championship, so archiving a racing season
+             re-rates the whole set to Common on its own. What happens to people's collections
+             is a separate decision — this is it.</p>
+          <p class="bk-note"><b>Archive and keep</b> records how it stood and lets everyone carry
+             on with what they have. <b>Archive and clear</b> wipes every collection so the new
+             season starts from nothing. Both take a snapshot first, so even clearing is
+             recorded.</p>
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="fg-label">CALL THIS CARD SEASON</label>
+              <input id="csName" placeholder="Season 1 cards">
+            </div>
+          </div>
+          <div class="form-actions">
+            <button class="btn btn-ghost" onclick="endCardSeason(false)">ARCHIVE AND KEEP</button>
+            <button class="btn btn-danger del-trigger"
+                    onclick="showDelConfirm(this, 'endCardSeason(true)')">ARCHIVE AND CLEAR</button>
+            <span class="img-size" id="csStatus"></span>
+          </div>
+          <div id="csList" style="margin-top:1rem"></div>
+        </div>
+
+        <div class="form-card">
           <h3>DISCORD COMMANDS</h3>
           <p class="bk-note">Discord only knows about the commands it has been told about.
              Press this after the Worker deploys and the new ones
@@ -1154,6 +1179,23 @@ textarea { resize:vertical; min-height:80px; }
             <button class="btn btn-white" onclick="ecRegisterCommands()">REGISTER COMMANDS</button>
             <span class="img-size" id="ecRegStatus"></span>
           </div>
+        </div>
+      </div>
+
+      <!-- SIGNUPS -->
+      <div class="adm-section" id="sec-signups">
+        <div class="sec-head"><h2>SIGNUPS</h2></div>
+        <div class="form-card">
+          <h3>WHO WANTS IN</h3>
+          <p class="bk-note">Everyone who filled in the form on the site. Nothing here is on
+             the grid — accepting marks it dealt with, it does not create a driver. Add them
+             on the Drivers tab when you are ready, and their Fortnite name is already here
+             to paste in.</p>
+          <div class="form-actions">
+            <button class="btn btn-ghost" onclick="loadSignups()">REFRESH</button>
+            <span class="img-size" id="suAdminStatus"></span>
+          </div>
+          <div id="suList" style="margin-top:1rem"></div>
         </div>
       </div>
 
@@ -1510,6 +1552,7 @@ function refreshSec() {
         case 'control': rcPopulateRaces(); rcPopulateEntry(); rcRefresh(); break;
         case 'cards': renderCardsAdmin(); break;
         case 'economy': if (!econ) loadEcon(); else renderEconomy(); break;
+        case 'signups': if (!signups) loadSignups(true); else renderSignups(); break;
         case 'availability': avPopulateRaces(); renderAvailability(); break;
         case 'stewards': renderStewards(); break;
         case 'season':  document.getElementById('seasonName').value = d().seasonName||'Season 1'; renderFviPanel(); renderPointsEditor(); renderStorageMeter(); if (!backups) loadBackups(true); else renderBackups(); if (!archives) loadArchives(true); else renderArchives(); seasonDefaults(); break;
@@ -2979,6 +3022,7 @@ async function loadEcon(quiet) {
 
 function renderEconomy() {
     renderMaintenance();
+    renderCardSeasons();
     renderEconPacks();
     renderEconCards();
     renderEconJobs();
@@ -3409,6 +3453,42 @@ function ecEditMode(kind, what) {
     if (card) card.classList.toggle('is-editing', Boolean(what));
 }
 
+
+
+/* ── Card seasons ────────────────────────────────────── */
+
+async function endCardSeason(clear) {
+    const st = document.getElementById('csStatus');
+    const name = document.getElementById('csName').value.trim()
+              || `${d().seasonName || 'Season'} cards`;
+    st.textContent = clear ? 'archiving and clearing…' : 'archiving…';
+    try {
+        const out = await econPost({ action: 'endCardSeason', name, clear });
+        st.textContent = `${out.name}: ${out.holders} collector${out.holders !== 1 ? 's' : ''}, ` +
+                         `${out.cards} cards${out.cleared ? ' · cleared' : ' · kept'}`;
+        toast(out.cleared
+            ? `${out.name} archived and everyone's collection cleared`
+            : `${out.name} archived — collections untouched`, 'ok');
+        await loadEcon(true);
+    } catch (e) {
+        st.textContent = '';
+        toast('Could not do that: ' + (e.message || 'unknown'), 'err');
+    }
+}
+
+function renderCardSeasons() {
+    const box = document.getElementById('csList');
+    if (!box) return;
+    const list = (econ && econ.cardSeasons) || [];
+    if (!list.length) { box.innerHTML = '<p class="bk-note">No card seasons archived yet.</p>'; return; }
+    box.innerHTML = list.map(cs => `<div class="ec-row">
+        <span class="ec-grow">${esc(cs.name)}
+          <span class="ec-mono"> · ${cs.holders} collector${cs.holders !== 1 ? 's' : ''} · ${cs.cards} cards${
+            cs.cleared ? ' · cleared' : ' · kept'}</span></span>
+        <span class="ec-mono" style="flex:0 0 110px;text-align:right">${
+          new Date(cs.ended_at).toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'2-digit' })}</span>
+      </div>`).join('');
+}
 
 /* ── Maintenance ─────────────────────────────────────── */
 
@@ -4499,6 +4579,81 @@ function raceLength(r) {
 }
 
 
+
+
+// ── SIGNUPS ───────────────────────────────────────────────
+let signups = null;
+
+async function loadSignups(quiet) {
+    const box = document.getElementById('suList');
+    const st = document.getElementById('suAdminStatus');
+    if (!box || !API_BASE) return;
+    if (st) st.textContent = 'loading…';
+    try {
+        const res = await fetch(`${API_BASE.replace(/\/+$/,'')}/api/signup`, {
+            headers: ADMIN_TOKEN ? { 'X-Admin-Token': ADMIN_TOKEN } : {},
+        });
+        const body = await res.json();
+        if (!res.ok || !body.ok) throw new Error(body.error || `HTTP ${res.status}`);
+        signups = body.signups || [];
+        renderSignups();
+        if (st) st.textContent = '';
+    } catch (e) {
+        if (st) st.textContent = '';
+        box.innerHTML = `<p class="bk-note">Could not load signups: ${esc(e.message || 'unknown')}</p>`;
+        if (!quiet) toast('Could not load signups', 'err');
+    }
+}
+
+const SU_EXP = { none:'never raced', some:'a bit of casual racing', league:'raced in a league' };
+
+function renderSignups() {
+    const box = document.getElementById('suList');
+    if (!box) return;
+    if (!signups || !signups.length) {
+        box.innerHTML = '<p class="bk-note">Nobody has signed up yet.</p>';
+        return;
+    }
+    const neu = signups.filter(s => s.status === 'new').length;
+    box.innerHTML = (neu ? `<p class="bk-note"><b>${neu}</b> waiting on you.</p>` : '') +
+      signups.map(su => `<div class="ec-row${su.status === 'new' ? '' : ' ec-off'}">
+        <span class="ec-grow">
+          <b>${esc(su.name)}</b>
+          <span class="ec-mono"> · ${esc(su.discord)}${su.fortnite ? ' · ' + esc(su.fortnite) : ''}
+            · ${String(su.class).toUpperCase()} · ${esc(SU_EXP[su.experience] || su.experience || '')}
+            ${su.status !== 'new' ? ' · ' + esc(su.status.toUpperCase()) : ''}</span>
+          ${su.note ? `<br><span class="bk-note">${esc(su.note)}</span>` : ''}
+        </span>
+        <div class="td-actions">
+          ${su.status === 'new' ? `
+            <button class="btn btn-white btn-sm" onclick="setSignup(${su.id},'accepted')">ACCEPT</button>
+            <button class="btn btn-ghost btn-sm" onclick="setSignup(${su.id},'declined')">DECLINE</button>`
+          : `<button class="btn btn-ghost btn-sm" onclick="setSignup(${su.id},'new')">REOPEN</button>`}
+          <button class="btn btn-danger btn-sm del-trigger"
+                  onclick="showDelConfirm(this, 'deleteSignup(${su.id})')">DEL</button>
+        </div>
+      </div>`).join('');
+}
+
+async function suPost(body) {
+    const res = await fetch(`${API_BASE.replace(/\/+$/,'')}/api/signup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json',
+                   ...(ADMIN_TOKEN ? { 'X-Admin-Token': ADMIN_TOKEN } : {}) },
+        body: JSON.stringify(body),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+}
+
+async function setSignup(id, status) {
+    try { await suPost({ action:'status', id, status }); await loadSignups(true); }
+    catch (e) { toast('Could not update: ' + (e.message || 'unknown'), 'err'); }
+}
+
+async function deleteSignup(id) {
+    try { await suPost({ action:'delete', id }); toast('Deleted', 'ok'); await loadSignups(true); }
+    catch (e) { toast('Could not delete: ' + (e.message || 'unknown'), 'err'); }
+}
 
 // ── PAST SEASONS ──────────────────────────────────────────
 // Archives live on the Worker rather than in the league file: the bin is

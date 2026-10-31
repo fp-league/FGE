@@ -32,7 +32,19 @@
     <link rel="manifest" href="manifest.json">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Titillium+Web:wght@400;600;700;900&display=swap" rel="stylesheet">
+    <!-- The font sheet is a third-party round trip, and as a plain
+         stylesheet it holds up first paint behind it. Loading it as print
+         media means the browser fetches it without blocking, then onload
+         promotes it to all. The URL already carries display=swap, so text
+         shows in the fallback face and reflows once — which is far better
+         than a blank page for the length of a DNS lookup and a round trip
+         to Google. The noscript copy keeps it working without JavaScript. -->
+    <link rel="stylesheet" media="print" onload="this.media='all';this.onload=null"
+          href="https://fonts.googleapis.com/css2?family=Titillium+Web:wght@400;600;700;900&display=swap">
+    <noscript>
+      <link rel="stylesheet"
+            href="https://fonts.googleapis.com/css2?family=Titillium+Web:wght@400;600;700;900&display=swap">
+    </noscript>
 </head>
 <body>
     <!-- Maintenance screen. Hidden unless the Worker says the league is
@@ -98,6 +110,7 @@
             <li><a href="#" class="nav-link" data-page="dotd"             onclick="navigate('dotd');closeNav();return false">DOTD</a></li>
             <li><a href="#" class="nav-link" data-page="cards" onclick="navigate('cards');closeNav();return false">CARDS</a></li>
             <li id="navStewards" style="display:none"><a href="#" class="nav-link" data-page="stewards" onclick="navigate('stewards');closeNav();return false">STEWARDS</a></li>
+            <li><a href="#" class="nav-link" data-page="signup" onclick="navigate('signup');closeNav();return false">RACE WITH US</a></li>
             <li id="navRecords" style="display:none"><a href="#" class="nav-link" data-page="records" onclick="navigate('records');closeNav();return false">RECORDS</a></li>
             <li><a href="manage.html" class="nav-link">ADMIN</a></li>
         </ul>
@@ -237,6 +250,53 @@
         </section>
 
         <!-- ══ STEWARDS ══ -->
+        <section id="signup" class="page">
+            <h1 class="cal-title">RACE WITH US</h1>
+            <p class="drivers-sub">Fill this in and we'll come back to you on Discord.
+               No experience needed — half the grid had none either.</p>
+            <form id="signupForm" class="su-form" onsubmit="submitSignup(event)">
+              <div class="su-grid">
+                <label class="su-field">
+                  <span>YOUR NAME</span>
+                  <input name="name" required maxlength="40" autocomplete="name"
+                         placeholder="What we should call you">
+                </label>
+                <label class="su-field">
+                  <span>DISCORD</span>
+                  <input name="discord" required maxlength="40" placeholder="yourname">
+                </label>
+                <label class="su-field">
+                  <span>FORTNITE NAME</span>
+                  <input name="fortnite" maxlength="40" placeholder="Your in-game name">
+                </label>
+                <label class="su-field">
+                  <span>WHICH CLASS</span>
+                  <select name="class">
+                    <option value="gt4">GT4 — Tier 2, where most people start</option>
+                    <option value="gt3">GT3 — Tier 1</option>
+                  </select>
+                </label>
+                <label class="su-field">
+                  <span>RACED BEFORE?</span>
+                  <select name="experience">
+                    <option value="none">Never raced</option>
+                    <option value="some">A bit of casual racing</option>
+                    <option value="league">I've raced in a league</option>
+                  </select>
+                </label>
+              </div>
+              <label class="su-field su-wide">
+                <span>ANYTHING ELSE <i>(optional)</i></span>
+                <textarea name="note" rows="3" maxlength="500"
+                          placeholder="When you're usually free, who you know here, anything at all"></textarea>
+              </label>
+              <div class="su-actions">
+                <button class="btn btn-primary" type="submit" id="suSubmit">SIGN ME UP</button>
+                <span class="su-status" id="suStatus"></span>
+              </div>
+            </form>
+        </section>
+
         <section id="records" class="page">
             <h1 class="cal-title">RECORDS</h1>
             <p class="drivers-sub">Every season FGE has run, and who has done the most across all of them.</p>
@@ -283,7 +343,9 @@
         <button onclick="dismissIosInstall()" style="background:transparent;color:#999;border:1px solid #333;padding:0.5rem 0.8rem;border-radius:6px;cursor:pointer;font-size:1rem;min-width:44px;min-height:44px;">✕</button>
     </div>
 
-    <script src="app.js"></script>
+    <!-- defer, so parsing this does not hold up the first paint. It sits
+         at the end of body, so nothing here depends on running earlier. -->
+    <script src="app.js" defer></script>
 <script type="module">
   // The season sums live in ./lib so the admin panel and this page count
   // the same way — archived summaries are written by one and read by the

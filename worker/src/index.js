@@ -23,7 +23,7 @@ import {
   doWork, doDaily, showBalance, showRich, payUser, showShop, buyPack, sellCard,
   payRace, adminConfig, setSettings, savePack, deletePack, saveCustomCard,
   deleteCustomCard, saveJob, deleteJob, allWallets, adjust, wallet, settings,
-  ECON_COMMANDS, TRADE_VIEWS,
+  ECON_COMMANDS, TRADE_VIEWS, endCardSeason, listCardSeasons,
   offerTrade, listTrades, acceptTrade, closeTrade,
 } from './economy.js';
 
@@ -775,6 +775,10 @@ async function postEcon(request, env) {
       case 'saveJob':    return json({ ok: true, id: await saveJob(env, body.job || {}) }, null, request, env);
       case 'deleteJob':  await deleteJob(env, body.id); return json({ ok: true }, null, request, env);
       case 'settings':   return json({ ok: true, settings: await setSettings(env, body.settings || {}) }, null, request, env);
+      case 'endCardSeason': {
+        const out = await endCardSeason(env, { name: body.name, clear: body.clear === true });
+        return json({ ok: true, ...out }, null, request, env);
+      }
       default: return bad('unknown action', request, env, 422);
     }
   } catch (err) {
@@ -864,6 +868,85 @@ async function handleArchive(request, env) {
   return bad('not found', request, env, 404);
 }
 
+/**
+ * Driver signups. Anyone can post one; only an admin can read or judge them.
+ *
+ * A signup is not a driver. It waits in a queue until a person decides, so
+ * the public form can never put a name on the grid by itself — and the
+ * answers are only ever shown in the admin panel, because a signup carries
+ * somebody's Discord handle.
+ */
+const SIGNUPS_PER_HOUR = 3;
+
+async function handleSignups(request, env) {
+  const admin = !env.ADMIN_TOKEN || request.headers.get('X-Admin-Token') === env.ADMIN_TOKEN;
+
+  try {
+    if (request.method === 'GET') {
+      if (!admin) return bad('not authorised', request, env, 401);
+      const rows = await env.DB.prepare(
+        `SELECT id, name, discord, fortnite, class, experience, note, status, created_at
+           FROM signup ORDER BY (status = 'new') DESC, created_at DESC LIMIT 200`).all();
+      return json({ ok: true, signups: rows.results || [] }, null, request, env);
+    }
+
+    if (request.method !== 'POST') return bad('not found', request, env, 404);
+
+    let body;
+    try { body = await request.json(); } catch { return bad('invalid JSON body', request, env); }
+
+    // Admin actions on an existing signup.
+    if (body.action) {
+      if (!admin) return bad('not authorised', request, env, 401);
+      if (body.action === 'status') {
+        const st = ['new', 'accepted', 'declined'].includes(body.status) ? body.status : 'new';
+        await env.DB.prepare(`UPDATE signup SET status = ? WHERE id = ?`)
+          .bind(st, Number(body.id) || 0).run();
+        return json({ ok: true }, null, request, env);
+      }
+      if (body.action === 'delete') {
+        await env.DB.prepare(`DELETE FROM signup WHERE id = ?`).bind(Number(body.id) || 0).run();
+        return json({ ok: true }, null, request, env);
+      }
+      return bad('unknown action', request, env, 422);
+    }
+
+    // A new signup from the public form.
+    const name = String(body.name || '').trim();
+    if (name.length < 2 || name.length > 40) {
+      return bad('a name between 2 and 40 characters is required', request, env, 422);
+    }
+    const discord = String(body.discord || '').trim().slice(0, 40);
+    if (!discord) return bad('a Discord name is required', request, env, 422);
+
+    const who = await voterHash(request, env);
+    const since = Date.now() - 3_600_000;
+    const recent = await env.DB.prepare(
+      `SELECT COUNT(*) AS n FROM signup WHERE voter = ? AND created_at > ?`
+    ).bind(who, since).first();
+    if ((recent && recent.n) >= SIGNUPS_PER_HOUR) {
+      return bad('you have already signed up — give us a chance to read it', request, env, 429);
+    }
+
+    await env.DB.prepare(
+      `INSERT INTO signup (name, discord, fortnite, class, experience, note, created_at, voter)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    ).bind(
+      name, discord,
+      String(body.fortnite || '').trim().slice(0, 40),
+      normClass(body.class),
+      String(body.experience || '').trim().slice(0, 40),
+      String(body.note || '').trim().slice(0, 500),
+      Date.now(), who
+    ).run();
+
+    return json({ ok: true }, null, request, env);
+  } catch (err) {
+    return json({ ok: false, error: 'signups are not set up on this Worker yet' },
+      { status: 503 }, request, env);
+  }
+}
+
 /** GET /api/econ — admin only. Everything the panel needs in one call. */
 async function getEcon(request, env) {
   if (env.ADMIN_TOKEN && request.headers.get('X-Admin-Token') !== env.ADMIN_TOKEN) {
@@ -871,7 +954,8 @@ async function getEcon(request, env) {
   }
   try {
     const cfg = await adminConfig(env);
-    return json({ ok: true, ...cfg, wallets: await allWallets(env) }, null, request, env);
+    return json({ ok: true, ...cfg, wallets: await allWallets(env),
+                  cardSeasons: await listCardSeasons(env) }, null, request, env);
   } catch (err) {
     return json({ ok: false, error: 'economy tables are not set up on this Worker yet' },
       { status: 503 }, request, env);
@@ -1367,6 +1451,10 @@ export default {
 
       if (pathname === '/api/archive') {
         return await handleArchive(request, env);
+      }
+
+      if (pathname === '/api/signup') {
+        return await handleSignups(request, env);
       }
 
       if (pathname === '/api/discord/channels' && request.method === 'GET') {
