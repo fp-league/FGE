@@ -812,3 +812,230 @@ export async function allWallets(env) {
 }
 
 export const ECON_COMMANDS = ['work', 'daily', 'balance', 'pay', 'rich', 'shop', 'buy', 'sell'];
+
+/* ── Trading ───────────────────────────────────────────── */
+
+/**
+ * Card trading.
+ *
+ * A spare can only be sold back to the house, which makes every duplicate
+ * worth exactly its sell price and nothing else. Trading makes a collection
+ * something two people can work on: the card you will never use is the one
+ * somebody else is missing.
+ *
+ * An offer is a row, not a message. The bot can restart, the other person
+ * can answer an hour later, and nothing moves until they accept.
+ *
+ * Only duplicates can be offered or asked for. Trading away your only copy
+ * of something is how people lose collections to a persuasive friend, and
+ * the rule that your last copy is never sellable should not stop applying
+ * because the buyer is a person rather than the house.
+ */
+
+const TRADE_WINDOW_MS = 48 * 60 * 60 * 1000;   // an offer nobody answers expires
+
+/** How many spare copies someone has of one card. */
+async function spareCount(env, userId, cardId) {
+  const row = await env.DB.prepare(
+    `SELECT copies FROM card_collection WHERE user_id = ? AND class = ? AND driver_id = ?`
+  ).bind(String(userId), SET, String(cardId)).first();
+  return row ? Math.max(0, row.copies - 1) : 0;
+}
+
+function findCard(set, query) {
+  const q = String(query || '').trim().toLowerCase();
+  if (!q) return null;
+  return set.find(c => c.name.toLowerCase() === q)
+      || set.find(c => c.name.toLowerCase().includes(q))
+      || set.find(c => String(c.number) === q)
+      || null;
+}
+
+/* ── /trade offer ──────────────────────────────────────── */
+export async function offerTrade(env, interaction, toId, giveQ, wantQ, record) {
+  const user = userOf(interaction);
+  if (!user.id) return simple('Who are you?', "Couldn't read your Discord account.");
+  if (!toId) return simple('Trade with who?', 'Pick someone: `/trade offer user:@them give:… want:…`');
+  if (String(toId) === String(user.id)) {
+    return simple('That is you', 'Trading with yourself would not achieve much.');
+  }
+
+  const cfg = await settings(env);
+  const set = await fullSet(env, record);
+  const give = findCard(set, giveQ);
+  const want = findCard(set, wantQ);
+  if (!give) return simple('No such card', `Nothing in the set matches “${giveQ}”.`);
+  if (!want) return simple('No such card', `Nothing in the set matches “${wantQ}”.`);
+  if (give.id === want.id) return simple('Same card', 'That is the same card on both sides.');
+
+  if (await spareCount(env, user.id, give.id) < 1) {
+    return simple('You have no spare',
+      `You need a duplicate of **${give.name}** to trade it away. Your last copy stays yours.`);
+  }
+  if (await spareCount(env, toId, want.id) < 1) {
+    return simple('They have no spare',
+      `<@${toId}> has no duplicate of **${want.name}** to give.`);
+  }
+
+  const now = Date.now();
+  await env.DB.prepare(
+    `INSERT INTO trade (from_user, to_user, give_card, want_card, status, created_at)
+     VALUES (?, ?, ?, ?, 'open', ?)`
+  ).bind(String(user.id), String(toId), give.id, want.id, now).run();
+
+  const row = await env.DB.prepare(
+    `SELECT id FROM trade WHERE from_user = ? AND to_user = ? AND status = 'open'
+      ORDER BY created_at DESC LIMIT 1`).bind(String(user.id), String(toId)).first();
+
+  return {
+    title: '🤝 Trade offered',
+    description: `${nameOf(user)} offers <@${toId}>:\n\n` +
+                 `**Gives** ${RARITY[give.rarity].icon} ${give.name}\n` +
+                 `**Wants** ${RARITY[want.rarity].icon} ${want.name}\n\n` +
+                 `<@${toId}> — \`/trade accept id:${row ? row.id : '?'}\` to take it, ` +
+                 `\`/trade decline id:${row ? row.id : '?'}\` to turn it down.`,
+    color: BRAND,
+    footer: { text: 'Nothing moves until they accept · offers expire after 48 hours' },
+  };
+}
+
+/* ── /trade list ───────────────────────────────────────── */
+export async function listTrades(env, interaction, record) {
+  const user = userOf(interaction);
+  if (!user.id) return simple('Who are you?', "Couldn't read your Discord account.");
+
+  const set = await fullSet(env, record);
+  const byId = {};
+  set.forEach(c => { byId[c.id] = c; });
+  const nameOfCard = id => (byId[id] ? byId[id].name : 'a card that no longer exists');
+
+  const cutoff = Date.now() - TRADE_WINDOW_MS;
+  const rows = await env.DB.prepare(
+    `SELECT * FROM trade WHERE status = 'open' AND created_at > ?
+        AND (to_user = ? OR from_user = ?)
+      ORDER BY created_at DESC LIMIT 15`
+  ).bind(cutoff, String(user.id), String(user.id)).all();
+
+  const list = rows.results || [];
+  if (!list.length) {
+    return simple('No open trades',
+      'Offer one with `/trade offer user:@them give:… want:…`.', BRAND);
+  }
+
+  const incoming = list.filter(t => t.to_user === String(user.id));
+  const outgoing = list.filter(t => t.from_user === String(user.id));
+  const fields = [];
+  if (incoming.length) fields.push({ name: `Waiting on you (${incoming.length})`,
+    value: incoming.map(t =>
+      `\`#${t.id}\` <@${t.from_user}> gives **${nameOfCard(t.give_card)}** ` +
+      `for your **${nameOfCard(t.want_card)}**`).join('\n').slice(0, 1020) });
+  if (outgoing.length) fields.push({ name: `Waiting on them (${outgoing.length})`,
+    value: outgoing.map(t =>
+      `\`#${t.id}\` you give **${nameOfCard(t.give_card)}** ` +
+      `for <@${t.to_user}>'s **${nameOfCard(t.want_card)}**`).join('\n').slice(0, 1020) });
+
+  return {
+    title: 'Open trades',
+    description: incoming.length
+      ? 'Accept one with `/trade accept id:…`.'
+      : 'Nothing needs your answer right now.',
+    color: BRAND,
+    fields,
+  };
+}
+
+/* ── /trade accept ─────────────────────────────────────── */
+export async function acceptTrade(env, interaction, id, record) {
+  const user = userOf(interaction);
+  if (!user.id) return simple('Who are you?', "Couldn't read your Discord account.");
+
+  const t = await env.DB.prepare(`SELECT * FROM trade WHERE id = ?`).bind(Number(id) || 0).first();
+  if (!t) return simple('No such trade', `There is no trade \`#${id}\`.`);
+  if (t.to_user !== String(user.id)) {
+    return simple('Not yours to accept', `Trade \`#${t.id}\` was offered to someone else.`);
+  }
+  if (t.status !== 'open') return simple('Already settled', `Trade \`#${t.id}\` is ${t.status}.`);
+  if (Date.now() - t.created_at > TRADE_WINDOW_MS) {
+    await env.DB.prepare(`UPDATE trade SET status = 'dead', closed_at = ? WHERE id = ?`)
+      .bind(Date.now(), t.id).run();
+    return simple('Too late', `Trade \`#${t.id}\` expired. Ask them to offer it again.`);
+  }
+
+  // Check both sides again at the moment of the swap. The spares that
+  // existed when the offer was made may have been sold or traded since.
+  if (await spareCount(env, t.from_user, t.give_card) < 1 ||
+      await spareCount(env, t.to_user, t.want_card) < 1) {
+    await env.DB.prepare(`UPDATE trade SET status = 'dead', closed_at = ? WHERE id = ?`)
+      .bind(Date.now(), t.id).run();
+    return simple('That one has gone',
+      'One of those spare cards is no longer spare. The offer has been closed.');
+  }
+
+  const set = await fullSet(env, record);
+  const byId = {};
+  set.forEach(c => { byId[c.id] = c; });
+  const give = byId[t.give_card], want = byId[t.want_card];
+  if (!give || !want) {
+    await env.DB.prepare(`UPDATE trade SET status = 'dead', closed_at = ? WHERE id = ?`)
+      .bind(Date.now(), t.id).run();
+    return simple('That card is gone', 'One of those cards is no longer in the set.');
+  }
+
+  const now = Date.now();
+  const move = (fromUser, toUser, cardId, rarity) => ([
+    env.DB.prepare(
+      `UPDATE card_collection SET copies = copies - 1
+        WHERE user_id = ? AND class = ? AND driver_id = ? AND copies - 1 >= 1`
+    ).bind(fromUser, SET, cardId),
+    env.DB.prepare(
+      `INSERT INTO card_collection (user_id, class, driver_id, rarity, copies, first_at)
+       VALUES (?, ?, ?, ?, 1, ?)
+       ON CONFLICT (user_id, class, driver_id)
+       DO UPDATE SET copies = copies + 1`
+    ).bind(toUser, SET, cardId, rarity, now),
+  ]);
+
+  await env.DB.batch([
+    ...move(t.from_user, t.to_user, t.give_card, give.rarity),
+    ...move(t.to_user, t.from_user, t.want_card, want.rarity),
+    env.DB.prepare(`UPDATE trade SET status = 'done', closed_at = ? WHERE id = ?`).bind(now, t.id),
+  ]);
+
+  const best = RARITIES.indexOf(give.rarity) >= RARITIES.indexOf(want.rarity) ? give : want;
+  const embed = {
+    title: '🤝 Trade done',
+    description: `<@${t.from_user}> ⇄ <@${t.to_user}>\n\n` +
+                 `${RARITY[give.rarity].icon} **${give.name}** → <@${t.to_user}>\n` +
+                 `${RARITY[want.rarity].icon} **${want.name}** → <@${t.from_user}>`,
+    color: RARITY[best.rarity].colour,
+    footer: { text: `Trade #${t.id}` },
+  };
+  const art = best.cardImage || best.photo;
+  if (art) embed.thumbnail = { url: art };
+  return embed;
+}
+
+/* ── /trade decline, /trade cancel ─────────────────────── */
+export async function closeTrade(env, interaction, id, how) {
+  const user = userOf(interaction);
+  if (!user.id) return simple('Who are you?', "Couldn't read your Discord account.");
+
+  const t = await env.DB.prepare(`SELECT * FROM trade WHERE id = ?`).bind(Number(id) || 0).first();
+  if (!t) return simple('No such trade', `There is no trade \`#${id}\`.`);
+  if (t.status !== 'open') return simple('Already settled', `Trade \`#${t.id}\` is ${t.status}.`);
+
+  const mine = how === 'cancelled' ? t.from_user === String(user.id)
+                                   : t.to_user === String(user.id);
+  if (!mine) {
+    return simple('Not yours',
+      how === 'cancelled' ? 'You can only cancel a trade you offered.'
+                          : 'You can only decline a trade offered to you.');
+  }
+
+  await env.DB.prepare(`UPDATE trade SET status = ?, closed_at = ? WHERE id = ?`)
+    .bind(how, Date.now(), t.id).run();
+  return simple(how === 'cancelled' ? 'Cancelled' : 'Declined',
+    `Trade \`#${t.id}\` is closed. Nothing changed hands.`, GREY);
+}
+
+export const TRADE_VIEWS = ['offer', 'list', 'accept', 'decline', 'cancel'];

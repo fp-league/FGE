@@ -149,4 +149,24 @@ commands.push(
   },
 );
 
+// ── Trading ──────────────────────────────────────────────
+commands.push({
+  name: 'trade',
+  description: 'Swap duplicate cards with someone else',
+  options: [
+    { name: 'offer', description: 'Offer one of your spares for one of theirs', type: 1, options: [
+      { name: 'user', description: 'Who to trade with', type: 6, required: true },
+      { name: 'give', description: 'The card you are giving', type: 3, required: true },
+      { name: 'want', description: 'The card you want back', type: 3, required: true },
+    ] },
+    { name: 'list',    description: 'Open trades involving you', type: 1 },
+    { name: 'accept',  description: 'Take a trade offered to you', type: 1, options: [
+      { name: 'id', description: 'The trade number', type: 4, required: true } ] },
+    { name: 'decline', description: 'Turn down a trade offered to you', type: 1, options: [
+      { name: 'id', description: 'The trade number', type: 4, required: true } ] },
+    { name: 'cancel',  description: 'Withdraw a trade you offered', type: 1, options: [
+      { name: 'id', description: 'The trade number', type: 4, required: true } ] },
+  ],
+});
+
 export const COMMANDS = commands;

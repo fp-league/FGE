@@ -22,7 +22,8 @@ import {
   doWork, doDaily, showBalance, showRich, payUser, showShop, buyPack, sellCard,
   payRace, adminConfig, setSettings, savePack, deletePack, saveCustomCard,
   deleteCustomCard, saveJob, deleteJob, allWallets, adjust, wallet, settings,
-  ECON_COMMANDS,
+  ECON_COMMANDS, TRADE_VIEWS,
+  offerTrade, listTrades, acceptTrade, closeTrade,
 } from './economy.js';
 
 const MAX_NAME = 24;
@@ -674,6 +675,31 @@ async function handleCards(interaction, record, env) {
 async function handleEconomy(interaction, record, env) {
   const data = interaction.data || {};
   const name = data.name || '';
+
+  // /trade is a group of subcommands, so the options live a level down.
+  if (name === 'trade') {
+    const sub = (data.options || []).find(o => o.type === 1) || (data.options || [])[0];
+    const view = (sub && sub.name) || '';
+    if (!TRADE_VIEWS.includes(view)) return null;
+    const o = (sub && sub.options) || [];
+    const take = n => (o.find(x => x.name === n) || {}).value;
+    let embed;
+    try {
+      switch (view) {
+        case 'offer':   embed = await offerTrade(env, interaction, take('user'),
+                                  take('give'), take('want'), record); break;
+        case 'list':    embed = await listTrades(env, interaction, record); break;
+        case 'accept':  embed = await acceptTrade(env, interaction, take('id'), record); break;
+        case 'decline': embed = await closeTrade(env, interaction, take('id'), 'declined'); break;
+        case 'cancel':  embed = await closeTrade(env, interaction, take('id'), 'cancelled'); break;
+      }
+    } catch (err) {
+      return { type: 4, data: { content:
+        'Trading is not set up on the server yet — the trade table is missing.' } };
+    }
+    return embed ? embedReply(embed) : null;
+  }
+
   if (!ECON_COMMANDS.includes(name)) return null;
 
   const opts = data.options || [];
