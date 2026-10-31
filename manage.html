@@ -589,6 +589,9 @@ textarea { resize:vertical; min-height:80px; }
             <div class="form-group"><label class="fg-label">DATE</label><input id="rDate" type="date"></div>
             <div class="form-group"><label class="fg-label">START TIME</label><input id="rTime" type="time"><span class="fg-hint" id="rTzHint"></span></div>
             <div class="form-group"><label class="fg-label">DURATION (MINS)</label><input id="rMins" type="number" min="1" placeholder="60"></div>
+            <div class="form-group"><label class="fg-label">VIDEO
+              <span style="color:var(--grey);font-weight:400">(YouTube or Twitch link)</span></label>
+              <input id="rVideo" placeholder="https://youtu.be/…"></div>
           </div>
           <div class="form-actions">
             <button class="btn btn-white" onclick="saveRace()">SAVE</button>
@@ -1296,6 +1299,34 @@ textarea { resize:vertical; min-height:80px; }
         </div>
 
         <div class="form-card" style="max-width:560px">
+          <h3>END THE SEASON</h3>
+          <p class="bk-note">Files the current season away and clears the calendar so the next
+             one starts empty. Drivers and teams stay — it is the same grid, a new year. The
+             finished season keeps its results, standings and champion, and shows on the site's
+             Archive and Records pages.</p>
+          <p class="bk-note">A backup is taken first, and archiving does not touch anything
+             until it has succeeded. Past seasons are stored on the server, not in the league
+             file, so they do not eat the storage budget.</p>
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="fg-label">ARCHIVE THIS SEASON AS</label>
+              <input id="arName" placeholder="Season 1">
+            </div>
+            <div class="form-group">
+              <label class="fg-label">NEXT SEASON WILL BE CALLED</label>
+              <input id="arNext" placeholder="Season 2">
+            </div>
+          </div>
+          <div class="form-actions">
+            <button class="btn btn-ghost" onclick="archiveOnly()">ARCHIVE, KEEP RACING</button>
+            <button class="btn btn-danger del-trigger"
+                    onclick="showDelConfirm(this, 'endSeason()')">END SEASON</button>
+            <span class="img-size" id="arStatus"></span>
+          </div>
+          <div id="arList" style="margin-top:1rem"></div>
+        </div>
+
+        <div class="form-card" style="max-width:560px">
           <h3>AUTOMATIC BACKUPS</h3>
           <p class="bk-note">The server takes a copy of everything at 4am every night and keeps
              the last 30. You do not have to remember anything. A copy is taken automatically
@@ -1481,7 +1512,7 @@ function refreshSec() {
         case 'economy': if (!econ) loadEcon(); else renderEconomy(); break;
         case 'availability': avPopulateRaces(); renderAvailability(); break;
         case 'stewards': renderStewards(); break;
-        case 'season':  document.getElementById('seasonName').value = d().seasonName||'Season 1'; renderFviPanel(); renderPointsEditor(); renderStorageMeter(); if (!backups) loadBackups(true); else renderBackups(); break;
+        case 'season':  document.getElementById('seasonName').value = d().seasonName||'Season 1'; renderFviPanel(); renderPointsEditor(); renderStorageMeter(); if (!backups) loadBackups(true); else renderBackups(); if (!archives) loadArchives(true); else renderArchives(); seasonDefaults(); break;
     }
 }
 
@@ -1744,7 +1775,7 @@ function openRaceForm() {
     editingIdx = null;
     document.getElementById('raceFormTitle').textContent = 'ADD RACE';
     document.getElementById('rRound').value = (d().races||[]).length + 1;
-    ['rName','rTrack','rMins','rTime'].forEach(id => document.getElementById(id).value='');
+    ['rName','rTrack','rMins','rTime','rVideo'].forEach(id => document.getElementById(id).value='');
     showTzHint();
     document.getElementById('rDate').value = '';
     document.getElementById('raceForm').style.display = 'block';
@@ -1757,6 +1788,7 @@ function editRace(i) {
     document.getElementById('raceFormTitle').textContent = 'EDIT RACE';
     document.getElementById('rRound').value = r.round||'';
     document.getElementById('rName').value  = r.name||'';
+    document.getElementById('rVideo').value = r.video||'';
     document.getElementById('rTrack').value = r.track||'';
     const dt = splitRaceDate(r.date);
     document.getElementById('rDate').value  = dt.date;
@@ -1801,6 +1833,7 @@ function saveRace() {
     const fields = {
         round: parseInt(document.getElementById('rRound').value)||1,
         name:  document.getElementById('rName').value.trim(),
+        video: document.getElementById('rVideo').value.trim(),
         track: document.getElementById('rTrack').value.trim(),
         date:  buildRaceDate(document.getElementById('rDate').value,
                              document.getElementById('rTime').value),
@@ -4466,6 +4499,166 @@ function raceLength(r) {
 }
 
 
+
+// ── PAST SEASONS ──────────────────────────────────────────
+// Archives live on the Worker rather than in the league file: the bin is
+// capped at a megabyte and a season is most of 40KB, so a few years of them
+// would quietly fill it and the next save would be the one that failed.
+
+let archives = null;
+
+function archApi(path) { return `${API_BASE.replace(/\/+$/,'')}${path}`; }
+
+async function loadArchives(quiet) {
+    const box = document.getElementById('arList');
+    if (!box || !API_BASE) return;
+    try {
+        const res = await fetch(archApi('/api/archive'));
+        const body = await res.json();
+        if (!res.ok || !body.ok) throw new Error(body.error || `HTTP ${res.status}`);
+        archives = body.seasons || [];
+        renderArchives();
+    } catch (e) {
+        if (!quiet) toast('Could not load past seasons', 'err');
+    }
+}
+
+function renderArchives() {
+    const box = document.getElementById('arList');
+    if (!box) return;
+    if (!archives || !archives.length) {
+        box.innerHTML = '<p class="bk-note">No seasons archived yet.</p>';
+        return;
+    }
+    box.innerHTML = archives.map(a => {
+        const champ = a.summary && a.summary.champion;
+        return `<div class="ec-row">
+            <span class="ec-grow">${esc(a.name)}
+              <span class="ec-mono"> · ${String(a.class).toUpperCase()} · ${a.rounds} round${a.rounds !== 1 ? 's' : ''}${
+                champ ? ` · 🏆 ${esc(champ.name)}` : ''}</span></span>
+            <span class="ec-mono" style="flex:0 0 68px;text-align:right">${fmtBytes(a.bytes)}</span>
+            <div class="td-actions">
+              <button class="btn btn-danger btn-sm del-trigger"
+                      onclick="showDelConfirm(this, 'deleteArchive(\\'${esc(a.id)}\\')')">DEL</button>
+            </div>
+          </div>`;
+    }).join('');
+}
+
+async function deleteArchive(id) {
+    try {
+        const res = await fetch(archApi('/api/archive'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json',
+                       ...(ADMIN_TOKEN ? { 'X-Admin-Token': ADMIN_TOKEN } : {}) },
+            body: JSON.stringify({ action: 'delete', id }),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        toast('Season removed from the archive', 'ok');
+        await loadArchives(true);
+    } catch (e) { toast('Could not delete: ' + (e.message || 'unknown'), 'err'); }
+}
+
+/** Put the current season in the archive. Changes nothing locally. */
+async function pushArchive(name) {
+    const cd = d();
+    const summary = window.seasonSummary(cd, name);
+    const res = await fetch(archApi('/api/archive'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json',
+                   ...(ADMIN_TOKEN ? { 'X-Admin-Token': ADMIN_TOKEN } : {}) },
+        body: JSON.stringify({
+            class: currentClass.toLowerCase(),
+            name,
+            record: { drivers: cd.drivers || [], teams: cd.teams || [],
+                      races: cd.races || [], points: cd.points || null,
+                      seasonName: name },
+            summary,
+        }),
+    });
+    const body = await res.json();
+    if (!res.ok || !body.ok) throw new Error(body.error || `HTTP ${res.status}`);
+    return { ...body, summary };
+}
+
+async function archiveOnly() {
+    const st = document.getElementById('arStatus');
+    const name = document.getElementById('arName').value.trim() || (d().seasonName || 'Season');
+    st.textContent = 'archiving…';
+    try {
+        const out = await pushArchive(name);
+        st.textContent = `archived as ${out.name}`;
+        toast(`${out.name} archived${out.summary.champion
+            ? ` — champion ${out.summary.champion.name}` : ''}`, 'ok');
+        await loadArchives(true);
+    } catch (e) {
+        st.textContent = '';
+        toast('Could not archive: ' + (e.message || 'unknown'), 'err');
+    }
+}
+
+/**
+ * Archive, then clear the calendar for next year.
+ *
+ * Order matters: back up, archive, and only then touch the live data. If
+ * either of the first two fails nothing has changed, which is the whole
+ * point of doing it in that order.
+ */
+async function endSeason() {
+    const st = document.getElementById('arStatus');
+    const cd = d();
+    const name = document.getElementById('arName').value.trim() || (cd.seasonName || 'Season');
+    const next = document.getElementById('arNext').value.trim() || nextSeasonName(name);
+
+    if (!(cd.races || []).some(r => (r.results || []).length)) {
+        toast('This season has no results in it — nothing to archive', 'err');
+        return;
+    }
+
+    try {
+        st.textContent = 'backing up…';
+        await fetch(archApi('/api/backups'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json',
+                       ...(ADMIN_TOKEN ? { 'X-Admin-Token': ADMIN_TOKEN } : {}) },
+            body: JSON.stringify({ kind: 'pre-restore' }),
+        }).catch(() => {});
+
+        st.textContent = 'archiving…';
+        const out = await pushArchive(name);
+
+        st.textContent = 'clearing the calendar…';
+        cd.races = [];
+        cd.seasonName = next;
+        document.getElementById('seasonName').value = next;
+        document.getElementById('arName').value = next;
+        document.getElementById('arNext').value = nextSeasonName(next);
+        await saveData(null);
+
+        st.textContent = `${out.name} archived · now racing ${next}`;
+        toast(`${out.name} is in the archive. ${next} starts with the same grid and an empty calendar.`, 'ok');
+        await loadArchives(true);
+        refreshSec();
+    } catch (e) {
+        st.textContent = '';
+        toast('Stopped before changing anything: ' + (e.message || 'unknown'), 'err');
+    }
+}
+
+/** Prefill the two name boxes from whatever the season is called now. */
+function seasonDefaults() {
+    const cur = (d().seasonName || 'Season 1');
+    const a = document.getElementById('arName'), b = document.getElementById('arNext');
+    if (a && !a.value) a.value = cur;
+    if (b && !b.value) b.value = nextSeasonName(cur);
+}
+
+/** "Season 1" → "Season 2". Anything else just gets a 2 on the end. */
+function nextSeasonName(name) {
+    const m = /^(.*?)(\d+)\s*$/.exec(String(name || '').trim());
+    return m ? `${m[1]}${Number(m[2]) + 1}` : `${name || 'Season'} 2`;
+}
+
 // ── AUTOMATIC BACKUPS ─────────────────────────────────────
 // The Worker takes the snapshots; it only has the bin's read key, so it
 // cannot write the league back. Restoring happens here, where the write key
@@ -4746,6 +4939,8 @@ document.addEventListener('DOMContentLoaded', () => {
   window.ocrPlayerColumn = playerColumn;
   window.ocrMatchAll = matchAll;
   window.ocrScore = score;
+  const season = await import('./lib/season.js');
+  window.seasonSummary = season.seasonSummary;
   const pen = await import('./lib/penalties.js');
   window.applyPenalties = pen.applyPenalties;
   window.gapSeconds = pen.gapSeconds;

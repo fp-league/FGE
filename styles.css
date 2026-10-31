@@ -1727,3 +1727,72 @@ textarea:focus-visible,
     vertical-align: middle;
     white-space: nowrap;
 }
+
+/* ── RACE VIDEO ───────────────────────────────────────────
+   The VOD on the round's own page, so the site is where people go after
+   the race rather than a link in a Discord channel that scrolls away. */
+.rv-wrap { margin-top: 2.4rem; }
+.rv-head {
+    font-family: var(--fu, inherit);
+    font-size: 0.8rem;
+    letter-spacing: 0.1em;
+    color: #fff;
+    margin: 0 0 0.8rem;
+}
+/* 16:9 that holds its height before the iframe loads, so the rest of the
+   page does not jump when it does. */
+.rv-frame {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    background: #0B0B0C;
+    border: 1px solid var(--line, #26262A);
+    border-radius: 4px;
+    overflow: hidden;
+}
+.rv-frame iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+
+/* ── RECORDS ──────────────────────────────────────────────
+   Leaderboards across every season FGE has run. */
+.rec-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+    gap: 1rem;
+    margin-bottom: 2.4rem;
+}
+.rec-board {
+    background: var(--surface, #141416);
+    border: 1px solid var(--line, #26262A);
+    border-radius: 4px;
+    padding: 0.9rem 1rem 1rem;
+}
+.rec-board h3 {
+    font-family: var(--fu, inherit);
+    font-size: 0.72rem;
+    letter-spacing: 0.12em;
+    color: var(--grey, #A6A6A6);
+    margin: 0 0 0.6rem;
+}
+.rec-list { list-style: none; margin: 0; padding: 0; }
+.rec-list li {
+    display: flex;
+    align-items: baseline;
+    gap: 0.6rem;
+    padding: 0.3rem 0;
+    font-size: 0.88rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+.rec-list li:last-child { border-bottom: 0; }
+/* The record holder, not just the top row of a list. */
+.rec-list li.first .rec-name { font-weight: 700; color: #fff; }
+.rec-list li.first .rec-val { color: var(--accent, #E10600); font-size: 1.05rem; }
+.rec-rank {
+    flex: 0 0 1.1rem;
+    color: var(--grey, #A6A6A6);
+    font-size: 0.75rem;
+    font-variant-numeric: tabular-nums;
+}
+.rec-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rec-val { font-weight: 700; font-variant-numeric: tabular-nums; }
+.rec-val i { font-style: normal; color: var(--grey, #A6A6A6); font-weight: 400; margin-left: 0.2rem; }
+.rec-star { color: #FFC400; font-size: 0.75rem; letter-spacing: -0.05em; }

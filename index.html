@@ -98,6 +98,7 @@
             <li><a href="#" class="nav-link" data-page="dotd"             onclick="navigate('dotd');closeNav();return false">DOTD</a></li>
             <li><a href="#" class="nav-link" data-page="cards" onclick="navigate('cards');closeNav();return false">CARDS</a></li>
             <li id="navStewards" style="display:none"><a href="#" class="nav-link" data-page="stewards" onclick="navigate('stewards');closeNav();return false">STEWARDS</a></li>
+            <li id="navRecords" style="display:none"><a href="#" class="nav-link" data-page="records" onclick="navigate('records');closeNav();return false">RECORDS</a></li>
             <li><a href="manage.html" class="nav-link">ADMIN</a></li>
         </ul>
         <div class="nav-overlay-foot">
@@ -236,6 +237,12 @@
         </section>
 
         <!-- ══ STEWARDS ══ -->
+        <section id="records" class="page">
+            <h1 class="cal-title">RECORDS</h1>
+            <p class="drivers-sub">Every season FGE has run, and who has done the most across all of them.</p>
+            <div id="recordsContent"></div>
+        </section>
+
         <section id="stewards" class="page">
             <h1 class="cal-title">STEWARDS' DECISIONS</h1>
             <p class="drivers-sub">Every penalty this season, with the reason behind it.</p>
@@ -277,5 +284,20 @@
     </div>
 
     <script src="app.js"></script>
+<script type="module">
+  // The season sums live in ./lib so the admin panel and this page count
+  // the same way — archived summaries are written by one and read by the
+  // other, and a records page that disagreed with the archive would be
+  // worse than no records page.
+  import { seasonSummary, records, careerTotals } from './lib/season.js';
+  window.seasonSummary = seasonSummary;
+  window.seasonRecords = records;
+  window.careerTotals = careerTotals;
+  // app.js may already have rendered before this module ran.
+  if (document.getElementById('records')?.classList.contains('active')) {
+    try { renderRecords(); } catch (e) {}
+  }
+  try { syncRecordsNav(); } catch (e) {}
+</script>
 </body>
 </html>

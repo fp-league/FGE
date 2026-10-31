@@ -18,6 +18,7 @@ import { verifyRequest, handleCommand, buildResults } from './discord.js';
 import { openPack, showCollection, showCard, showCollectors, grantPacks, CARD_VIEWS } from './cards.js';
 import { COMMANDS } from './commands.js';
 import { takeBackup, listBackups, readBackup, deleteBackup } from './backup.js';
+import { listArchive, readArchive, saveArchive, deleteArchive } from './archive.js';
 import {
   doWork, doDaily, showBalance, showRich, payUser, showShop, buyPack, sellCard,
   payRace, adminConfig, setSettings, savePack, deletePack, saveCustomCard,
@@ -822,6 +823,47 @@ async function handleBackups(request, env) {
   return bad('not found', request, env, 404);
 }
 
+/**
+ * Past seasons. Listing and reading are public — an archive nobody can see
+ * is just a backup — while writing and deleting need the admin token.
+ */
+async function handleArchive(request, env) {
+  const url = new URL(request.url);
+  const admin = !env.ADMIN_TOKEN || request.headers.get('X-Admin-Token') === env.ADMIN_TOKEN;
+
+  try {
+    if (request.method === 'GET') {
+      const id = url.searchParams.get('id');
+      if (id) {
+        return new Response(await readArchive(env, id), {
+          headers: { 'Content-Type': 'application/json', ...corsHeaders(request, env) },
+        });
+      }
+      const cls = url.searchParams.get('class');
+      return json({ ok: true, seasons: await listArchive(env, cls ? normClass(cls) : null) },
+        null, request, env);
+    }
+
+    if (request.method === 'POST') {
+      if (!admin) return bad('not authorised', request, env, 401);
+      let body;
+      try { body = await request.json(); } catch { return bad('invalid JSON body', request, env); }
+      if (body.action === 'delete') {
+        await deleteArchive(env, body.id);
+        return json({ ok: true }, null, request, env);
+      }
+      const out = await saveArchive(env, {
+        cls: body.class, name: body.name, record: body.record, summary: body.summary,
+      });
+      return json({ ok: true, ...out }, null, request, env);
+    }
+  } catch (err) {
+    return json({ ok: false, error: String(err && err.message || err) },
+      { status: 503 }, request, env);
+  }
+  return bad('not found', request, env, 404);
+}
+
 /** GET /api/econ — admin only. Everything the panel needs in one call. */
 async function getEcon(request, env) {
   if (env.ADMIN_TOKEN && request.headers.get('X-Admin-Token') !== env.ADMIN_TOKEN) {
@@ -1321,6 +1363,10 @@ export default {
 
       if (pathname === '/api/backups') {
         return await handleBackups(request, env);
+      }
+
+      if (pathname === '/api/archive') {
+        return await handleArchive(request, env);
       }
 
       if (pathname === '/api/discord/channels' && request.method === 'GET') {

@@ -328,6 +328,7 @@ function switchClass(cls) {
     applyThemeColor(cls);
     syncFviNav();
     syncStewardsNav();
+    syncRecordsNav();
     document.getElementById('csGT3')?.classList.toggle('active', cls === 'GT3');
     document.getElementById('csGT4')?.classList.toggle('active', cls === 'GT4');
     // Tallies are per class, so the cached one is wrong now.
@@ -379,6 +380,7 @@ function renderCurrentPage() {
         case 'drivers':    renderDrivers(); break;
         case 'fantasy':    renderFantasy(); break;
         case 'race':       renderRace(); break;
+        case 'records':    renderRecords(); break;
         case 'live':       renderLive(); break;
         case 'cards':      renderCards(); break;
         case 'stewards':   renderStewards(); break;
@@ -780,6 +782,65 @@ function renderResults() {
 // Races now get a full page rather than a cramped modal.
 function openRaceModal(idx) { navigate('race', { raceFocusIdx: idx }); }
 
+/**
+ * Turn a YouTube or Twitch link into something embeddable.
+ *
+ * Only these two, and only by recognising the id — building an iframe src
+ * out of whatever someone pasted is how a page ends up framing an
+ * arbitrary site. Anything unrecognised returns null and gets shown as a
+ * plain link instead.
+ */
+function videoEmbed(url) {
+    const raw = String(url || '').trim();
+    if (!raw) return null;
+
+    let u;
+    try { u = new URL(raw); } catch { return null; }
+    if (u.protocol !== 'https:' && u.protocol !== 'http:') return null;
+    const host = u.hostname.replace(/^www\./, '').toLowerCase();
+
+    const YT_ID = /^[A-Za-z0-9_-]{11}$/;
+    if (host === 'youtu.be') {
+        const id = u.pathname.slice(1);
+        return YT_ID.test(id) ? `https://www.youtube-nocookie.com/embed/${id}` : null;
+    }
+    if (host === 'youtube.com' || host === 'm.youtube.com' || host === 'youtube-nocookie.com') {
+        const id = u.searchParams.get('v')
+            || (/^\/(embed|shorts|live)\/([A-Za-z0-9_-]{11})$/.exec(u.pathname) || [])[2];
+        return id && YT_ID.test(id) ? `https://www.youtube-nocookie.com/embed/${id}` : null;
+    }
+    if (host === 'twitch.tv') {
+        const vid = (/^\/videos\/(\d{3,})$/.exec(u.pathname) || [])[1];
+        if (vid) return `https://player.twitch.tv/?video=${vid}&parent=${location.hostname}&autoplay=false`;
+        const chan = (/^\/([A-Za-z0-9_]{3,25})$/.exec(u.pathname) || [])[1];
+        if (chan) return `https://player.twitch.tv/?channel=${chan}&parent=${location.hostname}&autoplay=false`;
+        return null;
+    }
+    return null;
+}
+
+/** The video block for a race page, or '' when there isn't one. */
+function raceVideoHTML(race) {
+    const src = videoEmbed(race && race.video);
+    if (!src) {
+        const raw = String((race && race.video) || '').trim();
+        // A link we cannot embed is still a link worth offering.
+        return /^https:\/\//.test(raw)
+            ? `<div class="rv-wrap"><a class="btn btn-secondary" href="${esc(raw)}"
+                 target="_blank" rel="noopener noreferrer">WATCH THE RACE &rarr;</a></div>`
+            : '';
+    }
+    return `<div class="rv-wrap">
+        <h3 class="rv-head">WATCH THE RACE</h3>
+        <div class="rv-frame">
+          <iframe src="${esc(src)}" title="Race video" loading="lazy"
+                  allow="accelerometer; encrypted-media; picture-in-picture; fullscreen"
+                  referrerpolicy="strict-origin-when-cross-origin"
+                  allowfullscreen></iframe>
+        </div>
+      </div>`;
+}
+
 function renderRace() {
     const el = document.getElementById('raceContent');
     if (!el) return;
@@ -866,6 +927,8 @@ function renderRace() {
         </table>
       </div>`
       : `<p class="dp-empty" style="padding:2rem 0">No results have been entered for this race yet.</p>`}
+
+      ${raceVideoHTML(race)}
     `;
 }
 
@@ -1857,6 +1920,130 @@ function cardHTML(c, d) {
 // ── STEWARDS' DECISIONS ──────────────────────────────────
 // Hidden until there is something to show, so the nav doesn't carry an
 // empty page around for the first half of a season.
+
+// ── RECORDS AND PAST SEASONS ─────────────────────────────
+// Past seasons live on the Worker, not in the league file. The page adds
+// the season still running to whatever is archived, which is the only way
+// a "most wins" list means anything the year a record is broken.
+
+let archiveSeasons = null;      // null = not fetched, [] = none
+
+async function loadArchive() {
+    if (archiveSeasons || !API_BASE) return;
+    try {
+        const res = await fetch(`${API_BASE.replace(/\/+$/, '')}/api/archive`);
+        const body = await res.json();
+        archiveSeasons = (body && body.seasons) || [];
+    } catch (e) {
+        archiveSeasons = [];
+    }
+    syncRecordsNav();
+    if (document.getElementById('records')?.classList.contains('active')) renderRecords();
+}
+
+/** Hidden until there is something to show, like the Stewards page. */
+function syncRecordsNav() {
+    const li = document.getElementById('navRecords');
+    if (!li) return;
+    const scored = (cls().races || []).filter(r => (r.results || []).length).length;
+    const past = (archiveSeasons || []).filter(a =>
+        a.class === currentClass.toLowerCase()).length;
+    li.style.display = (past || scored) ? '' : 'none';
+}
+
+function renderRecords() {
+    const el = document.getElementById('recordsContent');
+    if (!el) return;
+    if (archiveSeasons === null) { loadArchive(); }
+
+    const d = cls();
+    const klass = currentClass.toLowerCase();
+    const live = window.seasonSummary
+        ? window.seasonSummary(d, d.seasonName || 'This season')
+        : null;
+
+    const past = (archiveSeasons || [])
+        .filter(a => a.class === klass && a.summary && a.summary.drivers)
+        .map(a => a.summary);
+
+    // The running season counts too, otherwise the records are always a
+    // year out of date and a record broken today does not show until the
+    // season ends.
+    const all = live && live.rounds ? past.concat([live]) : past;
+    if (!all.length) {
+        el.innerHTML = '<p class="dp-empty" style="padding:2rem">No seasons have been run yet.</p>';
+        return;
+    }
+
+    const rec = window.seasonRecords(all);
+
+    const board = (title, rows, unit) => {
+        if (!rows.length) return '';
+        return `<div class="rec-board">
+            <h3>${esc(title)}</h3>
+            <ol class="rec-list">${rows.map((r, i) => `
+              <li${i === 0 ? ' class="first"' : ''}>
+                <span class="rec-rank">${i + 1}</span>
+                <span class="rec-name">${esc(r.name)}</span>
+                <span class="rec-val">${r.value}${unit ? `<i>${esc(unit)}</i>` : ''}</span>
+              </li>`).join('')}</ol>
+          </div>`;
+    };
+
+    const champs = rec.champions.length ? `
+      <div class="section-head"><h2>CHAMPIONS</h2></div>
+      <div class="table-container">
+        <table class="rp-table">
+          <thead><tr><th>SEASON</th><th>CHAMPION</th><th class="rp-hide">TEAM</th><th>ROUNDS</th><th>PTS</th></tr></thead>
+          <tbody>${rec.champions.map(c => `<tr>
+            <td><b>${esc(c.season)}</b></td>
+            <td>${esc(c.driver)}</td>
+            <td class="rp-hide">${esc(c.team || '—')}</td>
+            <td>${c.rounds}</td>
+            <td>${c.points}</td>
+          </tr>`).join('')}</tbody>
+        </table>
+      </div>` : '';
+
+    const totals = rec.career.slice()
+        .sort((a, b) => b.points - a.points || b.wins - a.wins)
+        .slice(0, 30);
+
+    el.innerHTML = `
+      <p class="tc-how"><strong>${all.length} season${all.length !== 1 ? 's' : ''}</strong>
+         counted — ${past.length} finished${live && live.rounds
+           ? ` and ${esc(live.season)} still running` : ''}.</p>
+
+      ${champs}
+
+      <div class="section-head"><h2>ALL TIME</h2></div>
+      <div class="rec-grid">
+        ${board('Titles', rec.titles)}
+        ${board('Wins', rec.wins)}
+        ${board('Podiums', rec.podiums)}
+        ${board('Points', rec.points)}
+        ${board('Starts', rec.starts)}
+        ${board('Fastest laps', rec.fastestLaps)}
+      </div>
+
+      <div class="section-head"><h2>CAREER TOTALS</h2></div>
+      <div class="table-container">
+        <table class="rp-table">
+          <thead><tr><th>DRIVER</th><th class="rp-hide">TEAM</th><th>S</th><th>STARTS</th>
+            <th>WINS</th><th class="rp-hide">PODIUMS</th><th>PTS</th></tr></thead>
+          <tbody>${totals.map(c => `<tr>
+            <td><b>${esc(c.name)}</b>${c.titles ? ` <span class="rec-star" title="${c.titles} title${c.titles !== 1 ? 's' : ''}">${'★'.repeat(Math.min(c.titles, 5))}</span>` : ''}</td>
+            <td class="rp-hide">${esc(c.team || '—')}</td>
+            <td>${c.seasons}</td>
+            <td>${c.races}</td>
+            <td>${c.wins}</td>
+            <td class="rp-hide">${c.podiums}</td>
+            <td>${c.points}</td>
+          </tr>`).join('')}</tbody>
+        </table>
+      </div>`;
+}
+
 function syncStewardsNav() {
     const li = document.getElementById('navStewards');
     if (!li) return;
