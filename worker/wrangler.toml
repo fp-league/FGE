@@ -19,6 +19,12 @@ ANNOUNCE_CHANNEL_GT4 = "1478448745996619948"   # 🔵〡race🥇
 # Used for either class when the one above is blank.
 ANNOUNCE_CHANNEL_ID = ""
 
+# Daily backup. 04:10 UTC, which is the middle of the night in the UK and
+# nowhere near a race. The Worker only needs its read key for this — the
+# restore happens from the admin panel, which already holds the write key.
+[triggers]
+crons = ["10 4 * * *"]
+
 # D1 database. These ids are not secrets - they only identify the resource,
 # and are useless without an API token. Cloudflare's own docs commit them.
 # They were left as placeholders, which meant a deploy from CI could not find

@@ -17,6 +17,7 @@
 import { verifyRequest, handleCommand, buildResults } from './discord.js';
 import { openPack, showCollection, showCard, showCollectors, grantPacks, CARD_VIEWS } from './cards.js';
 import { COMMANDS } from './commands.js';
+import { takeBackup, listBackups, readBackup, deleteBackup } from './backup.js';
 import {
   doWork, doDaily, showBalance, showRich, payUser, showShop, buyPack, sellCard,
   payRace, adminConfig, setSettings, savePack, deletePack, saveCustomCard,
@@ -755,6 +756,46 @@ async function postEcon(request, env) {
   }
 }
 
+/**
+ * Backups. Admin only, and read-only as far as the league is concerned —
+ * the Worker has no write key for the bin, so the worst this can do is hand
+ * the panel a copy of an old season.
+ */
+async function handleBackups(request, env) {
+  if (env.ADMIN_TOKEN && request.headers.get('X-Admin-Token') !== env.ADMIN_TOKEN) {
+    return bad('not authorised', request, env, 401);
+  }
+  const url = new URL(request.url);
+
+  try {
+    if (request.method === 'GET') {
+      const key = url.searchParams.get('key');
+      if (key) {
+        // The snapshot itself, as the record the panel will write back.
+        return new Response(await readBackup(env, key), {
+          headers: { 'Content-Type': 'application/json', ...corsHeaders(request, env) },
+        });
+      }
+      return json({ ok: true, backups: await listBackups(env) }, null, request, env);
+    }
+
+    if (request.method === 'POST') {
+      let body = {};
+      try { body = await request.json(); } catch { /* an empty body means "take one" */ }
+      if (body.action === 'delete') {
+        await deleteBackup(env, body.key);
+        return json({ ok: true }, null, request, env);
+      }
+      const out = await takeBackup(env, body.kind || 'manual');
+      return json({ ok: true, ...out }, null, request, env);
+    }
+  } catch (err) {
+    return json({ ok: false, error: String(err && err.message || err) },
+      { status: 503 }, request, env);
+  }
+  return bad('not found', request, env, 404);
+}
+
 /** GET /api/econ — admin only. Everything the panel needs in one call. */
 async function getEcon(request, env) {
   if (env.ADMIN_TOKEN && request.headers.get('X-Admin-Token') !== env.ADMIN_TOKEN) {
@@ -1064,6 +1105,24 @@ async function getDiscordMembers(request, env) {
 /* ── entry ───────────────────────────────────────────────── */
 
 export default {
+  /**
+   * The nightly backup. Cloudflare calls this on the cron in wrangler.toml;
+   * nothing else triggers it. Failures are logged rather than thrown,
+   * because a thrown error in a scheduled handler is retried and a retry
+   * loop against the bin would be worse than a missed night.
+   */
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil((async () => {
+      try {
+        const out = await takeBackup(env, 'auto');
+        console.log(`backup ${out.key} — ${out.bytes} bytes — ${out.summary}` +
+                    (out.pruned ? ` — pruned ${out.pruned}` : ''));
+      } catch (err) {
+        console.error('backup failed:', err && err.message || err);
+      }
+    })());
+  },
+
   async fetch(request, env) {
     const { pathname } = new URL(request.url);
 
@@ -1157,6 +1216,10 @@ export default {
         return await getEconPublic(request, env);
       }
 
+      if (pathname === '/api/backups') {
+        return await handleBackups(request, env);
+      }
+
       if (pathname === '/api/discord/channels' && request.method === 'GET') {
         return await getDiscordChannels(request, env);
       }
@@ -1200,6 +1263,13 @@ export default {
           cards: await (async () => {
             try { await env.DB.prepare('SELECT 1 FROM card_collection LIMIT 1').first(); return true; }
             catch { return false; }
+          })(),
+          backups: await (async () => {
+            try {
+              const r = await env.DB.prepare(
+                'SELECT COUNT(*) AS n, MAX(taken_at) AS last FROM backup').first();
+              return { count: (r && r.n) || 0, last: (r && r.last) || null };
+            } catch { return false; }
           })(),
           economy: await (async () => {
             try { await env.DB.prepare('SELECT 1 FROM wallet LIMIT 1').first(); return true; }

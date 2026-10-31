@@ -1211,6 +1211,19 @@ textarea { resize:vertical; min-height:80px; }
           <input type="file" id="restoreFile" accept="application/json,.json" onchange="previewRestore(this)">
           <div id="restorePreview"></div>
         </div>
+
+        <div class="form-card" style="max-width:560px">
+          <h3>AUTOMATIC BACKUPS</h3>
+          <p class="bk-note">The server takes a copy of everything at 4am every night and keeps
+             the last 30. You do not have to remember anything. A copy is taken automatically
+             before a restore too, so even restoring the wrong one is undoable.</p>
+          <div class="form-actions" style="margin-bottom:0.8rem">
+            <button class="btn btn-ghost" onclick="loadBackups()">REFRESH</button>
+            <button class="btn btn-white" onclick="takeBackupNow()">BACK UP NOW</button>
+            <span class="img-size" id="bkStatus"></span>
+          </div>
+          <div id="bkList"></div>
+        </div>
       </div>
 
     </main>
@@ -1385,7 +1398,7 @@ function refreshSec() {
         case 'economy': if (!econ) loadEcon(); else renderEconomy(); break;
         case 'availability': avPopulateRaces(); renderAvailability(); break;
         case 'stewards': renderStewards(); break;
-        case 'season':  document.getElementById('seasonName').value = d().seasonName||'Season 1'; renderFviPanel(); renderPointsEditor(); renderStorageMeter(); break;
+        case 'season':  document.getElementById('seasonName').value = d().seasonName||'Season 1'; renderFviPanel(); renderPointsEditor(); renderStorageMeter(); if (!backups) loadBackups(true); else renderBackups(); break;
     }
 }
 
@@ -4036,6 +4049,154 @@ function raceLength(r) {
     if (m < 60) return `${m} min`;
     const h = Math.floor(m / 60), rem = m % 60;
     return rem ? `${h}h ${rem}m` : `${h}h`;
+}
+
+
+// ── AUTOMATIC BACKUPS ─────────────────────────────────────
+// The Worker takes the snapshots; it only has the bin's read key, so it
+// cannot write the league back. Restoring happens here, where the write key
+// already lives — which keeps the thing that guards against a bad write
+// from being able to make one.
+
+let backups = null;
+
+async function loadBackups(quiet) {
+    const box = document.getElementById('bkList');
+    const st  = document.getElementById('bkStatus');
+    if (!box) return;
+    if (!API_BASE) { box.innerHTML = '<p class="bk-note">No Worker configured.</p>'; return; }
+    if (st) st.textContent = 'loading…';
+    try {
+        const res = await fetch(`${API_BASE.replace(/\/+$/,'')}/api/backups`, {
+            headers: ADMIN_TOKEN ? { 'X-Admin-Token': ADMIN_TOKEN } : {},
+        });
+        const body = await res.json();
+        if (!res.ok || !body.ok) throw new Error(body.error || `HTTP ${res.status}`);
+        backups = body.backups || [];
+        renderBackups();
+        if (st) st.textContent = '';
+    } catch (e) {
+        if (st) st.textContent = '';
+        box.innerHTML = `<p class="bk-note">Could not load backups: ${esc(e.message || 'unknown')}</p>`;
+        if (!quiet) toast('Could not load backups', 'err');
+    }
+}
+
+function fmtWhen(ms) {
+    const d = new Date(ms);
+    const mins = Math.round((Date.now() - ms) / 60000);
+    let ago;
+    if (mins < 60) ago = `${mins}m ago`;
+    else if (mins < 1440) ago = `${Math.round(mins / 60)}h ago`;
+    else ago = `${Math.round(mins / 1440)}d ago`;
+    return `${d.toLocaleDateString('en-GB', { day:'numeric', month:'short' })} ` +
+           `${d.toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit' })} · ${ago}`;
+}
+
+function renderBackups() {
+    const box = document.getElementById('bkList');
+    if (!box) return;
+    if (!backups || !backups.length) {
+        box.innerHTML = '<p class="bk-note">No backups yet. The first automatic one runs at 4am, ' +
+                        'or press BACK UP NOW.</p>';
+        return;
+    }
+    box.innerHTML = backups.map(b => `<div class="ec-row">
+        <span class="ec-grow">${esc(fmtWhen(b.taken_at))}
+          <span class="ec-mono"> · ${esc(b.summary || '')}${b.kind !== 'auto' ? ' · ' + esc(b.kind) : ''}</span></span>
+        <span class="ec-mono" style="flex:0 0 68px;text-align:right">${fmtBytes(b.bytes)}</span>
+        <div class="td-actions">
+          <button class="btn btn-ghost btn-sm" onclick="downloadBackup('${esc(b.key)}')">GET</button>
+          <button class="btn btn-danger btn-sm del-trigger"
+                  onclick="showDelConfirm(this, 'restoreBackup(\\'${esc(b.key)}\\')')">RESTORE</button>
+        </div>
+      </div>`).join('');
+}
+
+async function fetchBackup(key) {
+    const res = await fetch(
+        `${API_BASE.replace(/\/+$/,'')}/api/backups?key=${encodeURIComponent(key)}`,
+        { headers: ADMIN_TOKEN ? { 'X-Admin-Token': ADMIN_TOKEN } : {} });
+    if (!res.ok) {
+        let why = `HTTP ${res.status}`;
+        try { why = (await res.json()).error || why; } catch (e) {}
+        throw new Error(why);
+    }
+    return res.json();
+}
+
+async function downloadBackup(key) {
+    try {
+        const record = await fetchBackup(key);
+        const blob = new Blob([JSON.stringify(record, null, 2)], { type: 'application/json' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `fge-${key.replace(/^bk\//, '').slice(0, 19)}.json`;
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+        toast('Downloaded', 'ok');
+    } catch (e) { toast('Could not download: ' + (e.message || 'unknown'), 'err'); }
+}
+
+async function takeBackupNow() {
+    const st = document.getElementById('bkStatus');
+    st.textContent = 'backing up…';
+    try {
+        const res = await fetch(`${API_BASE.replace(/\/+$/,'')}/api/backups`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json',
+                       ...(ADMIN_TOKEN ? { 'X-Admin-Token': ADMIN_TOKEN } : {}) },
+            body: JSON.stringify({ kind: 'manual' }),
+        });
+        const body = await res.json();
+        if (!res.ok || !body.ok) throw new Error(body.error || `HTTP ${res.status}`);
+        st.textContent = '';
+        toast(`Backed up — ${body.summary}`, 'ok');
+        await loadBackups(true);
+    } catch (e) {
+        st.textContent = '';
+        toast('Backup failed: ' + (e.message || 'unknown'), 'err');
+    }
+}
+
+/**
+ * Restore. Takes a copy of what is there now first, so restoring the wrong
+ * backup is itself undoable — the common way to lose data with a restore
+ * button is pressing it on the wrong row.
+ */
+async function restoreBackup(key) {
+    const st = document.getElementById('bkStatus');
+    st.textContent = 'saving a copy of right now…';
+    try {
+        await fetch(`${API_BASE.replace(/\/+$/,'')}/api/backups`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json',
+                       ...(ADMIN_TOKEN ? { 'X-Admin-Token': ADMIN_TOKEN } : {}) },
+            body: JSON.stringify({ kind: 'pre-restore' }),
+        }).catch(() => {});
+
+        st.textContent = 'restoring…';
+        const record = await fetchBackup(key);
+        if (!record || (!record.gt3 && !record.gt4)) {
+            throw new Error('that backup does not look like a league');
+        }
+
+        const res = await fetch(BIN_URL, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', 'X-Master-Key': MASTER_KEY },
+            body: JSON.stringify(record),
+        });
+        if (!res.ok) throw new Error(`the bin refused it (HTTP ${res.status})`);
+
+        adminData = record;
+        st.textContent = 'restored';
+        toast('Restored. A copy of what was there before is at the top of the list.', 'ok');
+        refreshSec();
+        await loadBackups(true);
+    } catch (e) {
+        st.textContent = '';
+        toast('Restore failed: ' + (e.message || 'unknown'), 'err');
+    }
 }
 
 // ── BACKUP / RESTORE ──────────────────────────────────────
