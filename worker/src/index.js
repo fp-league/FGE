@@ -819,11 +819,20 @@ async function getEconPublic(request, env) {
     let packs = [];
     try {
       const p = await env.DB.prepare(
-        `SELECT id, name, emoji, blurb, price, size, guarantee
+        `SELECT id, name, emoji, blurb, price, size, guarantee, odds
            FROM pack_type WHERE enabled = 1 ORDER BY sort, price`).all();
       packs = p.results || [];
     } catch { /* optional */ }
-    return json({ ok: true, cards: rows.results || [], packs,
+    // The jobs go out too: the site's shop is no use without the half that
+    // says how to afford any of it.
+    let jobs = [];
+    try {
+      const j = await env.DB.prepare(
+        `SELECT id, name, emoji, blurb, min_pay, max_pay, cooldown_min
+           FROM job WHERE enabled = 1 ORDER BY sort, min_pay`).all();
+      jobs = j.results || [];
+    } catch { /* optional */ }
+    return json({ ok: true, cards: rows.results || [], packs, jobs,
                   settings: await settings(env) }, null, request, env);
   } catch {
     // Not an error for the site — it just means there are no custom cards.

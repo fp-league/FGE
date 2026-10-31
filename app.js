@@ -1642,7 +1642,10 @@ async function loadCustomCards() {
     } catch (e) {
         customCards = [];
     }
-    if (document.getElementById('page-cards')?.classList.contains('active')) renderCards();
+    // The section's id is 'cards'; there is no 'page-cards'. Getting this
+    // wrong meant the custom cards and the shop never appeared, because the
+    // first render runs before this fetch finishes and nothing re-ran it.
+    if (document.getElementById('cards')?.classList.contains('active')) renderCards();
 }
 
 /** Custom cards, shaped like the driver entries above. */
@@ -1702,20 +1705,13 @@ function renderCards() {
         `<span class="tc-chip" style="--tc:${CARD_TIERS[t].colour}">
            <i></i>${CARD_TIERS[t].label} <b>${counts[t]}</b></span>`).join('') + `</div>`;
 
-    const shop = (econPublic && econPublic.packs) || [];
     const how = `<div class="tc-how">
         <strong>${set.length} cards in the set — GT3 and GT4 together.</strong>
         Collect them in Discord — <code>/cards pack</code> for a free pack every 8 hours,
         <code>/shop</code> to buy more, <code>/cards collection</code> to see yours.
         Rarity comes from the season: the championship leader is Legendary, the
         championship podium and race winners are Epic, a race podium is Rare.
-        Earn credits with <code>/work</code>, <code>/daily</code>, race prize money,
-        and by selling duplicates with <code>/sell</code>.
-      </div>` + (shop.length ? `<div class="tc-how">
-        <strong>On sale.</strong> ${shop.map(p =>
-          `${esc(p.emoji || '')} ${esc(p.name)} — <b>${Number(p.price).toLocaleString('en-GB')}</b>`
-        ).join(' · ')}
-      </div>` : '');
+      </div>`;
 
     const grid = TIER_ORDER.filter(t => counts[t]).map(t => `
         <h2 class="tc-head" style="--tc:${CARD_TIERS[t].colour}">
@@ -1725,7 +1721,108 @@ function renderCards() {
           set.filter(c => c.rarity === t).map(c => cardHTML(c, d)).join('')
         }</div>`).join('');
 
-    el.innerHTML = how + key + grid;
+    // Intro and rarity key belong together — they both describe the set.
+    // The shop is its own block, and the cards come last.
+    el.innerHTML = how + key + shopHTML() + grid;
+}
+
+/** House odds, mirroring RARITY in worker/src/cards.js. */
+const HOUSE_ODDS = { common: 50, uncommon: 28, rare: 15, epic: 6, legendary: 1 };
+
+const money = n => Number(n || 0).toLocaleString('en-GB');
+
+function fmtCooldown(min) {
+    const m = Number(min) || 0;
+    if (m < 60) return `${m}m`;
+    const h = Math.floor(m / 60), r = m % 60;
+    return `${h}h${r ? ` ${r}m` : ''}`;
+}
+
+/**
+ * The shop, as the site shows it.
+ *
+ * Buying happens in Discord — the site has no accounts to charge — so this
+ * is the window: what is on sale, what is in each pack, the real odds, and
+ * how to afford any of it. All of it comes from the Worker, so changing a
+ * price in the admin panel changes this page too.
+ */
+function shopHTML() {
+    if (!econPublic) return '';
+    const packs = econPublic.packs || [];
+    const jobs  = econPublic.jobs  || [];
+    const cfg   = econPublic.settings || {};
+    if (!packs.length && !jobs.length) return '';
+
+    const coin = cfg.currency_emoji || '🪙';
+    let sell = {};
+    try { sell = JSON.parse(cfg.sell_values || '{}'); } catch (e) {}
+    let prize = [];
+    try { prize = JSON.parse(cfg.prize_table || '[]'); } catch (e) {}
+
+    const packCards = packs.map(p => {
+        let odds = null;
+        try { odds = p.odds ? JSON.parse(p.odds) : null; } catch (e) {}
+        const w = odds || HOUSE_ODDS;
+        const total = TIER_ORDER.reduce((n, t) => n + (Number(w[t]) || 0), 0) || 1;
+        const bar = TIER_ORDER.slice().reverse().filter(t => Number(w[t]) > 0).map(t =>
+            `<i style="--tc:${CARD_TIERS[t].colour};flex:${Number(w[t])}"
+                title="${CARD_TIERS[t].label} ${Math.round(Number(w[t]) / total * 100)}%"></i>`).join('');
+        const odds_line = TIER_ORDER.slice().reverse().filter(t => Number(w[t]) > 0).map(t =>
+            `<span style="color:${CARD_TIERS[t].colour}">${Math.round(Number(w[t]) / total * 100)}%</span>`
+        ).join(' · ');
+        return `<div class="shop-pack">
+            <div class="shop-pack-top">
+              <span class="shop-emoji">${esc(p.emoji || '🃏')}</span>
+              <span class="shop-name">${esc(p.name)}</span>
+              <span class="shop-price">${money(p.price)} ${coin}</span>
+            </div>
+            <p class="shop-blurb">${esc(p.blurb || '')}</p>
+            <div class="shop-meta">${p.size} card${p.size !== 1 ? 's' : ''}${
+              p.guarantee ? ` · ${CARD_TIERS[p.guarantee].label} or better guaranteed` : ''}</div>
+            <div class="shop-bar">${bar}</div>
+            <div class="shop-odds">${odds_line}</div>
+            <code class="shop-cmd">/buy pack:${esc(p.id)}</code>
+          </div>`;
+    }).join('');
+
+    const jobRows = jobs.map(j => `<tr>
+        <td>${esc(j.emoji || '')} ${esc(j.name)}</td>
+        <td class="num">${money(j.min_pay)}–${money(j.max_pay)}</td>
+        <td class="num">every ${fmtCooldown(j.cooldown_min)}</td>
+      </tr>`).join('');
+
+    const sellRows = TIER_ORDER.slice().reverse().filter(t => sell[t] != null).map(t =>
+        `<span class="tc-chip" style="--tc:${CARD_TIERS[t].colour}">
+           <i></i>${CARD_TIERS[t].label} <b>${money(sell[t])}</b></span>`).join('');
+
+    return `
+      <h2 class="tc-head" style="--tc:var(--accent)">THE SHOP<span>${packs.length}</span></h2>
+      <p class="tc-how">Packs are bought in Discord with <code>/shop</code> and
+         <code>/buy</code>. Prices and odds below are live — they are whatever the
+         league is actually running right now.</p>
+      <div class="shop-grid">${packCards}</div>
+
+      <h2 class="tc-head" style="--tc:var(--accent)">EARNING CREDITS</h2>
+      <div class="shop-earn">
+        <div>
+          <h3>Work for it — <code>/work</code></h3>
+          <table class="shop-table"><tbody>${jobRows}</tbody></table>
+          <p class="shop-note">Once a day you can also claim <code>/daily</code> —
+            ${money(cfg.daily_amount)} ${coin} plus ${money(cfg.daily_streak_bonus)} a day for
+            a streak, up to ${esc(String(cfg.daily_streak_max || 7))} days.</p>
+        </div>
+        <div>
+          <h3>Race for it</h3>
+          <p class="shop-note">Finishing pays${prize.length
+            ? ` from <b>${money(prize[0])}</b> ${coin} for a win down to
+               <b>${money(prize[prize.length - 1])}</b>` : ''}, plus
+            ${money(cfg.prize_fastest)} ${coin} for the fastest lap. Paid automatically when a
+            result is published, to drivers with a Discord account linked.</p>
+          <h3 style="margin-top:1.1rem">Sell your spares — <code>/sell</code></h3>
+          <div class="tc-key">${sellRows}</div>
+          <p class="shop-note">Your last copy of a card is never sold.</p>
+        </div>
+      </div>`;
 }
 
 function cardHTML(c, d) {
