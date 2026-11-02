@@ -1,10 +1,15 @@
-const CACHE = 'fge-v10';
+const CACHE = 'fge-v11';
 
-// Only pre-cache fonts and images — they never change between deploys
-const IMMUTABLE = [
-  './porsche.webp', './gt3-logo.webp', './gt4-logo.webp',
-  './fge-logo.webp', './fge-logo-sm.webp'
-];
+// Pre-cache only what every visit uses at every screen size.
+//
+// This used to list the full-size car and logos. Now that those are served
+// through srcset, a phone never loads them — so pre-caching the originals
+// downloaded about 94 KB on first visit that the page then ignored, which
+// is the exact opposite of the point. The fetch handler below is already
+// cache-first for images, so whichever variant a device actually picks is
+// cached the first time it is used. Only the nav logo, which is the same
+// 2 KB file on every device, is worth fetching up front.
+const IMMUTABLE = ['./fge-logo-sm.webp'];
 
 self.addEventListener('install', e => {
   e.waitUntil(

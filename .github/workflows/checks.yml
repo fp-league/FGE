@@ -1,0 +1,24 @@
+# index.html carries a copy of a few rules from styles.css, inlined so the
+# page can paint before the full stylesheet arrives. A copy can drift from
+# its source, and drift here is invisible — the site still works, it just
+# paints the first frame with stale colours or a stale layout.
+#
+# So the copy is generated, and this checks it was regenerated. If it fails,
+# run `node tools/boot-css.mjs` and commit the result.
+name: checks
+
+on:
+  push:
+    paths: ['styles.css', 'index.html', 'tools/**']
+  pull_request:
+    paths: ['styles.css', 'index.html', 'tools/**']
+
+jobs:
+  boot-css:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: node tools/boot-css.mjs --check

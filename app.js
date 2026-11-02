@@ -2405,17 +2405,25 @@ function lightsOut() {
     // to sit on top of the page forever.
     setTimeout(() => killIntro(el), 3000);
 
+    // styles.css now loads without blocking first paint, which means the
+    // overlay can be on screen before the rest of the page has any styling
+    // at all. Lifting it then would show a flash of unstyled content, so
+    // every path that lifts it waits for the sheet. whenCss fires straight
+    // away once it has landed, and the 3s failsafe above is deliberately
+    // not gated — a sheet that never arrives must not strand the page.
+    const lift = fn => (window.whenCss ? window.whenCss(fn) : fn());
+
     let alreadyPlayed = false;
     try { alreadyPlayed = !!sessionStorage.getItem('fge_lit'); } catch(e) {}
 
     // Intro already played this session (eg. a refresh) — drop the overlay now.
-    if (alreadyPlayed) { killIntro(el); return; }
+    if (alreadyPlayed) { lift(() => killIntro(el)); return; }
 
     try { sessionStorage.setItem('fge_lit','1'); } catch(e) {}
-    setTimeout(() => {
+    setTimeout(() => lift(() => {
         el.classList.add('hidden');
         setTimeout(() => { el.style.display = 'none'; }, 400);
-    }, 1400);
+    }), 1400);
 }
 
 // ── PWA INSTALL ───────────────────────────────────────────
