@@ -50,7 +50,8 @@ const commands = [
     name: 'lineups',
     description: 'Team lineups',
     options: [
-      { name: 'team', description: 'Show one team only', type: 3, required: false },
+      { name: 'team', description: 'Start typing — pick from the list', type: 3,
+        required: false, autocomplete: true },
       CLASS_OPTION,
     ],
   },
@@ -58,7 +59,8 @@ const commands = [
     name: 'driver',
     description: 'A driver’s season so far',
     options: [
-      { name: 'name', description: 'Driver name', type: 3, required: true },
+      { name: 'name', description: 'Start typing — pick from the list', type: 3,
+        required: true, autocomplete: true },
       CLASS_OPTION,
     ],
   },
@@ -78,9 +80,11 @@ const subcommands = [
   { name: 'calendar',  description: 'Full season calendar',   type: 1 },
   { name: 'nextrace',  description: 'The next race and when it starts', type: 1 },
   { name: 'lineups',   description: 'Team lineups',           type: 1,
-    options: [{ name: 'team', description: 'Show one team only', type: 3, required: false }] },
+    options: [{ name: 'team', description: 'Start typing — pick from the list', type: 3,
+                required: false, autocomplete: true }] },
   { name: 'driver',    description: 'A driver’s season so far', type: 1,
-    options: [{ name: 'name', description: 'Driver name', type: 3, required: true }] },
+    options: [{ name: 'name', description: 'Start typing — pick from the list', type: 3,
+                required: true, autocomplete: true }] },
 ];
 
 commands.push(
@@ -99,7 +103,8 @@ commands.push({
       { name: 'user', description: 'Whose collection (defaults to yours)', type: 6, required: false },
     ] },
     { name: 'card', description: 'Look at one card', type: 1, options: [
-      { name: 'name', description: 'Driver or card name', type: 3, required: true },
+      { name: 'name', description: 'Start typing — pick from the list', type: 3,
+        required: true, autocomplete: true },
     ] },
     { name: 'collectors', description: 'Who has collected the most', type: 1 },
   ],
@@ -112,8 +117,8 @@ commands.push(
   {
     name: 'work',
     description: 'Do a job for credits — run it with no job to see the board',
-    options: [{ name: 'job', description: 'Which job (leave blank to see them all)',
-                type: 3, required: false }],
+    options: [{ name: 'job', description: 'Pick a job, or leave blank to see them all',
+                type: 3, required: false, autocomplete: true }],
   },
   { name: 'daily', description: 'Claim your daily credits and keep your streak' },
   {
@@ -135,14 +140,15 @@ commands.push(
   {
     name: 'buy',
     description: 'Buy and open a pack',
-    options: [{ name: 'pack', description: 'Which pack (see /shop)', type: 3, required: true }],
+    options: [{ name: 'pack', description: 'Pick a pack — prices are shown in the list',
+                type: 3, required: true, autocomplete: true }],
   },
   {
     name: 'sell',
     description: 'Sell duplicate cards for credits — your last copy is never sold',
     options: [
-      { name: 'name',   description: 'Driver or card name, or "all" for every spare',
-        type: 3, required: false },
+      { name: 'name',   description: 'Pick a spare card, or "all" for every spare',
+        type: 3, required: false, autocomplete: true },
       { name: 'amount', description: 'How many copies (defaults to all the spares)',
         type: 4, required: false },
     ],
@@ -156,8 +162,10 @@ commands.push({
   options: [
     { name: 'offer', description: 'Offer one of your spares for one of theirs', type: 1, options: [
       { name: 'user', description: 'Who to trade with', type: 6, required: true },
-      { name: 'give', description: 'The card you are giving', type: 3, required: true },
-      { name: 'want', description: 'The card you want back', type: 3, required: true },
+      { name: 'give', description: 'One of your spares — pick from the list', type: 3,
+        required: true, autocomplete: true },
+      { name: 'want', description: 'One of their spares — pick from the list', type: 3,
+        required: true, autocomplete: true },
     ] },
     { name: 'list',    description: 'Open trades involving you', type: 1 },
     { name: 'accept',  description: 'Take a trade offered to you', type: 1, options: [

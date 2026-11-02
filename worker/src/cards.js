@@ -10,15 +10,98 @@
  * moves and a Legendary genuinely means something.
  */
 
-export const RARITIES = ['common', 'uncommon', 'rare', 'epic', 'legendary'];
+/**
+ * The rarity ladder.
+ *
+ * These five live in the `rarity` table and an admin can add more, so the
+ * two exports below are rebuilt from the table rather than fixed here.
+ * They are `let` on purpose: ES module bindings are live, so every file
+ * that imports RARITY or RARITIES sees the current ladder without having
+ * to be passed it.
+ *
+ * The five are still written out here because they are the floor. Driver
+ * card rarity is computed from the championship and names them directly —
+ * a leader is Legendary — so if the table is missing or empty (a fresh
+ * database, a migration that has not run yet) the set still works.
+ */
+const BUILT_IN = [
+  { id: 'common',    label: 'Common',    colour: '#9E9E9E', icon: '⚪', weight: 50, sort: 10, sell: 25,  built_in: 1 },
+  { id: 'uncommon',  label: 'Uncommon',  colour: '#4CAF50', icon: '🟢', weight: 28, sort: 20, sell: 60,  built_in: 1 },
+  { id: 'rare',      label: 'Rare',      colour: '#2196F3', icon: '🔵', weight: 15, sort: 30, sell: 140, built_in: 1 },
+  { id: 'epic',      label: 'Epic',      colour: '#9C27B0', icon: '🟣', weight: 6,  sort: 40, sell: 350, built_in: 1 },
+  { id: 'legendary', label: 'Legendary', colour: '#FFC400', icon: '🟡', weight: 1,  sort: 50, sell: 900, built_in: 1 },
+];
 
-export const RARITY = {
-  common:    { label: 'Common',    colour: 0x9E9E9E, icon: '⚪', weight: 50 },
-  uncommon:  { label: 'Uncommon',  colour: 0x4CAF50, icon: '🟢', weight: 28 },
-  rare:      { label: 'Rare',      colour: 0x2196F3, icon: '🔵', weight: 15 },
-  epic:      { label: 'Epic',      colour: 0x9C27B0, icon: '🟣', weight: 6  },
-  legendary: { label: 'Legendary', colour: 0xFFC400, icon: '🟡', weight: 1  },
+/** The ids that driver cards are assigned, which therefore cannot be removed. */
+export const CORE_RARITIES = BUILT_IN.map(r => r.id);
+
+/** Commonest first. Code asks "is a rarer than b" with indexOf, so order is meaning. */
+export let RARITIES = BUILT_IN.map(r => r.id);
+
+export let RARITY = {};
+
+const toInt = hex => {
+  const m = /^#?([0-9a-f]{6})$/i.exec(String(hex || ''));
+  return m ? parseInt(m[1], 16) : 0x9E9E9E;
 };
+
+/**
+ * Rebuild the ladder from `rarity` rows. Anything missing falls back to the
+ * built-in five, so a half-written row cannot take the card set down.
+ */
+export function setRarities(rows) {
+  const list = (Array.isArray(rows) && rows.length ? rows : BUILT_IN)
+    .slice()
+    .sort((a, b) => (Number(a.sort) || 0) - (Number(b.sort) || 0) ||
+                    String(a.id).localeCompare(String(b.id)));
+
+  // The five must always be present even if the table somehow lost one:
+  // cardSet assigns them by name and would otherwise produce cards whose
+  // rarity is not on the ladder at all.
+  const have = new Set(list.map(r => String(r.id)));
+  for (const b of BUILT_IN) if (!have.has(b.id)) list.push(b);
+  list.sort((a, b) => (Number(a.sort) || 0) - (Number(b.sort) || 0));
+
+  RARITIES = list.map(r => String(r.id));
+  RARITY = {};
+  for (const r of list) {
+    RARITY[String(r.id)] = {
+      label:  String(r.label || r.id),
+      colour: toInt(r.colour),            // Discord embeds want an integer
+      hex:    String(r.colour || '#9E9E9E'),
+      icon:   String(r.icon || '⚪'),
+      weight: Number(r.weight) || 0,
+      sell:   Number(r.sell) || 0,
+      builtIn: Number(r.built_in) === 1,
+    };
+  }
+}
+setRarities(null);
+
+// One D1 read would otherwise land on every interaction, every keystroke of
+// typeahead and every live-timing poll. The ladder changes when an admin
+// saves, which clears this.
+let rarityCache = { at: 0, rows: null };
+const RARITY_TTL_MS = 60_000;
+
+export function clearRarityCache() { rarityCache = { at: 0, rows: null }; }
+
+/** Load the ladder for this request. Safe to call on a database without the table. */
+export async function loadRarities(env) {
+  const now = Date.now();
+  if (rarityCache.rows && now - rarityCache.at < RARITY_TTL_MS) {
+    setRarities(rarityCache.rows);
+    return rarityCache.rows;
+  }
+  let rows = [];
+  try {
+    const res = await env.DB.prepare(`SELECT * FROM rarity ORDER BY sort, id`).all();
+    rows = res.results || [];
+  } catch { rows = []; }
+  rarityCache = { at: now, rows };
+  setRarities(rows);
+  return rows.length ? rows : BUILT_IN;
+}
 
 const PACK_SIZE = 5;
 const COOLDOWN_MS = 8 * 60 * 60 * 1000;      // one free pack every 8 hours

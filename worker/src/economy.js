@@ -12,7 +12,8 @@
  * decide the numbers.
  */
 
-import { RARITY, RARITIES, drawPack, fullSet, SET, packEmbeds } from './cards.js';
+import { RARITY, RARITIES, CORE_RARITIES, clearRarityCache,
+         drawPack, fullSet, SET, packEmbeds } from './cards.js';
 
 const userOf = i => (i.member && i.member.user) || i.user || {};
 const nameOf = u => u.global_name || u.username || 'Someone';
@@ -512,6 +513,21 @@ export async function buyPack(env, interaction, packId, record) {
  * wakes up having dismantled their own collection, and a pile of dupes is
  * worth something instead of being dead weight.
  */
+/**
+ * The cards someone could give away: anything they hold more than one of.
+ *
+ * The last copy is never sellable or tradable, so a "spare" is copies - 1.
+ * Shared by the sell and trade flows and by the command typeahead, which
+ * should offer exactly the cards those flows will accept.
+ */
+export async function listSpares(env, userId) {
+  if (!userId) return [];
+  const rows = await env.DB.prepare(
+    `SELECT driver_id, rarity, copies FROM card_collection
+      WHERE user_id = ? AND class = ? AND copies > 1`).bind(String(userId), SET).all();
+  return rows.results || [];
+}
+
 export async function sellCard(env, interaction, query, howMany, record) {
   const user = userOf(interaction);
   if (!user.id) return simple('Who are you?', "Couldn't read your Discord account.");
@@ -529,7 +545,10 @@ async function sellFrom(env, user, query, howMany, cfg, values, set) {
   const dupes = rows.results || [];
   const byId = {};
   set.forEach(c => { byId[c.id] = c; });
-  const price = r => Math.max(0, num(values[r], 0));
+  // sell_values is the admin's explicit override; a rarity's own `sell` is
+  // the default. Without the fallback a newly added rarity would be worth
+  // nothing until someone remembered to edit the JSON as well.
+  const price = r => Math.max(0, num(values[r], (RARITY[r] || {}).sell || 0));
 
   const q = String(query || '').trim().toLowerCase();
 
@@ -697,7 +716,12 @@ export async function adminConfig(env) {
     const rows = await env.DB.prepare(`SELECT * FROM job ORDER BY sort, min_pay`).all();
     allJobs = rows.results || jobs;
   } catch { /* use enabled-only */ }
-  return { settings: cfg, jobs: allJobs, packs: allPacks, cards, rarities: RARITIES };
+  // The panel needs the whole ladder, not just the ids: it draws the
+  // colours, the icons and the sell values.
+  const rarities = await listRarities(env);
+  return { settings: cfg, jobs: allJobs, packs: allPacks, cards,
+           rarities: rarities.length ? rarities : RARITIES.map(id => ({ id, ...RARITY[id] })),
+           coreRarities: CORE_RARITIES };
 }
 
 export async function setSettings(env, patch) {
@@ -800,6 +824,81 @@ export async function deleteJob(env, id) {
     env.DB.prepare(`DELETE FROM job WHERE id = ?`).bind(String(id)),
     env.DB.prepare(`DELETE FROM work_log WHERE job = ?`).bind(String(id)),
   ]);
+}
+
+/* ── Rarities ──────────────────────────────────────────── */
+
+export async function listRarities(env) {
+  try {
+    const rows = await env.DB.prepare(`SELECT * FROM rarity ORDER BY sort, id`).all();
+    return rows.results || [];
+  } catch { return []; }
+}
+
+/**
+ * Create or update one rarity.
+ *
+ * The five built-ins can be renamed, recoloured and repriced, but their id
+ * and their built_in flag are fixed: driver cards are assigned by id, so a
+ * renamed id would orphan every card already holding it.
+ */
+export async function saveRarity(env, r) {
+  const wanted = slug(r.id || r.label);
+  const core = CORE_RARITIES.includes(wanted);
+  // A new rarity defaults to the top of the ladder, which is where someone
+  // adding one almost always means to put it.
+  const existing = await listRarities(env);
+  const top = existing.reduce((m, x) => Math.max(m, Number(x.sort) || 0), 0);
+
+  await env.DB.prepare(
+    `INSERT INTO rarity (id, label, colour, icon, weight, sort, sell, built_in)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT (id) DO UPDATE SET
+       label = excluded.label, colour = excluded.colour, icon = excluded.icon,
+       weight = excluded.weight, sort = excluded.sort, sell = excluded.sell`
+  ).bind(
+    wanted,
+    String(r.label || wanted).slice(0, 40),
+    /^#[0-9a-fA-F]{6}$/.test(String(r.colour || '')) ? String(r.colour) : '#9E9E9E',
+    String(r.icon || '⚪').slice(0, 8),
+    Math.max(0, Math.round(num(r.weight, 10))),
+    Math.max(0, Math.round(num(r.sort, top + 10))),
+    Math.max(0, Math.round(num(r.sell, 25))),
+    core ? 1 : 0
+  ).run();
+
+  clearRarityCache();
+  return wanted;
+}
+
+/**
+ * Remove a rarity, and move anything wearing it back down the ladder.
+ *
+ * A card whose rarity no longer exists would fall out of every pack draw
+ * and sell for nothing, so custom cards and collected copies are moved to
+ * the next rarity down rather than left pointing at a hole.
+ */
+export async function deleteRarity(env, id) {
+  const key = String(id);
+  if (CORE_RARITIES.includes(key)) {
+    throw new Error('the five built-in rarities cannot be deleted — driver cards are graded against them');
+  }
+  const all = await listRarities(env);
+  const row = all.find(r => r.id === key);
+  if (!row) return { moved: 0, to: null };
+
+  // The nearest rarity below it, or the lowest there is.
+  const below = all.filter(r => r.id !== key && (Number(r.sort) || 0) <= (Number(row.sort) || 0));
+  const to = (below.length ? below[below.length - 1] : all.find(r => r.id !== key) || { id: 'common' }).id;
+
+  const moved = await env.DB.prepare(
+    `UPDATE custom_card SET rarity = ? WHERE rarity = ?`).bind(to, key).run();
+  await env.DB.prepare(
+    `UPDATE card_collection SET rarity = ? WHERE rarity = ?`).bind(to, key).run();
+  await env.DB.prepare(`DELETE FROM rarity WHERE id = ?`).bind(key).run();
+
+  clearRarityCache();
+  return { moved: (moved.meta && moved.meta.changes) || 0, to };
 }
 
 /** Balances for the member list in the admin panel. */

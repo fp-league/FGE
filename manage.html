@@ -965,6 +965,54 @@ textarea { resize:vertical; min-height:80px; }
           <div id="ecWallets" style="margin-top:1rem"></div>
         </div>
 
+        <div class="form-card" id="rarityCard">
+          <h3>RARITIES</h3>
+          <p class="bk-note">The ladder every card is graded on. The five that come with FGE
+             can be renamed, recoloured and repriced, but not deleted — driver cards are
+             graded against them, so a championship leader is whatever you have called
+             <b>Legendary</b>. Add your own for custom cards and they appear everywhere at
+             once: the pack odds above, the card form, Discord and the site.</p>
+          <div id="ecRarities" style="margin:1rem 0"></div>
+
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="fg-label">NAME</label>
+              <input id="raLabel" placeholder="Mythic" maxlength="40">
+            </div>
+            <div class="form-group">
+              <label class="fg-label">ICON</label>
+              <input id="raIcon" placeholder="🔴" maxlength="8">
+            </div>
+            <div class="form-group">
+              <label class="fg-label">COLOUR</label>
+              <div class="img-row">
+                <input id="raColour" type="color" value="#FF3366" style="width:52px;padding:2px">
+                <input id="raColourHex" placeholder="#FF3366" maxlength="7">
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="fg-label">HOW RARE</label>
+              <select id="raAfter"></select>
+            </div>
+            <div class="form-group">
+              <label class="fg-label">PACK WEIGHT</label>
+              <input id="raWeight" type="number" min="0" value="2">
+            </div>
+            <div class="form-group">
+              <label class="fg-label">A DUPLICATE SELLS FOR</label>
+              <input id="raSell" type="number" min="0" value="1500">
+            </div>
+          </div>
+          <p class="bk-note"><b>Pack weight</b> is how often it turns up relative to the others,
+             for any pack that has not had its own odds set. A weight of 1 next to Common's 50
+             means roughly one in fifty.</p>
+          <div class="form-actions">
+            <button class="btn btn-white" id="raSaveBtn" onclick="ecSaveRarity()">ADD RARITY</button>
+            <button class="btn btn-ghost" onclick="ecNewRarity()">NEW</button>
+            <span class="img-size" id="raStatus"></span>
+          </div>
+        </div>
+
         <div class="form-card">
           <h3>PACKS</h3>
           <p class="bk-note">Each pack is a price, a size and its own odds. Leave the odds blank
@@ -990,13 +1038,7 @@ textarea { resize:vertical; min-height:80px; }
             </div>
             <div class="form-group">
               <label class="fg-label">GUARANTEE</label>
-              <select id="pkGuarantee">
-                <option value="">None</option>
-                <option value="uncommon">Uncommon or better</option>
-                <option value="rare">Rare or better</option>
-                <option value="epic">Epic or better</option>
-                <option value="legendary">Legendary</option>
-              </select>
+              <select id="pkGuarantee"><option value="">None</option></select>
             </div>
           </div>
           <div class="form-group">
@@ -1005,13 +1047,10 @@ textarea { resize:vertical; min-height:80px; }
           </div>
           <label class="fg-label" style="margin-top:0.8rem;display:block">ODDS
             <span style="color:var(--grey);font-weight:400">— relative weights, 0 means never</span></label>
-          <div class="ec-odds">
-            <label><i style="--tc:#9E9E9E"></i>Common <input id="pkOddsCommon" type="number" min="0" placeholder="50"></label>
-            <label><i style="--tc:#4CAF50"></i>Uncommon <input id="pkOddsUncommon" type="number" min="0" placeholder="28"></label>
-            <label><i style="--tc:#2196F3"></i>Rare <input id="pkOddsRare" type="number" min="0" placeholder="15"></label>
-            <label><i style="--tc:#9C27B0"></i>Epic <input id="pkOddsEpic" type="number" min="0" placeholder="6"></label>
-            <label><i style="--tc:#FFC400"></i>Legendary <input id="pkOddsLegendary" type="number" min="0" placeholder="1"></label>
-          </div>
+          <!-- One input per rarity, built from the ladder so a new rarity
+               appears here the moment it is created. The ids are the same
+               pkOdds<Capitalised> the rest of the panel already reads. -->
+          <div class="ec-odds" id="pkOddsRow"></div>
           <div id="pkOddsPreview" class="bk-note" style="margin-top:0.5rem"></div>
           <div class="form-actions">
             <button class="btn btn-white" id="pkSaveBtn" onclick="ecSavePack()">SAVE PACK</button>
@@ -1038,13 +1077,7 @@ textarea { resize:vertical; min-height:80px; }
             </div>
             <div class="form-group">
               <label class="fg-label">RARITY</label>
-              <select id="ccRarity">
-                <option value="common">Common</option>
-                <option value="uncommon">Uncommon</option>
-                <option value="rare" selected>Rare</option>
-                <option value="epic">Epic</option>
-                <option value="legendary">Legendary</option>
-              </select>
+              <select id="ccRarity"></select>
             </div>
             <div class="form-group img-field">
               <label class="fg-label">CARD ART</label>
@@ -1081,14 +1114,7 @@ textarea { resize:vertical; min-height:80px; }
             <div class="form-grid">
               <div class="form-group">
                 <label class="fg-label">RARITY</label>
-                <select id="bulkRarity">
-                  <option value="">Auto, from the file name</option>
-                  <option value="common">Common</option>
-                  <option value="uncommon">Uncommon</option>
-                  <option value="rare">Rare</option>
-                  <option value="epic">Epic</option>
-                  <option value="legendary">Legendary</option>
-                </select>
+                <select id="bulkRarity"><option value="">Auto, from the file name</option></select>
               </div>
               <div class="form-group">
                 <label class="fg-label">IMAGES</label>
@@ -1183,13 +1209,7 @@ textarea { resize:vertical; min-height:80px; }
             <input id="esPrize" placeholder="1200,900,700,550,450,360,290,230,180,140">
           </div>
           <label class="fg-label" style="margin-top:0.8rem;display:block">WHAT A DUPLICATE SELLS FOR</label>
-          <div class="ec-odds">
-            <label><i style="--tc:#9E9E9E"></i>Common <input id="esSellCommon" type="number" min="0"></label>
-            <label><i style="--tc:#4CAF50"></i>Uncommon <input id="esSellUncommon" type="number" min="0"></label>
-            <label><i style="--tc:#2196F3"></i>Rare <input id="esSellRare" type="number" min="0"></label>
-            <label><i style="--tc:#9C27B0"></i>Epic <input id="esSellEpic" type="number" min="0"></label>
-            <label><i style="--tc:#FFC400"></i>Legendary <input id="esSellLegendary" type="number" min="0"></label>
-          </div>
+          <div class="ec-odds" id="esSellRow"></div>
           <div class="form-actions">
             <button class="btn btn-white" onclick="ecSaveSettings()">SAVE NUMBERS</button>
             <span class="img-size" id="esStatus"></span>
@@ -3572,9 +3592,97 @@ let editingPack = null;    // id being edited, null when the form is a new one
 let editingCard = null;
 let editingJob  = null;
 
-const RTIER = { common:['COMMON','#9E9E9E'], uncommon:['UNCOMMON','#4CAF50'],
-                rare:['RARE','#2196F3'], epic:['EPIC','#9C27B0'], legendary:['LEGENDARY','#FFC400'] };
-const RORDER = ['common','uncommon','rare','epic','legendary'];
+/* ── The rarity ladder ───────────────────────────────────
+   These were constants. They are now rebuilt from whatever the Worker
+   says the ladder is, so an added rarity flows through the odds editor,
+   the card form, the collection view and the sell prices without any of
+   them knowing it happened. The five built-ins are the fallback for when
+   the economy has not loaded yet. */
+const CORE_RARITIES = ['common','uncommon','rare','epic','legendary'];
+let RTIER = { common:['COMMON','#9E9E9E'], uncommon:['UNCOMMON','#4CAF50'],
+              rare:['RARE','#2196F3'], epic:['EPIC','#9C27B0'], legendary:['LEGENDARY','#FFC400'] };
+let RORDER = CORE_RARITIES.slice();
+let RMETA  = {};                      // id -> the full row, for icons and weights
+let editingRarity = null;
+
+/** Capitalised id — how the pkOdds and esSell inputs are named. */
+const rId = r => r[0].toUpperCase() + r.slice(1);
+
+function applyRarities(rows) {
+    const list = (Array.isArray(rows) && rows.length ? rows : [])
+        .filter(r => r && r.id)
+        .slice()
+        .sort((a, b) => (Number(a.sort) || 0) - (Number(b.sort) || 0));
+    if (!list.length) return;                       // keep the built-in fallback
+    RORDER = list.map(r => String(r.id));
+    RTIER = {}; RMETA = {};
+    list.forEach(r => {
+        RTIER[r.id] = [String(r.label || r.id).toUpperCase(), String(r.colour || '#9E9E9E')];
+        RMETA[r.id] = r;
+    });
+    buildRarityInputs();
+}
+
+/**
+ * Rebuild everything in the panel that has one entry per rarity.
+ *
+ * Values already typed in are kept: this runs after a save, and wiping a
+ * half-filled pack form because someone added a rarity would be its own
+ * small betrayal.
+ */
+function buildRarityInputs() {
+    const rows = (boxId, prefix, phField) => {
+        const box = document.getElementById(boxId);
+        if (!box) return;
+        const was = {};
+        box.querySelectorAll('input').forEach(i => { was[i.id] = i.value; });
+        box.innerHTML = RORDER.map(r => {
+            const id = prefix + rId(r);
+            const [label, colour] = RTIER[r] || [r.toUpperCase(), '#9E9E9E'];
+            // The placeholder is the rarity's own default, so an empty box
+            // reads as "use the default" rather than "worth nothing".
+            const dflt = (RMETA[r] || {})[phField];
+            const place = dflt == null ? '' : ` placeholder="${esc(String(dflt))}"`;
+            return `<label><i style="--tc:${esc(colour)}"></i>${esc(label[0] + label.slice(1).toLowerCase())}` +
+                   ` <input id="${esc(id)}" type="number" min="0"${place}></label>`;
+        }).join('');
+        box.querySelectorAll('input').forEach(i => { if (was[i.id] != null) i.value = was[i.id]; });
+    };
+    rows('pkOddsRow', 'pkOdds', 'weight');
+    rows('esSellRow', 'esSell', 'sell');
+
+    const fill = (sel, first, keep) => {
+        const el = document.getElementById(sel);
+        if (!el) return;
+        const prev = keep === false ? '' : el.value;
+        el.innerHTML = (first ? `<option value="">${esc(first)}</option>` : '') +
+            RORDER.map(r => {
+                const [label] = RTIER[r] || [r.toUpperCase()];
+                const nice = label[0] + label.slice(1).toLowerCase();
+                return `<option value="${esc(r)}">${esc((RMETA[r] || {}).icon || '')} ${esc(nice)}</option>`;
+            }).join('');
+        if (prev) el.value = prev;
+    };
+    fill('ccRarity', null);
+    fill('bulkRarity', 'Auto, from the file name');
+    // A guarantee of the commonest rarity guarantees nothing, so it is not
+    // offered — the choices are "or better", which only means something
+    // above the floor.
+    const g = document.getElementById('pkGuarantee');
+    if (g) {
+        const prev = g.value;
+        g.innerHTML = '<option value="">None</option>' + RORDER.slice(1).map((r, i) => {
+            const [label] = RTIER[r] || [r.toUpperCase()];
+            const nice = label[0] + label.slice(1).toLowerCase();
+            const top = i === RORDER.length - 2;
+            return `<option value="${esc(r)}">${esc(nice)}${top ? '' : ' or better'}</option>`;
+        }).join('');
+        if (prev) g.value = prev;
+    }
+    if (!document.getElementById('ccRarity').value) {
+        document.getElementById('ccRarity').value = RORDER.includes('rare') ? 'rare' : RORDER[0];
+    }
+}
 
 function econApi(path) { return `${API_BASE.replace(/\/+$/,'')}${path}`; }
 function econHeaders(json) {
@@ -3599,6 +3707,7 @@ async function loadEcon(quiet) {
         const body = await res.json();
         if (!res.ok || !body.ok) throw new Error(body.error || `HTTP ${res.status}`);
         econ = body;
+        applyRarities(body.rarities);
         renderEconomy();
     } catch (e) {
         econ = null;
@@ -3612,6 +3721,7 @@ async function loadEcon(quiet) {
 function renderEconomy() {
     renderMaintenance();
     renderCardSeasons();
+    renderEconRarities();
     renderEconPacks();
     renderEconCards();
     renderEconJobs();
@@ -4199,6 +4309,169 @@ function renderEconJobs() {
           <button class="btn btn-danger btn-sm del-trigger" onclick="showDelConfirm(this, 'ecDeleteJob(\\'${esc(j.id)}\\')')">DEL</button>
         </div>
       </div>`).join('');
+}
+
+/* ── Rarities ────────────────────────────────────────── */
+
+function renderEconRarities() {
+    const box = document.getElementById('ecRarities');
+    if (!box) return;
+    const list = RORDER.map(id => RMETA[id]).filter(Boolean);
+    if (!list.length) {
+        box.innerHTML = '<p class="bk-note">The ladder has not loaded yet.</p>';
+        ecFillRarityPosition();
+        return;
+    }
+    // Rarest first, which is the order anyone thinks about them in.
+    box.innerHTML = list.slice().reverse().map(r => {
+        const core = CORE_RARITIES.includes(r.id);
+        return `<div class="ec-row">
+        <span style="flex:0 0 1.4rem">${esc(r.icon || '⚪')}</span>
+        <span style="flex:0 0 14px;height:14px;border-radius:2px;background:${esc(r.colour)}"></span>
+        <span class="ec-grow">${esc(r.label)}
+          <span class="ec-mono"> · weight ${Number(r.weight) || 0} · sells for ${Number(r.sell) || 0}${core ? '' : ' · yours'}</span></span>
+        <div class="td-actions">
+          <button class="btn btn-ghost btn-sm" onclick="ecEditRarity('${esc(r.id)}')">EDIT</button>
+          ${core ? '' : `<button class="btn btn-danger btn-sm del-trigger"
+             onclick="showDelConfirm(this, 'ecDeleteRarity(\\'${esc(r.id)}\\')')">DEL</button>`}
+        </div>
+      </div>`;
+    }).join('');
+    ecFillRarityPosition();
+}
+
+/**
+ * Where on the ladder, in words.
+ *
+ * The table stores a number, but nobody thinks "sort 45" — they think
+ * "rarer than Epic". The select offers each existing rarity and the new
+ * one is placed just above whichever is picked.
+ */
+function ecFillRarityPosition(selected) {
+    const el = document.getElementById('raAfter');
+    if (!el) return;
+    const prev = selected || el.value;
+    el.innerHTML = RORDER.slice().reverse()
+        .filter(r => r !== editingRarity)
+        .map(r => `<option value="${esc(r)}">Rarer than ${esc((RTIER[r] || [r])[0].toLowerCase())}</option>`)
+        .join('') + '<option value="">Commonest of all</option>';
+    // Default to the top of the ladder. Someone adding a rarity nearly
+    // always wants a rarer one, and "commonest of all" is the one answer
+    // that would quietly devalue it.
+    const top = RORDER.filter(r => r !== editingRarity).pop() || '';
+    el.value = (prev && [...el.options].some(o => o.value === prev)) ? prev : top;
+}
+
+/** The sort number that puts a new rarity immediately above `aboveId`. */
+function ecSortAbove(aboveId) {
+    const sorted = RORDER.map(id => RMETA[id]).filter(Boolean);
+    if (!sorted.length) return 10;
+    if (!aboveId) return Math.max(0, (Number(sorted[0].sort) || 10) - 10);
+    const i = sorted.findIndex(r => r.id === aboveId);
+    if (i < 0) return (Number(sorted[sorted.length - 1].sort) || 50) + 10;
+    const lo = Number(sorted[i].sort) || 0;
+    const next = sorted[i + 1];
+    // Halfway to the next rung, or ten above the top one.
+    return next ? Math.round((lo + (Number(next.sort) || lo + 20)) / 2) : lo + 10;
+}
+
+function ecRarityEditMode(on) {
+    const card = document.getElementById('rarityCard');
+    if (card) card.classList.toggle('is-editing', !!on);
+    const btn = document.getElementById('raSaveBtn');
+    if (btn) btn.textContent = on ? 'SAVE RARITY' : 'ADD RARITY';
+}
+
+function ecNewRarity() {
+    editingRarity = null;
+    const set = (id, v) => { const e = document.getElementById(id); if (e) e.value = v; };
+    set('raLabel', ''); set('raIcon', '🔴');
+    set('raColour', '#FF3366'); set('raColourHex', '#FF3366');
+    set('raWeight', 2); set('raSell', 1500);
+    ecFillRarityPosition(RORDER[RORDER.length - 1] || '');
+    ecRarityEditMode(false);
+    const st = document.getElementById('raStatus'); if (st) st.textContent = '';
+    const l = document.getElementById('raLabel'); if (l) l.focus();
+}
+
+function ecEditRarity(id) {
+    const r = RMETA[id];
+    if (!r) return;
+    editingRarity = id;
+    const set = (i, v) => { const e = document.getElementById(i); if (e) e.value = v; };
+    set('raLabel', r.label || id);
+    set('raIcon', r.icon || '⚪');
+    set('raColour', /^#[0-9a-f]{6}$/i.test(r.colour || '') ? r.colour : '#9E9E9E');
+    set('raColourHex', r.colour || '#9E9E9E');
+    set('raWeight', Number(r.weight) || 0);
+    set('raSell', Number(r.sell) || 0);
+    // Editing keeps its rung: the position picker is for placing new ones.
+    ecFillRarityPosition();
+    ecRarityEditMode(true);
+    const st = document.getElementById('raStatus');
+    if (st) st.textContent = CORE_RARITIES.includes(id)
+        ? 'A built-in — rename and recolour freely, but it cannot be deleted.' : '';
+    document.getElementById('rarityCard').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+async function ecSaveRarity() {
+    const st = document.getElementById('raStatus');
+    const val = id => (document.getElementById(id) || {}).value || '';
+    const label = val('raLabel').trim();
+    if (!label) { toast('Give the rarity a name', 'err'); return; }
+
+    const hex = val('raColourHex').trim() || val('raColour');
+    if (!/^#[0-9a-fA-F]{6}$/.test(hex)) { toast('Colour must look like #FF3366', 'err'); return; }
+
+    const rarity = {
+        id: editingRarity || label,
+        label,
+        icon: val('raIcon').trim() || '⚪',
+        colour: hex,
+        weight: Math.max(0, Math.round(Number(val('raWeight')) || 0)),
+        sell: Math.max(0, Math.round(Number(val('raSell')) || 0)),
+    };
+    // An existing rarity keeps its rung; a new one is placed by the picker.
+    rarity.sort = editingRarity
+        ? (Number((RMETA[editingRarity] || {}).sort) || 50)
+        : ecSortAbove(val('raAfter'));
+
+    if (st) st.textContent = 'saving…';
+    try {
+        const out = await econPost({ action: 'saveRarity', rarity }, st);
+        applyRarities(out.rarities);
+        if (econ) econ.rarities = out.rarities;
+        renderEconRarities();
+        renderEconCards();
+        const made = !editingRarity;
+        editingRarity = null;
+        ecNewRarity();
+        if (st) st.textContent = '';
+        toast(made ? `Added ${label}` : `Saved ${label}`, 'ok');
+    } catch (e) {
+        if (st) st.textContent = '';
+        toast('Could not save: ' + (e.message || 'unknown'), 'err');
+    }
+}
+
+async function ecDeleteRarity(id) {
+    if (CORE_RARITIES.includes(id)) {
+        toast('The five built-in rarities cannot be deleted', 'err');
+        return;
+    }
+    try {
+        const out = await econPost({ action: 'deleteRarity', id });
+        applyRarities(out.rarities);
+        if (econ) econ.rarities = out.rarities;
+        // Cards that were wearing it have been re-graded, so the list and
+        // the card rows both need redrawing.
+        await loadEcon(true);
+        toast(out.moved
+            ? `Deleted — ${out.moved} card${out.moved === 1 ? '' : 's'} moved to ${esc((RTIER[out.to] || [out.to])[0].toLowerCase())}`
+            : 'Deleted', 'ok');
+    } catch (e) {
+        toast('Could not delete: ' + (e.message || 'unknown'), 'err');
+    }
 }
 
 /* ── The numbers ─────────────────────────────────────── */
@@ -5670,6 +5943,17 @@ async function confirmRestore() {
 document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('tColor').addEventListener('input', function(){ document.getElementById('tColorHex').value = this.value; });
     document.getElementById('tColorHex').addEventListener('input', function(){ if(/^#[0-9a-f]{6}$/i.test(this.value)) document.getElementById('tColor').value = this.value; });
+
+    // The rarity colour swatch and its hex box follow each other.
+    const rc = document.getElementById('raColour'), rh = document.getElementById('raColourHex');
+    if (rc && rh) {
+        rc.addEventListener('input', function(){ rh.value = this.value; });
+        rh.addEventListener('input', function(){ if (/^#[0-9a-f]{6}$/i.test(this.value)) rc.value = this.value; });
+    }
+    // Draw the rarity-driven inputs from the built-in ladder straight away,
+    // so the card form and the odds editor are usable before the economy
+    // has come back from the Worker.
+    try { buildRarityInputs(); } catch (e) {}
 });
 </script>
 <script type="module">

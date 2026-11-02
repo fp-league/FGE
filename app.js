@@ -1638,16 +1638,45 @@ async function voteDOTD(name) {
 // ── TRADING CARDS ────────────────────────────────────────
 // The set is shown here; collecting happens in Discord, which is also the
 // login — the site has no accounts and this did not seem worth adding them
-// for. These rarity rules mirror worker/src/cards.js exactly; if one changes
-// the other has to.
-const CARD_TIERS = {
+// for.
+//
+// The ladder used to be copied out of worker/src/cards.js and kept in step
+// by hand. It is now whatever the admin has set: /api/econ/public sends it
+// and applyPublicRarities rebuilds these two. The five below are only the
+// fallback for a first paint, before that fetch lands.
+//
+// TIER_ORDER is RAREST FIRST — the order things are listed in on the page.
+// The Worker's RARITIES is the other way round. Worth remembering before
+// comparing two rarities with indexOf.
+let CARD_TIERS = {
     legendary: { label: 'LEGENDARY', colour: '#FFC400' },
     epic:      { label: 'EPIC',      colour: '#9C27B0' },
     rare:      { label: 'RARE',      colour: '#2196F3' },
     uncommon:  { label: 'UNCOMMON',  colour: '#4CAF50' },
     common:    { label: 'COMMON',    colour: '#9E9E9E' },
 };
-const TIER_ORDER = ['legendary', 'epic', 'rare', 'uncommon', 'common'];
+let TIER_ORDER = ['legendary', 'epic', 'rare', 'uncommon', 'common'];
+
+/** Default pack odds, one weight per rarity, when a pack sets none. */
+let HOUSE_ODDS = { common: 50, uncommon: 28, rare: 15, epic: 6, legendary: 1 };
+
+/** Anything unknown still renders, in grey, rather than throwing. */
+const tierOf = t => CARD_TIERS[t] || { label: String(t || '').toUpperCase() || 'UNKNOWN',
+                                       colour: '#9E9E9E' };
+
+function applyPublicRarities(rows) {
+    if (!Array.isArray(rows) || !rows.length) return;
+    // The API sends them commonest first; the page lists them rarest first.
+    const list = rows.slice().sort((a, b) => (Number(a.sort) || 0) - (Number(b.sort) || 0));
+    TIER_ORDER = list.map(r => String(r.id)).reverse();
+    CARD_TIERS = {};
+    HOUSE_ODDS = {};
+    list.forEach(r => {
+        CARD_TIERS[r.id] = { label: String(r.label || r.id).toUpperCase(),
+                             colour: String(r.colour || '#9E9E9E') };
+        HOUSE_ODDS[r.id] = Number(r.weight) || 0;
+    });
+}
 
 function cardSetFor(d) {
     const drivers = d.drivers || [];
@@ -1702,6 +1731,7 @@ async function loadCustomCards() {
         const body = await res.json();
         customCards = (body && body.cards) || [];
         econPublic = body || null;
+        applyPublicRarities(body && body.rarities);
     } catch (e) {
         customCards = [];
     }
@@ -1741,7 +1771,9 @@ function wholeSet() {
             const card = { ...c, cls: k };
             if (!prev) { seen.set(id, card); out.push(card); return; }
             // Entered in both classes: one card, at the better rarity.
-            if (TIER_ORDER.indexOf(card.rarity) > TIER_ORDER.indexOf(prev.rarity)) {
+            // TIER_ORDER is rarest first, so the better rarity is the LOWER
+            // index. This read `>`, which kept the worse of the two.
+            if (TIER_ORDER.indexOf(card.rarity) < TIER_ORDER.indexOf(prev.rarity)) {
                 Object.assign(prev, card);
             }
         });
@@ -1765,8 +1797,8 @@ function renderCards() {
     set.forEach(c => { counts[c.rarity] = (counts[c.rarity] || 0) + 1; });
 
     const key = `<div class="tc-key">` + TIER_ORDER.filter(t => counts[t]).map(t =>
-        `<span class="tc-chip" style="--tc:${CARD_TIERS[t].colour}">
-           <i></i>${CARD_TIERS[t].label} <b>${counts[t]}</b></span>`).join('') + `</div>`;
+        `<span class="tc-chip" style="--tc:${tierOf(t).colour}">
+           <i></i>${tierOf(t).label} <b>${counts[t]}</b></span>`).join('') + `</div>`;
 
     const how = `<div class="tc-how">
         <strong>${set.length} cards in the set — GT3 and GT4 together.</strong>
@@ -1777,8 +1809,8 @@ function renderCards() {
       </div>`;
 
     const grid = TIER_ORDER.filter(t => counts[t]).map(t => `
-        <h2 class="tc-head" style="--tc:${CARD_TIERS[t].colour}">
-          ${CARD_TIERS[t].label}<span>${counts[t]}</span>
+        <h2 class="tc-head" style="--tc:${tierOf(t).colour}">
+          ${tierOf(t).label}<span>${counts[t]}</span>
         </h2>
         <div class="tc-grid">${
           set.filter(c => c.rarity === t).map(c => cardHTML(c, d)).join('')
@@ -1788,9 +1820,6 @@ function renderCards() {
     // The shop is its own block, and the cards come last.
     el.innerHTML = how + key + shopHTML() + grid;
 }
-
-/** House odds, mirroring RARITY in worker/src/cards.js. */
-const HOUSE_ODDS = { common: 50, uncommon: 28, rare: 15, epic: 6, legendary: 1 };
 
 const money = n => Number(n || 0).toLocaleString('en-GB');
 
@@ -1828,10 +1857,10 @@ function shopHTML() {
         const w = odds || HOUSE_ODDS;
         const total = TIER_ORDER.reduce((n, t) => n + (Number(w[t]) || 0), 0) || 1;
         const bar = TIER_ORDER.slice().reverse().filter(t => Number(w[t]) > 0).map(t =>
-            `<i style="--tc:${CARD_TIERS[t].colour};flex:${Number(w[t])}"
-                title="${CARD_TIERS[t].label} ${Math.round(Number(w[t]) / total * 100)}%"></i>`).join('');
+            `<i style="--tc:${tierOf(t).colour};flex:${Number(w[t])}"
+                title="${tierOf(t).label} ${Math.round(Number(w[t]) / total * 100)}%"></i>`).join('');
         const odds_line = TIER_ORDER.slice().reverse().filter(t => Number(w[t]) > 0).map(t =>
-            `<span style="color:${CARD_TIERS[t].colour}">${Math.round(Number(w[t]) / total * 100)}%</span>`
+            `<span style="color:${tierOf(t).colour}">${Math.round(Number(w[t]) / total * 100)}%</span>`
         ).join(' · ');
         return `<div class="shop-pack">
             <div class="shop-pack-top">
@@ -1841,7 +1870,7 @@ function shopHTML() {
             </div>
             <p class="shop-blurb">${esc(p.blurb || '')}</p>
             <div class="shop-meta">${p.size} card${p.size !== 1 ? 's' : ''}${
-              p.guarantee ? ` · ${CARD_TIERS[p.guarantee].label} or better guaranteed` : ''}</div>
+              p.guarantee ? ` · ${tierOf(p.guarantee).label} or better guaranteed` : ''}</div>
             <div class="shop-bar">${bar}</div>
             <div class="shop-odds">${odds_line}</div>
             <code class="shop-cmd">/buy pack:${esc(p.id)}</code>
@@ -1855,8 +1884,8 @@ function shopHTML() {
       </tr>`).join('');
 
     const sellRows = TIER_ORDER.slice().reverse().filter(t => sell[t] != null).map(t =>
-        `<span class="tc-chip" style="--tc:${CARD_TIERS[t].colour}">
-           <i></i>${CARD_TIERS[t].label} <b>${money(sell[t])}</b></span>`).join('');
+        `<span class="tc-chip" style="--tc:${tierOf(t).colour}">
+           <i></i>${tierOf(t).label} <b>${money(sell[t])}</b></span>`).join('');
 
     return `
       <h2 class="tc-head" style="--tc:var(--accent)">THE SHOP<span>${packs.length}</span></h2>
@@ -1890,7 +1919,7 @@ function shopHTML() {
 
 function cardHTML(c, d) {
     const drv = c.drv;
-    const tier = CARD_TIERS[c.rarity];
+    const tier = tierOf(c.rarity);
     const team = safeHex(colourFor(drv.team, d.teams), '#888888');
     const names = String(drv.name || '').trim().split(/\s+/);
     const initials = ((names[0] || '')[0] || '') + ((names[names.length - 1] || '')[0] || '');

@@ -15,8 +15,10 @@
  */
 
 import { verifyRequest, handleCommand, buildResults } from './discord.js';
-import { openPack, showCollection, showCard, showCollectors, grantPacks, CARD_VIEWS } from './cards.js';
+import { openPack, showCollection, showCard, showCollectors, grantPacks, CARD_VIEWS,
+         loadRarities } from './cards.js';
 import { COMMANDS } from './commands.js';
+import { handleAutocomplete } from './autocomplete.js';
 import { takeBackup, listBackups, readBackup, deleteBackup } from './backup.js';
 import { listArchive, readArchive, saveArchive, deleteArchive } from './archive.js';
 import {
@@ -25,6 +27,7 @@ import {
   deleteCustomCard, saveJob, deleteJob, allWallets, adjust, wallet, settings,
   ECON_COMMANDS, TRADE_VIEWS, endCardSeason, listCardSeasons,
   offerTrade, listTrades, acceptTrade, closeTrade,
+  listRarities, saveRarity, deleteRarity,
 } from './economy.js';
 
 const MAX_NAME = 24;
@@ -744,6 +747,7 @@ async function postEcon(request, env) {
   let body;
   try { body = await request.json(); } catch { return bad('invalid JSON body', request, env); }
   const action = String(body.action || '');
+  await loadRarities(env);
 
   try {
     switch (action) {
@@ -774,6 +778,15 @@ async function postEcon(request, env) {
       case 'deleteCard': await deleteCustomCard(env, body.id); return json({ ok: true }, null, request, env);
       case 'saveJob':    return json({ ok: true, id: await saveJob(env, body.job || {}) }, null, request, env);
       case 'deleteJob':  await deleteJob(env, body.id); return json({ ok: true }, null, request, env);
+      case 'saveRarity': return json({ ok: true, id: await saveRarity(env, body.rarity || {}),
+                                       rarities: await listRarities(env) }, null, request, env);
+      case 'deleteRarity': {
+        // Says what it moved: deleting a rarity re-grades every card that
+        // was wearing it, and silently re-grading someone's collection
+        // would be a nasty surprise.
+        const out = await deleteRarity(env, body.id);
+        return json({ ok: true, ...out, rarities: await listRarities(env) }, null, request, env);
+      }
       case 'settings':   return json({ ok: true, settings: await setSettings(env, body.settings || {}) }, null, request, env);
       case 'endCardSeason': {
         const out = await endCardSeason(env, { name: body.name, clear: body.clear === true });
@@ -953,6 +966,7 @@ async function getEcon(request, env) {
     return bad('not authorised', request, env, 401);
   }
   try {
+    await loadRarities(env);
     const cfg = await adminConfig(env);
     return json({ ok: true, ...cfg, wallets: await allWallets(env),
                   cardSeasons: await listCardSeasons(env) }, null, request, env);
@@ -984,7 +998,9 @@ async function getEconPublic(request, env) {
            FROM job WHERE enabled = 1 ORDER BY sort, min_pay`).all();
       jobs = j.results || [];
     } catch { /* optional */ }
-    return json({ ok: true, cards: rows.results || [], packs, jobs,
+    let rarities = [];
+    try { rarities = await listRarities(env); } catch { /* optional */ }
+    return json({ ok: true, cards: rows.results || [], packs, jobs, rarities,
                   settings: await settings(env) }, null, request, env);
   } catch {
     // Not an error for the site — it just means there are no custom cards.
@@ -1379,11 +1395,33 @@ export default {
         try { interaction = JSON.parse(raw); }
         catch { return new Response('bad body', { status: 400 }); }
 
+        // Rarities are editable, so the ladder is loaded per interaction
+        // rather than baked in. Cached in the isolate for a minute, so this
+        // is a D1 read only when it has actually gone stale.
+        await loadRarities(env);
+
         // Discord pings the endpoint to validate it
         if (interaction.type === 1) {
           return new Response(JSON.stringify({ type: 1 }), {
             headers: { 'Content-Type': 'application/json' },
           });
+        }
+
+        // Typeahead. Discord sends one of these on every keystroke and
+        // wants an answer inside three seconds, so this sits in front of
+        // the command handling and never does more than a cached league
+        // read plus one small query. It is not held by maintenance —
+        // suggesting a pack name changes nothing, and the command itself
+        // still answers ERROR.
+        if (interaction.type === 4) {
+          let choices = null;
+          try {
+            const record = await league(env).catch(() => ({}));
+            choices = await handleAutocomplete(interaction, record, env);
+          } catch { /* fall through to an empty list */ }
+          return new Response(JSON.stringify(
+            choices || { type: 8, data: { choices: [] } }
+          ), { headers: { 'Content-Type': 'application/json' } });
         }
 
         if (interaction.type === 2) {
