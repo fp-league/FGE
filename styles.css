@@ -96,7 +96,19 @@ body {
     min-height: 100vh;
     overflow-x: hidden;
     transition: background-color 0.45s ease;
+    /* The accent footer bar is heavy enough that seeing black below it on
+       a short page reads as the page having broken. A column with the
+       main region growing keeps it on the floor of the window. The
+       overlays are all position:fixed, so none of them are affected. */
+    display: flex; flex-direction: column;
 }
+/* width:100% matters. .container centres itself with margin: 0 auto, and
+   auto side margins on a flex item switch it from stretching to
+   shrink-to-fit — which collapsed every page to the width of its widest
+   child. Stating the width puts the max-width and the centring back in
+   charge. */
+body > main { flex: 1 0 auto; width: 100%; }
+body > .footer { flex-shrink: 0; width: 100%; }
 
 .container { max-width: 1200px; margin: 0 auto; padding: 0 1.5rem 4rem; }
 
@@ -167,7 +179,7 @@ body {
 }
 .nav-toggle span {
     display: block; width: 24px; height: 2px;
-    background: var(--white); border-radius: 1px;
+    background: var(--white); border-radius: 0;
     transition: all 0.3s ease;
 }
 .nav-toggle.open span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
@@ -520,7 +532,7 @@ body {
 .cb-sep { font-family: var(--font-display); font-size: 1.6rem; color: var(--grey); margin-bottom: 0.4rem; }
 .cb-raceday {
     font-family: var(--font-display); font-size: 1.8rem;
-    letter-spacing: 0.12em; color: var(--class-color);
+    letter-spacing: 0.12em; color: var(--class-on-dark);
     text-shadow: 0 0 20px var(--class-color);
     animation: racedayPulse 1.6s ease-in-out infinite;
 }
@@ -568,8 +580,8 @@ body {
 .nh-meta { display: flex; align-items: center; gap: 0.7rem; margin-bottom: 0.7rem; flex-wrap: wrap; }
 .nh-tag {
     font-family: var(--font-display); font-size: 0.6rem; letter-spacing: 0.09em;
-    background: var(--class-color); color: #fff;
-    padding: 0.18rem 0.55rem; border-radius: 2px;
+    background: var(--class-fill); color: #fff;
+    padding: 0.18rem 0.55rem; border-radius: 0;
     display: inline-block; transition: background 0.3s; text-transform: uppercase;
 }
 .nh-date, .nm-date {
@@ -591,7 +603,7 @@ body {
     border-bottom: 2px solid var(--class-color); padding-bottom: 2px;
     transition: color 0.2s, gap 0.2s;
 }
-.nh:hover .nh-read { color: var(--class-color); }
+.nh:hover .nh-read { color: var(--class-on-dark); }
 
 /* ── Side stories ── */
 .news-side { display: flex; flex-direction: column; gap: 1rem; }
@@ -604,7 +616,7 @@ body {
     transition: border-left-color 0.25s, background 0.25s, transform 0.25s;
 }
 .nm:hover {
-    background: var(--surface2); border-left-color: var(--class-color);
+    background: var(--surface2); border-left-color: var(--class-on-dark);
     transform: translateX(3px);
 }
 .nm-img {
@@ -624,8 +636,8 @@ body {
 .nm-meta { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
 .nm-tag {
     font-family: var(--font-display); font-size: 0.54rem; letter-spacing: 0.072em;
-    color: var(--class-color); text-transform: uppercase;
-    border: 1px solid var(--class-color); border-radius: 2px;
+    color: var(--class-on-dark); text-transform: uppercase;
+    border: 1px solid var(--class-color); border-radius: 0;
     padding: 0.06rem 0.35rem; transition: color 0.3s, border-color 0.3s;
 }
 .nm-body h4 {
@@ -723,7 +735,7 @@ select {
     font-size: 0.8rem; cursor: pointer;
 }
 select option { background: var(--page-deep); color: var(--white); }
-select:focus { outline: none; border-color: var(--class-color); }
+select:focus { outline: none; border-color: var(--class-on-dark); }
 
 /* ── TABS ── */
 .standings-controls { display: flex; gap: 0.4rem; margin-bottom: 1.2rem; flex-wrap: wrap; }
@@ -734,13 +746,18 @@ select:focus { outline: none; border-color: var(--class-color); }
     transition: all 0.2s;
 }
 .tab-btn:hover { color: var(--white); border-color: var(--line-strong); }
-.tab-btn.active { background: var(--white); color: var(--black); border-color: var(--white); }
+/* The selected tab takes the class colour rather than going white. White
+   was the loudest thing on the page and it was being spent on a tab. */
+.tab-btn.active {
+    background: var(--class-fill); color: #fff;
+    border-color: var(--class-fill); font-weight: 700;
+}
 
 /* ── CLASS BADGE ── */
 .class-badge {
     display: inline-block; font-family: var(--font-display);
     font-size: 0.6rem; letter-spacing: 0.1em;
-    padding: 0.12rem 0.45rem; border-radius: 2px;
+    padding: 0.12rem 0.45rem; border-radius: 0;
     font-weight: bold; vertical-align: middle; margin-left: 0.3rem;
 }
 .badge-gt3 { background: rgba(225,6,0,0.15); color: var(--gt3); border: 1px solid var(--gt3); }
@@ -766,7 +783,7 @@ select:focus { outline: none; border-color: var(--class-color); }
 
 /* ── STANDINGS TABLE ── */
 .standings-table { width: 100%; border-collapse: collapse; font-family: var(--font-body); font-size: 0.88rem; }
-.standings-table thead th { font-family: var(--font-ui); font-size: 0.68rem; letter-spacing: 0.12em; color: var(--grey); padding: 0.7rem 0.8rem; text-align: left; border-bottom: 1px solid var(--line); }
+.standings-table thead th { font-family: var(--font-ui); font-weight: 700; font-size: 0.64rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--grey); padding: 0.75rem 0.8rem; text-align: left; border-bottom: 1px solid var(--line); }
 .standings-table tbody tr { border-bottom: 1px solid rgba(255,255,255,0.04); transition: background 0.15s; cursor: pointer; }
 .standings-table tbody tr:hover { background: var(--surface); }
 .standings-table td { padding: 0.72rem 0.8rem; }
@@ -778,7 +795,7 @@ select:focus { outline: none; border-color: var(--class-color); }
 
 /* ── RESULTS ── */
 .results-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
-.results-table thead th { font-family: var(--font-ui); font-size: 0.68rem; letter-spacing: 0.1em; color: var(--grey); padding: 0.65rem 0.8rem; border-bottom: 1px solid var(--line); text-align: left; background: var(--surface); }
+.results-table thead th { font-family: var(--font-ui); font-weight: 700; font-size: 0.64rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--grey); padding: 0.7rem 0.8rem; border-bottom: 1px solid var(--line); text-align: left; background: var(--surface); }
 .results-table tbody tr { border-bottom: 1px solid rgba(255,255,255,0.04); transition: background 0.15s; }
 .results-table tbody tr:hover { background: var(--surface); }
 .results-table td { padding: 0.7rem 0.8rem; }
@@ -792,7 +809,7 @@ select:focus { outline: none; border-color: var(--class-color); }
 .rt-gp { color: var(--white); }
 .rt-date { color: var(--grey); font-size: 0.8rem; white-space: nowrap; }
 .rt-laps { color: var(--grey); font-size: 0.8rem; }
-.pts-leader { font-family: var(--font-display); font-size: 0.68rem; background: var(--class-color); color: #fff; padding: 0.12rem 0.45rem; border-radius: 2px; letter-spacing: 0.1em; }
+.pts-leader { font-family: var(--font-display); font-size: 0.68rem; background: var(--class-fill); color: #fff; padding: 0.12rem 0.45rem; border-radius: 0; letter-spacing: 0.1em; }
 .pts-gap { color: var(--grey); font-family: var(--font-ui); font-size: 0.82rem; }
 
 @media (max-width: 600px) { .std-hide-mobile { display: none !important; } }
@@ -804,14 +821,34 @@ select:focus { outline: none; border-color: var(--class-color); }
 
 /* ── FORM GUIDE ── */
 .form-guide { display: flex; gap: 3px; }
-.fg-dot { width: 22px; height: 22px; border-radius: 3px; font-size: 0.58rem; font-weight: 900; display: flex; align-items: center; justify-content: center; color: #fff; font-family: var(--font-display); }
+.fg-dot { width: 22px; height: 22px; border-radius: 0; font-size: 0.58rem; font-weight: 900; display: flex; align-items: center; justify-content: center; color: #fff; font-family: var(--font-display); }
 .fg-dot.fg-win { background: #1a5c1e; }
 .fg-dot.fg-pod { background: var(--grey-mid); }
 .fg-dot.fg-fin { background: #1A1A1A; }
-.fg-dot.fg-dnf { background: #0D0D0D; color: #333; }
+/* Dimmed, but still legible: at #333 the letter was 1.5:1 and
+   effectively invisible, which defeats the point of marking a DNF with a
+   letter rather than only a colour. */
+.fg-dot.fg-dnf { background: #0D0D0D; color: #858585; }
 
 /* ── CALENDAR ── */
-.cal-title { font-family: var(--font-display); font-size: 1.6rem; letter-spacing: 0.1em; color: var(--white); margin-bottom: 1.2rem; }
+/* The title every page opens with. It was a tracked-out line of medium
+   weight, which read as a label rather than a masthead and left each page
+   starting quieter than the section headings further down it. Same
+   treatment as the hero now, one size below, with the accent rule the
+   section heads carry so a page announces itself the same way. */
+.cal-title {
+    font-family: var(--font-display); font-weight: 900; font-style: italic;
+    font-size: clamp(1.9rem, 5vw, 3rem);
+    line-height: 0.92; letter-spacing: -0.018em;
+    text-transform: uppercase; color: var(--white);
+    margin: 0.4rem 0 1.6rem;
+    display: flex; align-items: center; gap: 0.75rem;
+}
+.cal-title::before {
+    content: ''; width: 6px; height: 0.78em;
+    background: var(--class-color); flex-shrink: 0;
+    transform: skewX(-12deg); transition: background 0.3s;
+}
 .cal-top { display: flex; align-items: center; justify-content: flex-end; gap: 1rem; margin-bottom: 1rem; }
 .cal-featured { display: flex; gap: 1px; margin-bottom: 1px; overflow-x: auto; padding-bottom: 0; scrollbar-width: none; background: var(--line); border: 1px solid var(--line); border-bottom: none; border-radius: var(--radius) var(--radius) 0 0; overflow: hidden; }
 .cal-featured::-webkit-scrollbar { display: none; }
@@ -824,7 +861,7 @@ select:focus { outline: none; border-color: var(--class-color); }
 .feat-overlay { display: none; }
 .feat-body { position: relative; z-index: 1; }
 .feat-label { font-family: var(--font-ui); font-size: 0.62rem; letter-spacing: 0.081em; color: var(--grey); display: block; margin-bottom: 0.25rem; }
-.feat-card.next .feat-label { color: var(--class-color); }
+.feat-card.next .feat-label { color: var(--class-on-dark); }
 .feat-round { font-family: var(--font-display); font-size: 0.8rem; color: var(--grey-light); letter-spacing: 0.1em; }
 .feat-name { font-family: var(--font-display); font-size: 1rem; color: var(--white); margin-top: 0.15rem; letter-spacing: 0.05em; }
 .feat-date { font-size: 0.77rem; color: var(--grey); margin-top: 0.25rem; font-family: var(--font-ui); }
@@ -835,13 +872,19 @@ select:focus { outline: none; border-color: var(--class-color); }
     position: relative; overflow: hidden; transition: background 0.2s;
 }
 .cal-card:hover { background: var(--surface2); }
-.cal-card.next { border-left: 2px solid var(--class-color); }
+.cal-card.next { border-left: 3px solid var(--class-color); }
 .cal-card-bg { position: absolute; inset: 0; background-size: cover; background-position: center; opacity: 0.06; }
 .cal-card-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem; position: relative; }
 .cal-round { font-family: var(--font-display); font-size: 0.68rem; letter-spacing: 0.063em; color: var(--grey); }
-.cal-next-badge { font-family: var(--font-display); font-size: 0.58rem; letter-spacing: 0.12em; background: var(--class-color); color: #fff; padding: 0.08rem 0.4rem; border-radius: 2px; }
+.cal-next-badge { font-family: var(--font-display); font-size: 0.58rem; letter-spacing: 0.12em; background: var(--class-fill); color: #fff; padding: 0.08rem 0.4rem; border-radius: 0; }
 .cal-date { font-size: 0.72rem; color: var(--grey); font-family: var(--font-ui); }
-.cal-name { font-family: var(--font-display); font-size: 0.9rem; color: var(--white); letter-spacing: 0.06em; position: relative; }
+/* The circuit is the thing you scan the calendar for, so it is set like
+   the race title on the home page rather than a line of bold body text. */
+.cal-name {
+    font-family: var(--font-display); font-weight: 900; font-style: italic;
+    font-size: 1.25rem; line-height: 1; letter-spacing: -0.012em;
+    text-transform: uppercase; color: var(--white); position: relative;
+}
 .cal-track { font-size: 0.78rem; color: var(--grey); margin-top: 0.15rem; position: relative; font-family: var(--font-ui); }
 .cal-date-lg { font-family: var(--font-display); font-size: 0.95rem; color: var(--grey-light); margin-top: 0.4rem; position: relative; }
 .cal-podium { margin-top: 0.7rem; position: relative; display: flex; flex-direction: column; gap: 0.2rem; }
@@ -915,7 +958,7 @@ select:focus { outline: none; border-color: var(--class-color); }
     font-family: var(--font-display); font-size: 0.68rem;
     letter-spacing: 0.1em; color: var(--white);
     background: rgba(0,0,0,0.5); border: 1px solid var(--line-strong);
-    border-radius: 2px; padding: 0.1rem 0.4rem;
+    border-radius: 0; padding: 0.1rem 0.4rem;
 }
 /* Big faded car number as a watermark */
 .fdc-num {
@@ -1035,7 +1078,7 @@ select:focus { outline: none; border-color: var(--class-color); }
     display: inline-flex; align-items: center; gap: 0.4rem;
 }
 .dp-nat, .dp-numtag {
-    border: 1px solid var(--line-strong); border-radius: 2px;
+    border: 1px solid var(--line-strong); border-radius: 0;
     padding: 0.12rem 0.5rem; font-size: 0.7rem;
     text-transform: uppercase; letter-spacing: 0.1em;
 }
@@ -1077,7 +1120,7 @@ select:focus { outline: none; border-color: var(--class-color); }
 }
 .dp-panel h3::before {
     content: ''; width: 3px; height: 0.9em;
-    background: var(--tc, var(--class-color)); border-radius: 1px;
+    background: var(--tc, var(--class-color)); border-radius: 0;
 }
 .dp-bio { color: var(--grey-light); line-height: 1.7; font-size: 0.89rem; }
 .dp-empty { color: var(--grey); font-size: 0.84rem; font-family: var(--font-ui); letter-spacing: 0.04em; }
@@ -1094,7 +1137,7 @@ select:focus { outline: none; border-color: var(--class-color); }
     font-family: var(--font-display); font-size: 0.86rem;
     color: var(--white); text-align: center;
     background: var(--surface2); border: 1px solid var(--line-strong);
-    border-radius: 2px; padding: 0.18rem 0;
+    border-radius: 0; padding: 0.18rem 0;
 }
 .dp-rpos.gold   { background: rgba(255,195,0,0.16);  border-color: rgba(255,195,0,0.5);  color: #FFD24A; }
 .dp-rpos.silver { background: rgba(200,200,200,0.14); border-color: rgba(200,200,200,0.45); color: #DFDFDF; }
@@ -1173,7 +1216,7 @@ select:focus { outline: none; border-color: var(--class-color); }
 .fmp-box { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 1.1rem; }
 .fmp-box h3 { font-family: var(--font-display); font-size: 0.82rem; letter-spacing: 0.12em; color: var(--white); margin-bottom: 0.8rem; }
 .fmp-grid { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.8rem; }
-.fmp-item { background: var(--surface2); border-radius: 2px; padding: 0.38rem 0.7rem; font-size: 0.8rem; }
+.fmp-item { background: var(--surface2); border-radius: 0; padding: 0.38rem 0.7rem; font-size: 0.8rem; }
 .fmp-item span { display: block; color: var(--white); }
 .fmp-item small { color: var(--grey); font-size: 0.7rem; }
 .fmp-pts { font-family: var(--font-display); font-size: 0.95rem; color: var(--white); }
@@ -1197,7 +1240,7 @@ select:focus { outline: none; border-color: var(--class-color); }
 .pred-correct { border-color: #2e7d32 !important; }
 .pred-wrong { border-color: #c62828 !important; }
 .pred-result-row { display: flex; align-items: center; justify-content: space-between; font-size: 0.83rem; flex-wrap: wrap; gap: 0.5rem; }
-.pred-badge { font-family: var(--font-ui); font-size: 0.7rem; letter-spacing: 0.06em; padding: 0.18rem 0.55rem; border-radius: 2px; }
+.pred-badge { font-family: var(--font-ui); font-size: 0.7rem; letter-spacing: 0.06em; padding: 0.18rem 0.55rem; border-radius: 0; }
 .pred-badge-win { background: rgba(46,125,50,0.2); color: #81c784; }
 .pred-badge-loss { background: rgba(198,40,40,0.15); color: #e57373; }
 .pred-badge-none { background: var(--surface2); color: var(--grey); }
@@ -1216,18 +1259,21 @@ select:focus { outline: none; border-color: var(--class-color); }
 .dotd-card.dotd-voted { border-color: var(--white); }
 .dotd-name { font-family: var(--font-ui); font-size: 0.83rem; color: var(--white); font-weight: 600; }
 .dotd-team { font-size: 0.7rem; color: var(--grey); margin-top: 0.1rem; }
-.dotd-bar-wrap { height: 3px; background: var(--surface2); border-radius: 2px; margin-top: 0.5rem; overflow: hidden; }
-.dotd-bar { height: 100%; border-radius: 2px; transition: width 0.3s; }
+.dotd-bar-wrap { height: 3px; background: var(--surface2); border-radius: 0; margin-top: 0.5rem; overflow: hidden; }
+.dotd-bar { height: 100%; border-radius: 0; transition: width 0.3s; }
 .dotd-pct { font-size: 0.7rem; color: var(--grey); margin-top: 0.2rem; font-family: var(--font-ui); }
 .dotd-check { font-size: 0.62rem; color: var(--white); margin-top: 0.2rem; font-family: var(--font-ui); letter-spacing: 0.05em; }
 .dotd-total { font-size: 0.78rem; color: var(--grey); margin-top: 0.8rem; font-family: var(--font-ui); }
 
 /* ── BUTTONS ── */
 .btn { display: inline-flex; align-items: center; justify-content: center; padding: 0.65rem 1.4rem; border-radius: var(--radius); cursor: pointer; font-family: var(--font-display); font-size: 0.82rem; letter-spacing: 0.12em; border: none; text-decoration: none; transition: all 0.2s; }
-.btn-primary { background: var(--white); color: var(--black); }
-.btn-primary:hover { background: var(--off-white); }
-.btn-secondary { background: transparent; color: var(--white); border: 1px solid var(--line); margin-top: 1.2rem; }
+/* Primary actions are the class colour, matching the hero and the next
+   race card, so there is one kind of button that means "do the thing". */
+.btn-primary { background: var(--class-fill); color: #fff; font-weight: 700; }
+.btn-primary:hover { filter: brightness(1.14); }
+.btn-secondary { background: transparent; color: var(--white); border: 1px solid var(--line-strong); margin-top: 1.2rem; }
 .btn-secondary:hover { border-color: var(--white); }
+.btn:focus-visible { outline: 2px solid var(--white); outline-offset: 2px; }
 
 /* ── TABLE CONTAINER ── */
 .table-container { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
@@ -1254,9 +1300,12 @@ select:focus { outline: none; border-color: var(--class-color); }
 .footer-links a {
     color: #fff; text-decoration: none; font-size: 0.74rem;
     font-family: var(--font-ui); letter-spacing: 0.1em;
-    text-transform: uppercase; opacity: 0.86; transition: opacity 0.2s;
+    text-transform: uppercase; transition: opacity 0.2s;
 }
-.footer-links a:hover, .footer-links a:focus-visible { opacity: 1; }
+/* Full white. Dimming these to 0.86 for a softer look dropped them to
+   3.9:1 on the bar, and a footer link is 12px. The hover state carries
+   the affordance instead. */
+.footer-links a:hover, .footer-links a:focus-visible { text-decoration: underline; }
 
 /* ── PAGES ── */
 .page { display: none; padding-top: 1.5rem; }
@@ -1264,7 +1313,7 @@ select:focus { outline: none; border-color: var(--class-color); }
 
 /* ── UTIL ── */
 .hidden { display: none !important; }
-.season-divider { height: 2px; background: linear-gradient(90deg, var(--class-color) 0%, transparent 60%); margin-bottom: 1.5rem; border-radius: 1px; transition: background 0.3s; }
+.season-divider { height: 2px; background: linear-gradient(90deg, var(--class-color) 0%, transparent 60%); margin-bottom: 1.5rem; border-radius: 0; transition: background 0.3s; }
 
 /* ══════════ FIRE VS ICE ══════════ */
 .fvi-empty { background: var(--surface); border: 1px dashed var(--line-strong); border-radius: var(--radius); padding: 2.5rem 1.5rem; text-align: center; }
@@ -1286,7 +1335,7 @@ select:focus { outline: none; border-color: var(--class-color); }
 .fvi-score-label { font-family: var(--font-ui); font-size: 0.72rem; letter-spacing: 0.117em; color: var(--grey-light); }
 .fvi-vs { font-family: var(--font-display); font-size: 0.85rem; letter-spacing: 0.063em; color: var(--grey); }
 
-.fvi-bar { display: flex; height: 10px; border-radius: 5px; overflow: hidden; margin: 1.5rem 0 0.9rem; background: var(--surface2); border: 1px solid var(--line); }
+.fvi-bar { display: flex; height: 10px; border-radius: 0; overflow: hidden; margin: 1.5rem 0 0.9rem; background: var(--surface2); border: 1px solid var(--line); }
 .fvi-bar-fire { background: linear-gradient(90deg, #E64A19, #FF7043); transition: width 0.6s cubic-bezier(.2,.6,.2,1); }
 .fvi-bar-ice  { background: linear-gradient(90deg, #4FC3F7, #0288D1); transition: width 0.6s cubic-bezier(.2,.6,.2,1); }
 .fvi-verdict { text-align: center; font-size: 0.88rem; color: var(--grey-light); }
@@ -1321,7 +1370,7 @@ select:focus { outline: none; border-color: var(--class-color); }
 
 .fvi-unassigned { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 1rem 1.2rem; }
 .fvi-unassigned p { color: var(--grey); font-size: 0.82rem; margin-bottom: 0.7rem; }
-.fvi-chip { display: inline-block; font-family: var(--font-ui); font-size: 0.76rem; color: var(--grey-light); border: 1px solid var(--line-strong); border-radius: 2px; padding: 0.18rem 0.5rem; margin: 0 0.35rem 0.35rem 0; }
+.fvi-chip { display: inline-block; font-family: var(--font-ui); font-size: 0.76rem; color: var(--grey-light); border: 1px solid var(--line-strong); border-radius: 0; padding: 0.18rem 0.5rem; margin: 0 0.35rem 0.35rem 0; }
 
 /* Fire Vs Ice — class markers and per-class split */
 .fvi-cls { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; display: inline-block; }
@@ -1380,7 +1429,7 @@ select:focus { outline: none; border-color: var(--class-color); }
 
 /* ══════════ RACE PAGE ══════════ */
 .rp-head { border-bottom: 1px solid var(--line); padding-bottom: 1.1rem; margin-bottom: 1.5rem; }
-.rp-round { font-family: var(--font-ui); font-size: 0.68rem; letter-spacing: 0.14em; color: var(--class-color); font-weight: 600; }
+.rp-round { font-family: var(--font-ui); font-size: 0.68rem; letter-spacing: 0.14em; color: var(--class-on-dark); font-weight: 600; }
 .rp-title { font-family: var(--font-display); font-size: clamp(1.5rem, 5vw, 2.4rem); color: var(--white); line-height: 1.1; margin: 0.2rem 0 0.5rem; }
 .rp-meta { display: flex; flex-wrap: wrap; gap: 0.5rem 1.1rem; color: var(--grey); font-size: 0.82rem; font-family: var(--font-ui); }
 
@@ -1427,7 +1476,7 @@ select:focus { outline: none; border-color: var(--class-color); }
 .rp-teamcell .team-dot { margin-right: 0.4rem; }
 .rp-time { color: var(--grey); font-family: var(--font-ui); font-size: 0.82rem; }
 .rp-pts { font-family: var(--font-display); color: var(--white); }
-.rp-badge { font-family: var(--font-ui); font-size: 0.56rem; letter-spacing: 0.1em; padding: 0.08rem 0.32rem; border-radius: 2px; margin-left: 0.4rem; vertical-align: middle; }
+.rp-badge { font-family: var(--font-ui); font-size: 0.56rem; letter-spacing: 0.1em; padding: 0.08rem 0.32rem; border-radius: 0; margin-left: 0.4rem; vertical-align: middle; }
 .rp-badge.fl   { background: rgba(167,139,250,0.2); color: #C4B5FD; border: 1px solid rgba(167,139,250,0.45); }
 .rp-badge.dotd { background: rgba(255,195,0,0.18); color: #FFD24A; border: 1px solid rgba(255,195,0,0.45); }
 .rt-dnf { opacity: 0.6; }
@@ -1481,7 +1530,7 @@ select:focus { outline: none; border-color: var(--class-color); }
 .lv-bl  { font-family: var(--font-ui); font-size: 0.68rem; font-weight: 700; letter-spacing: 0.16em; color: #ff6b63; }
 .lv-bn  { color: var(--white); font-weight: 600; flex: 1; min-width: 0; }
 .lv-bs  { font-family: var(--font-ui); font-size: 0.66rem; letter-spacing: 0.1em; color: var(--grey-light); }
-.lv-bgo { font-family: var(--font-ui); font-size: 0.68rem; letter-spacing: 0.1em; color: var(--class-color); font-weight: 700; }
+.lv-bgo { font-family: var(--font-ui); font-size: 0.68rem; letter-spacing: 0.1em; color: var(--class-on-dark); font-weight: 700; }
 
 /* Session header */
 .lv-head {
@@ -1492,12 +1541,12 @@ select:focus { outline: none; border-color: var(--class-color); }
     border-radius: var(--radius); padding: 1rem 1.2rem; margin-bottom: 1rem;
 }
 .lv-hl, .lv-hr { display: flex; align-items: center; gap: 0.8rem; flex-wrap: wrap; }
-.lv-round { font-family: var(--font-display); font-size: 0.78rem; letter-spacing: 0.12em; color: var(--class-color); }
+.lv-round { font-family: var(--font-display); font-size: 0.78rem; letter-spacing: 0.12em; color: var(--class-on-dark); }
 .lv-race  { color: var(--white); font-weight: 700; font-size: 1.05rem; }
 .lv-track { color: var(--grey); font-size: 0.82rem; }
 .lv-flag {
     font-family: var(--font-ui); font-size: 0.68rem; font-weight: 700;
-    letter-spacing: 0.14em; padding: 0.35rem 0.8rem; border-radius: 999px;
+    letter-spacing: 0.14em; padding: 0.35rem 0.8rem; border-radius: 0;
     background: var(--surface2); color: var(--white); border: 1px solid var(--line-strong);
 }
 .lv-clock {
@@ -1525,7 +1574,7 @@ select:focus { outline: none; border-color: var(--class-color); }
 }
 .lv-msg span {
     display: block; font-family: var(--font-ui); font-size: 0.6rem;
-    font-weight: 700; letter-spacing: 0.2em; color: var(--class-color); margin-bottom: 0.25rem;
+    font-weight: 700; letter-spacing: 0.2em; color: var(--class-on-dark); margin-bottom: 0.25rem;
 }
 
 /* Timing tower */
@@ -1550,7 +1599,7 @@ select:focus { outline: none; border-color: var(--class-color); }
 .lv-row.p1 .lv-pos { color: #FFD24A; }
 .lv-row.p2 .lv-pos { color: #DFDFDF; }
 .lv-row.p3 .lv-pos { color: #E09A52; }
-.lv-bar  { width: 5px; height: 22px; border-radius: 1px; }
+.lv-bar  { width: 5px; height: 22px; border-radius: 0; }
 .lv-num  { font-family: var(--font-ui); font-size: 0.78rem; color: var(--grey-light); }
 .lv-name { color: var(--white); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lv-team { color: var(--grey); font-size: 0.82rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1570,8 +1619,8 @@ select:focus { outline: none; border-color: var(--class-color); }
 
 /* Qualifying — an extra lap-time column before the gap to pole */
 .lv-sess { font-family: var(--font-ui); font-size: 0.6rem; font-weight: 700;
-    letter-spacing: 0.16em; padding: 0.2rem 0.5rem; border-radius: 3px;
-    background: var(--class-color); color: #fff; }
+    letter-spacing: 0.16em; padding: 0.2rem 0.5rem; border-radius: 0;
+    background: var(--class-fill); color: #fff; }
 .lv-tower.is-quali .lv-row { grid-template-columns: 54px 5px 48px 1fr 1fr 96px 96px; }
 .lv-lap { font-family: var(--font-ui); font-size: 0.86rem; color: var(--white);
     text-align: right; font-variant-numeric: tabular-nums; }
@@ -1609,7 +1658,7 @@ select:focus { outline: none; border-color: var(--class-color); }
     gap: 0.7rem; padding: 0.5rem 0; border-bottom: 1px solid rgba(255,255,255,0.05); }
 .tr-row:last-child { border-bottom: none; }
 .tr-pos { font-family: var(--font-display); color: var(--grey-light); }
-.tr-bar { width: 4px; height: 18px; border-radius: 1px; }
+.tr-bar { width: 4px; height: 18px; border-radius: 0; }
 .tr-name { color: var(--white); font-weight: 600; overflow: hidden;
     text-overflow: ellipsis; white-space: nowrap; }
 .tr-need { font-size: 0.8rem; color: var(--grey-light); }
@@ -1626,7 +1675,7 @@ select:focus { outline: none; border-color: var(--class-color); }
     background: var(--surface); border: 1px dashed var(--line-strong); border-radius: var(--radius);
     color: var(--grey-light); font-family: var(--font-ui); font-size: 0.8rem; letter-spacing: 0.1em;
     cursor: pointer; transition: border-color 0.2s, color 0.2s; }
-.cmp-open:hover { border-color: var(--class-color); color: var(--white); }
+.cmp-open:hover { border-color: var(--class-on-dark); color: var(--white); }
 .cmp-box { background: var(--surface); border: 1px solid var(--line);
     border-radius: var(--radius); padding: 1.1rem; margin-bottom: 1.8rem; }
 .cmp-picks { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 1.1rem; }
@@ -1640,7 +1689,7 @@ select:focus { outline: none; border-color: var(--class-color); }
 .cmp-heads { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;
     gap: 0.8rem; margin-bottom: 1rem; }
 .cmp-head { display: flex; flex-direction: column; gap: 0.1rem; }
-.cmp-head .cmp-bar { width: 32px; height: 4px; border-radius: 2px; background: var(--tc); margin-bottom: 0.35rem; }
+.cmp-head .cmp-bar { width: 32px; height: 4px; border-radius: 0; background: var(--tc); margin-bottom: 0.35rem; }
 .cmp-head strong { color: var(--white); font-size: 1rem; }
 .cmp-head span:not(.cmp-bar) { color: var(--grey); font-size: 0.78rem; }
 .cmp-right { align-items: flex-end; text-align: right; }
@@ -1650,7 +1699,7 @@ select:focus { outline: none; border-color: var(--class-color); }
     border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
 .cmp-h2h-n { font-family: var(--font-display); font-size: 1.8rem; color: var(--grey-light); }
 .cmp-h2h-n:last-child { text-align: right; }
-.cmp-h2h-n.win { color: var(--class-color); }
+.cmp-h2h-n.win { color: var(--class-on-dark); }
 .cmp-h2h-l { font-family: var(--font-ui); font-size: 0.62rem; letter-spacing: 0.14em; color: var(--grey); }
 .cmp-row { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;
     gap: 0.8rem; padding: 0.42rem 0; border-bottom: 1px solid rgba(255,255,255,0.04); }
@@ -1663,18 +1712,18 @@ select:focus { outline: none; border-color: var(--class-color); }
 
 /* ══════════ STEWARDS ══════════ */
 .stw-round { font-family: var(--font-display); font-size: 0.8rem; letter-spacing: 0.12em;
-    color: var(--class-color); margin: 1.6rem 0 0.7rem; }
+    color: var(--class-on-dark); margin: 1.6rem 0 0.7rem; }
 .stw-round:first-child { margin-top: 0; }
 .stw-card { display: flex; gap: 0.9rem; background: var(--surface);
     border: 1px solid var(--line); border-radius: var(--radius);
     padding: 0.9rem 1rem; margin-bottom: 0.6rem; }
-.stw-bar { width: 4px; border-radius: 2px; flex-shrink: 0; }
+.stw-bar { width: 4px; border-radius: 0; flex-shrink: 0; }
 .stw-body { flex: 1; min-width: 0; }
 .stw-top { display: flex; align-items: center; justify-content: space-between;
     gap: 0.8rem; flex-wrap: wrap; margin-bottom: 0.3rem; }
 .stw-driver { color: var(--white); font-weight: 600; }
 .stw-pen { font-family: var(--font-ui); font-size: 0.64rem; font-weight: 700;
-    letter-spacing: 0.1em; padding: 0.22rem 0.55rem; border-radius: 3px; }
+    letter-spacing: 0.1em; padding: 0.22rem 0.55rem; border-radius: 0; }
 .stw-pen.stw-dq   { background: #c62828; color: #fff; }
 .stw-pen.stw-pen  { background: rgba(249,168,37,0.18); color: #F9A825; border: 1px solid rgba(249,168,37,0.45); }
 .stw-pen.stw-warn { background: rgba(255,210,74,0.14); color: #FFD24A; border: 1px solid rgba(255,210,74,0.4); }
@@ -1697,7 +1746,7 @@ textarea:focus-visible,
 .dotd-card:focus-visible {
     outline: 3px solid var(--class-color);
     outline-offset: 2px;
-    border-radius: 3px;
+    border-radius: 0;
 }
 /* Pointer users keep a clean look; only keyboard focus draws a ring. */
 :focus:not(:focus-visible) { outline: none; }
@@ -1705,8 +1754,8 @@ textarea:focus-visible,
 /* Skip straight to the content rather than tabbing the whole nav. */
 .skip-link {
     position: absolute; left: 50%; transform: translateX(-50%) translateY(-200%);
-    top: 0; z-index: 10000; background: var(--class-color); color: #fff;
-    padding: 0.7rem 1.2rem; border-radius: 0 0 4px 4px; font-family: var(--font-ui);
+    top: 0; z-index: 10000; background: var(--class-fill); color: #fff;
+    padding: 0.7rem 1.2rem; border-radius: 0; font-family: var(--font-ui);
     font-size: 0.82rem; letter-spacing: 0.08em; text-decoration: none;
     transition: transform 0.15s;
 }
@@ -1735,19 +1784,26 @@ textarea:focus-visible,
     font-size: 0.9rem; line-height: 1.6; }
 .tc-how strong { color: var(--white); display: block; margin-bottom: 0.2rem; }
 .tc-how code { background: rgba(0,0,0,0.4); border: 1px solid var(--line);
-    border-radius: 3px; padding: 0.1rem 0.4rem; color: var(--white);
+    border-radius: 0; padding: 0.1rem 0.4rem; color: var(--white);
     font-family: var(--font-ui); font-size: 0.82rem; }
 
 .tc-key { display: flex; flex-wrap: wrap; gap: 0.45rem; margin-bottom: 1.8rem; }
 .tc-chip { display: inline-flex; align-items: center; gap: 0.4rem;
     background: var(--surface2); border: 1px solid var(--line);
-    border-radius: 999px; padding: 0.28rem 0.7rem;
+    border-radius: 0; padding: 0.28rem 0.7rem;
     font-family: var(--font-ui); font-size: 0.66rem; letter-spacing: 0.1em; color: var(--grey-light); }
 .tc-chip i { width: 8px; height: 8px; border-radius: 50%; background: var(--tc); }
 .tc-chip b { color: var(--white); }
 
+/* The tier is named in white and coloured by the block beside it.
+   Setting the words themselves in the rarity colour put legibility at the
+   mercy of whatever hex an admin picked — Epic's purple came out at
+   2.97:1 — and now that rarities are editable, any colour at all can end
+   up here. A swatch cannot be unreadable. */
 .tc-head { font-family: var(--font-display); font-size: 0.86rem; letter-spacing: 0.16em;
-    color: var(--tc); margin: 1.8rem 0 0.8rem; display: flex; align-items: center; gap: 0.6rem; }
+    color: var(--white); margin: 1.8rem 0 0.8rem; display: flex; align-items: center; gap: 0.6rem; }
+.tc-head::before { content: ''; width: 10px; height: 1.05em; background: var(--tc);
+    flex-shrink: 0; transform: skewX(-12deg); }
 .tc-head::after { content: ''; flex: 1; height: 1px;
     background: linear-gradient(90deg, var(--tc), transparent); opacity: 0.45; }
 .tc-head span { font-family: var(--font-ui); font-size: 0.7rem; color: var(--grey);
@@ -1762,7 +1818,7 @@ textarea:focus-visible,
     position: relative; cursor: pointer; overflow: hidden;
     background: linear-gradient(170deg, color-mix(in srgb, var(--tc) 16%, transparent), var(--surface) 55%);
     border: 1px solid color-mix(in srgb, var(--tc) 45%, transparent);
-    border-radius: 10px; padding: 0.8rem 0.8rem 0.9rem;
+    border-radius: 0; padding: 0.8rem 0.8rem 0.9rem;
     transition: transform 0.18s, border-color 0.18s, box-shadow 0.18s;
 }
 .tc:hover { transform: translateY(-4px);
@@ -1774,7 +1830,7 @@ textarea:focus-visible,
 
 .tc-rar { font-family: var(--font-ui); font-size: 0.54rem; font-weight: 700;
     letter-spacing: 0.18em; color: var(--tc); margin-bottom: 0.5rem; }
-.tc-media { position: relative; aspect-ratio: 1; border-radius: 7px; overflow: hidden;
+.tc-media { position: relative; aspect-ratio: 1; border-radius: 0; overflow: hidden;
     background: rgba(0,0,0,0.3); border: 1px solid var(--line);
     display: flex; align-items: center; justify-content: center; margin-bottom: 0.6rem; }
 .tc-media img { width: 100%; height: 100%; object-fit: cover; display: block; }
@@ -1835,7 +1891,7 @@ textarea:focus-visible,
    reads as "being worked on" rather than "broken". */
 .maint-flag { display: flex; gap: 0.5rem; justify-content: center; margin-bottom: 1.6rem; }
 .maint-flag i {
-    width: 26px; height: 7px; border-radius: 1px; background: var(--gt3, #E10600);
+    width: 26px; height: 7px; border-radius: 0; background: var(--gt3, #E10600);
     animation: maint-wave 1.4s ease-in-out infinite;
 }
 .maint-flag i:nth-child(2) { animation-delay: 0.18s; opacity: 0.75; }
@@ -1865,7 +1921,7 @@ textarea:focus-visible,
     color: #fff;
     background: var(--gt3, #E10600);
     border: 0;
-    border-radius: 3px;
+    border-radius: 0;
     cursor: pointer;
     transition: filter 0.15s ease;
 }
@@ -1885,7 +1941,7 @@ textarea:focus-visible,
 .shop-pack {
     background: var(--surface, #141416);
     border: 1px solid var(--line, #26262A);
-    border-radius: 4px;
+    border-radius: 0;
     padding: 0.95rem 1rem 1rem;
 }
 .shop-pack-top { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.45rem; }
@@ -1903,7 +1959,7 @@ textarea:focus-visible,
 
 /* Odds as a single proportional bar — the shape of a pack at a glance,
    which a column of percentages does not give you. */
-.shop-bar { display: flex; height: 6px; border-radius: 3px; overflow: hidden; gap: 1px; }
+.shop-bar { display: flex; height: 6px; border-radius: 0; overflow: hidden; gap: 1px; }
 .shop-bar i { background: var(--tc, #888); display: block; min-width: 2px; }
 .shop-odds {
     display: flex; flex-wrap: wrap; gap: 0.35rem;
@@ -1912,7 +1968,7 @@ textarea:focus-visible,
 }
 .shop-cmd {
     display: inline-block; font-size: 0.74rem; padding: 0.2rem 0.45rem;
-    background: rgba(255,255,255,0.06); border-radius: 3px; color: var(--grey-light, #CCC);
+    background: rgba(255,255,255,0.06); border-radius: 0; color: var(--grey-light, #CCC);
 }
 
 .shop-earn { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.6rem; }
@@ -1933,7 +1989,7 @@ textarea:focus-visible,
 .lv-pen {
     margin-left: 0.45rem;
     padding: 0.05rem 0.3rem;
-    border-radius: 2px;
+    border-radius: 0;
     background: #FFC400;
     color: #111;
     font-size: 0.68rem;
@@ -1962,7 +2018,7 @@ textarea:focus-visible,
     aspect-ratio: 16 / 9;
     background: #0B0B0C;
     border: 1px solid var(--line, #26262A);
-    border-radius: 4px;
+    border-radius: 0;
     overflow: hidden;
 }
 .rv-frame iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
@@ -1978,7 +2034,7 @@ textarea:focus-visible,
 .rec-board {
     background: var(--surface, #141416);
     border: 1px solid var(--line, #26262A);
-    border-radius: 4px;
+    border-radius: 0;
     padding: 0.9rem 1rem 1rem;
 }
 .rec-board h3 {
@@ -2000,7 +2056,7 @@ textarea:focus-visible,
 .rec-list li:last-child { border-bottom: 0; }
 /* The record holder, not just the top row of a list. */
 .rec-list li.first .rec-name { font-weight: 700; color: #fff; }
-.rec-list li.first .rec-val { color: var(--accent, #E10600); font-size: 1.05rem; }
+.rec-list li.first .rec-val { color: var(--class-on-dark); font-size: 1.05rem; }
 .rec-rank {
     flex: 0 0 1.1rem;
     color: var(--grey, #A6A6A6);
@@ -2036,7 +2092,7 @@ textarea:focus-visible,
     padding: 0.6rem 0.7rem;
     background: var(--surface, #141416);
     border: 1px solid var(--line, #26262A);
-    border-radius: 3px;
+    border-radius: 0;
     color: var(--off-white, #F0F0F0);
     font: inherit;
     font-size: 0.92rem;
@@ -2057,6 +2113,6 @@ textarea:focus-visible,
     background: var(--surface, #141416);
     border: 1px solid var(--line, #26262A);
     border-left: 3px solid #7BD88F;
-    border-radius: 4px;
+    border-radius: 0;
     line-height: 1.6;
 }

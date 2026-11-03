@@ -2157,9 +2157,12 @@ function renderRecords() {
         .slice(0, 30);
 
     el.innerHTML = `
+      <!-- The season's own name used to be dropped into the middle of this
+           sentence, which produced "0 finished and This season still
+           running". The name is in the table below anyway. -->
       <p class="tc-how"><strong>${all.length} season${all.length !== 1 ? 's' : ''}</strong>
          counted — ${past.length} finished${live && live.rounds
-           ? ` and ${esc(live.season)} still running` : ''}.</p>
+           ? `, plus the one still running` : ''}.</p>
 
       ${champs}
 

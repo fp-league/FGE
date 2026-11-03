@@ -123,6 +123,11 @@ body {
     min-height: 100vh;
     overflow-x: hidden;
     transition: background-color 0.45s ease;
+    /* The accent footer bar is heavy enough that seeing black below it on
+       a short page reads as the page having broken. A column with the
+       main region growing keeps it on the floor of the window. The
+       overlays are all position:fixed, so none of them are affected. */
+    display: flex; flex-direction: column;
 }
 .lights-out {
     position: fixed; inset: 0;
