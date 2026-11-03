@@ -50,6 +50,11 @@ const DEFAULTS = {
   rob_fine_pct: '12',         // on failure, this much of YOURS, paid to them
   rob_target_min: '400',      // they must have at least this to be worth robbing
   rob_min_balance: '250',     // you must have at least this, so a fine can bite
+  // Casino and shifts.
+  casino_enabled: '1',
+  bet_min: '50',
+  bet_max: '25000',
+  shift_fail_pct: '40',       // a wrong answer still pays this much of the shift
   // Maintenance. One switch: the bot refuses every command and the site
   // puts up a holding screen, so the league can be worked on without
   // anyone pulling a pack out of a half-finished set.
@@ -213,22 +218,13 @@ export async function doWork(env, interaction, wanted) {
       `**${job.name}** is ready again in **${fmtLeft(left)}**.\nRun \`/work\` to see what else is going.`);
   }
 
-  const pay = rand(num(job.min_pay, 0), num(job.max_pay, 0));
-  await env.DB.prepare(
-    `INSERT INTO work_log (user_id, job, last_at, times, earned) VALUES (?, ?, ?, 1, ?)
-     ON CONFLICT (user_id, job) DO UPDATE SET
-       last_at = excluded.last_at, times = times + 1, earned = earned + excluded.earned`
-  ).bind(user.id, job.id, now, pay).run();
-
-  const w = await adjust(env, user.id, pay, `Work: ${job.name}`, cfg);
   const done = (by[job.id] ? by[job.id].times : 0) + 1;
 
-  return {
-    title: `${job.emoji} ${job.name}`,
-    description: `${nameOf(user)} earned ${money(pay, cfg)}.\nBalance: ${money(w.balance, cfg)}`,
-    color: GOLD,
-    footer: { text: `Shift ${done} · ready again in ${fmtLeft(job.cooldown_min * 60000)}` },
-  };
+  // A shift is a question now, not a payout. The cooldown and the pay are
+  // both settled when it is answered, in startShift's handler — so walking
+  // away from one means no pay, but it also means no cooldown burned.
+  const { startShift } = await import('./games.js');
+  return startShift(env, interaction, job, cfg, done);
 }
 
 /* ── /daily ────────────────────────────────────────────── */
@@ -1025,7 +1021,8 @@ export async function allWallets(env) {
   } catch { return []; }
 }
 
-export const ECON_COMMANDS = ['work', 'daily', 'balance', 'pay', 'rich', 'shop', 'buy', 'sell', 'rob'];
+export const ECON_COMMANDS = ['work', 'daily', 'balance', 'pay', 'rich', 'shop', 'buy', 'sell',
+                              'rob', 'blackjack', 'roulette'];
 
 /* ── Trading ───────────────────────────────────────────── */
 

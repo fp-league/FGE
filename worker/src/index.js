@@ -19,6 +19,7 @@ import { openPack, showCollection, showCard, showCollectors, grantPacks, CARD_VI
          loadRarities } from './cards.js';
 import { COMMANDS } from './commands.js';
 import { handleAutocomplete } from './autocomplete.js';
+import { startBlackjack, playRoulette, handleComponent, sweepGames } from './games.js';
 import { takeBackup, listBackups, readBackup, deleteBackup } from './backup.js';
 import { listArchive, readArchive, saveArchive, deleteArchive } from './archive.js';
 import {
@@ -632,6 +633,10 @@ async function maintenanceReply(env) {
  * summary, which is the first of them.
  */
 function embedReply(out) {
+  // Some handlers build the whole response themselves, because they carry
+  // buttons or replace the message a button was on. Anything already
+  // shaped like an interaction response goes through untouched.
+  if (out && typeof out.type === 'number' && out.data) return out;
   const embeds = Array.isArray(out.embeds) ? out.embeds.slice(0, 10) : [out];
   const head = embeds[0];
   head.footer = head.footer || { text: 'FGE' };
@@ -717,6 +722,8 @@ async function handleEconomy(interaction, record, env) {
       case 'balance': embed = await showBalance(env, interaction, pick('user')); break;
       case 'pay':     embed = await payUser(env, interaction, pick('user'), pick('amount')); break;
       case 'rob':     embed = await robUser(env, interaction, pick('user')); break;
+      case 'blackjack': embed = await startBlackjack(env, interaction, pick('bet')); break;
+      case 'roulette':  embed = await playRoulette(env, interaction, pick('on'), pick('bet')); break;
       case 'rich':    embed = await showRich(env); break;
       case 'shop':    embed = await showShop(env, interaction); break;
       case 'buy':     embed = await buyPack(env, interaction, pick('pack'), record); break;
@@ -1358,13 +1365,28 @@ export default {
    * loop against the bin would be worse than a missed night.
    */
   async scheduled(event, env, ctx) {
+    // Two schedules land here. The nightly one takes the backup; the
+    // hourly one does the small housekeeping. Branching on the cron
+    // string keeps them from running each other's work.
+    const nightly = String(event.cron || '').startsWith('10 4');
+
     ctx.waitUntil((async () => {
+      if (nightly) {
+        try {
+          const out = await takeBackup(env, 'auto');
+          console.log(`backup ${out.key} — ${out.bytes} bytes — ${out.summary}` +
+                      (out.pruned ? ` — pruned ${out.pruned}` : ''));
+        } catch (err) {
+          console.error('backup failed:', err && err.message || err);
+        }
+        return;
+      }
+
       try {
-        const out = await takeBackup(env, 'auto');
-        console.log(`backup ${out.key} — ${out.bytes} bytes — ${out.summary}` +
-                    (out.pruned ? ` — pruned ${out.pruned}` : ''));
+        const swept = await sweepGames(env);
+        if (swept) console.log(`swept ${swept} abandoned game(s)`);
       } catch (err) {
-        console.error('backup failed:', err && err.message || err);
+        console.error('sweep failed:', err && err.message || err);
       }
     })());
   },
@@ -1423,6 +1445,26 @@ export default {
           return new Response(JSON.stringify(
             choices || { type: 8, data: { choices: [] } }
           ), { headers: { 'Content-Type': 'application/json' } });
+        }
+
+        // A button press. Held by maintenance like any other command, so a
+        // hand cannot be played while the league is being worked on.
+        if (interaction.type === 3) {
+          const held = await maintenanceReply(env);
+          if (held) {
+            return new Response(JSON.stringify(held), {
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+          let out = null;
+          try { out = await handleComponent(interaction, env); }
+          catch (err) {
+            out = { type: 4, data: { flags: 64, content:
+              'That did not work. The game has been left as it was.' } };
+          }
+          return new Response(JSON.stringify(out || {
+            type: 4, data: { flags: 64, content: 'That button is no longer live.' },
+          }), { headers: { 'Content-Type': 'application/json' } });
         }
 
         if (interaction.type === 2) {

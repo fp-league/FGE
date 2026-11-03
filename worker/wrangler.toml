@@ -23,7 +23,10 @@ ANNOUNCE_CHANNEL_ID = ""
 # nowhere near a race. The Worker only needs its read key for this — the
 # restore happens from the admin panel, which already holds the write key.
 [triggers]
-crons = ["10 4 * * *"]
+# 04:10 nightly takes the league backup. The hourly one sweeps abandoned
+# games and reprices the betting book; :07 rather than :00 so it is not
+# queued behind everyone else's hourly jobs.
+crons = ["10 4 * * *", "7 * * * *"]
 
 # D1 database. These ids are not secrets - they only identify the resource,
 # and are useless without an API token. Cloudflare's own docs commit them.

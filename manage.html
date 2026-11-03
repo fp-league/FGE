@@ -1254,6 +1254,33 @@ textarea { resize:vertical; min-height:80px; }
             </div>
           </div>
 
+          <label class="fg-label" style="margin-top:1.4rem;display:block">CASINO AND SHIFTS</label>
+          <p class="bk-note">Blackjack pays 3:2 on a natural and the dealer stands on all 17s;
+             roulette is a single-zero wheel. Both are the standard rules, so the house edge is
+             the ordinary one rather than anything invented. A shift asks a racing question
+             before it pays — get it wrong and it still pays, just less.</p>
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="fg-label">CASINO OPEN</label>
+              <select id="esCasinoOn">
+                <option value="1">Yes</option>
+                <option value="0">No</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="fg-label">SMALLEST STAKE</label>
+              <input id="esBetMin" type="number" min="0">
+            </div>
+            <div class="form-group">
+              <label class="fg-label">LARGEST STAKE</label>
+              <input id="esBetMax" type="number" min="0">
+            </div>
+            <div class="form-group">
+              <label class="fg-label">WRONG ANSWER STILL PAYS (%)</label>
+              <input id="esShiftFail" type="number" min="0" max="100">
+            </div>
+          </div>
+
           <div class="form-actions">
             <button class="btn btn-white" onclick="ecSaveSettings()">SAVE NUMBERS</button>
             <span class="img-size" id="esStatus"></span>
@@ -4543,6 +4570,10 @@ function fillEconSettings() {
     set('esRobFine',  s.rob_fine_pct ?? '');
     set('esRobFloor', s.rob_target_min ?? '');
     set('esRobMine',  s.rob_min_balance ?? '');
+    set('esCasinoOn',  String(s.casino_enabled ?? '1'));
+    set('esBetMin',    s.bet_min ?? '');
+    set('esBetMax',    s.bet_max ?? '');
+    set('esShiftFail', s.shift_fail_pct ?? '');
 }
 
 async function ecSaveSettings() {
@@ -4574,6 +4605,11 @@ async function ecSaveSettings() {
         rob_fine_pct:     val('esRobFine'),
         rob_target_min:   val('esRobFloor'),
         rob_min_balance:  val('esRobMine'),
+        casino_enabled: val('esCasinoOn') === '0' ? '0' : '1',
+        // Largest below smallest would refuse every stake there is.
+        bet_min: String(Math.min(+val('esBetMin') || 0, +val('esBetMax') || 0)),
+        bet_max: String(Math.max(+val('esBetMin') || 0, +val('esBetMax') || 0)),
+        shift_fail_pct: val('esShiftFail'),
     };
     st.textContent = 'saving…';
     try {

@@ -17,6 +17,7 @@
 
 import { listPackTypes, listJobs, listSpares } from './economy.js';
 import { fullSet, RARITY } from './cards.js';
+import { rouletteChoices } from './games.js';
 
 const MAX = 25;                      // Discord's hard limit on choices
 const cut = (s, n) => (String(s).length > n ? String(s).slice(0, n - 1) + '…' : String(s));
@@ -171,6 +172,11 @@ export async function handleAutocomplete(interaction, record, env) {
 
     case 'work job':
       return reply(await jobChoices(env, q));
+
+    // The named bets, plus whatever number is being typed offered back as
+    // a straight bet — listing all thirty-seven would bury the rest.
+    case 'roulette on':
+      return reply(rouletteChoices(q).map(c => choice(c.name, c.value)));
 
     // Selling is from your own spares; naming a card you have only one of
     // is never going to work, so it is not offered.

@@ -140,6 +140,20 @@ commands.push(
     description: 'Try to take credits off someone — it does not always work',
     options: [{ name: 'user', description: 'Who to go after', type: 6, required: true }],
   },
+  {
+    name: 'blackjack',
+    description: 'Play a hand against the dealer',
+    options: [{ name: 'bet', description: 'How much to stake', type: 4, required: true }],
+  },
+  {
+    name: 'roulette',
+    description: 'Back a colour, a dozen or a number on the wheel',
+    options: [
+      { name: 'on', description: 'What to back — pick from the list', type: 3,
+        required: true, autocomplete: true },
+      { name: 'bet', description: 'How much to stake', type: 4, required: true },
+    ],
+  },
   { name: 'rich', description: 'Who has the most credits' },
   { name: 'shop', description: 'Packs you can buy' },
   {
