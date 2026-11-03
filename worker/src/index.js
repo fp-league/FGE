@@ -19,7 +19,10 @@ import { openPack, showCollection, showCard, showCollectors, grantPacks, CARD_VI
          loadRarities } from './cards.js';
 import { COMMANDS } from './commands.js';
 import { handleAutocomplete } from './autocomplete.js';
-import { startBlackjack, playRoulette, handleComponent, sweepGames } from './games.js';
+import { startBlackjack, playRoulette, handleComponent, sweepGames,
+         showOdds, placeRaceBet, showMyBets } from './games.js';
+import { repriceAll, listBooks, openBook, setBookStatus, settleBook, voidBook, deleteBook }
+  from './book.js';
 import { takeBackup, listBackups, readBackup, deleteBackup } from './backup.js';
 import { listArchive, readArchive, saveArchive, deleteArchive } from './archive.js';
 import {
@@ -724,6 +727,10 @@ async function handleEconomy(interaction, record, env) {
       case 'rob':     embed = await robUser(env, interaction, pick('user')); break;
       case 'blackjack': embed = await startBlackjack(env, interaction, pick('bet')); break;
       case 'roulette':  embed = await playRoulette(env, interaction, pick('on'), pick('bet')); break;
+      case 'odds':      embed = await showOdds(env, interaction, normClass(pick('class'))); break;
+      case 'bet':       embed = await placeRaceBet(env, interaction, normClass(pick('class')),
+                                                   pick('driver'), pick('amount')); break;
+      case 'mybets':    embed = await showMyBets(env, interaction); break;
       case 'rich':    embed = await showRich(env); break;
       case 'shop':    embed = await showShop(env, interaction); break;
       case 'buy':     embed = await buyPack(env, interaction, pick('pack'), record); break;
@@ -786,6 +793,36 @@ async function postEcon(request, env) {
       case 'deleteCard': await deleteCustomCard(env, body.id); return json({ ok: true }, null, request, env);
       case 'saveJob':    return json({ ok: true, id: await saveJob(env, body.job || {}) }, null, request, env);
       case 'deleteJob':  await deleteJob(env, body.id); return json({ ok: true }, null, request, env);
+      // ── Betting ──
+      case 'books':
+        return json({ ok: true, books: await listBooks(env) }, null, request, env);
+      case 'openBook': {
+        const b = body.book || {};
+        const out = await openBook(env, {
+          cls: b.cls, round: b.round, race: b.race,
+          margin: b.margin, runners: b.runners || [],
+        });
+        return json({ ok: true, book: out, books: await listBooks(env) }, null, request, env);
+      }
+      case 'bookStatus':
+        await setBookStatus(env, body.id, body.status);
+        return json({ ok: true, books: await listBooks(env) }, null, request, env);
+      case 'settleBook': {
+        // Paying out is the one thing in here that moves money, so it goes
+        // through the same adjust() every other payment does.
+        const out = await settleBook(env, body.id, body.winner,
+          (uid, amount, why) => adjust(env, uid, amount, why));
+        return json({ ok: true, ...out, books: await listBooks(env) }, null, request, env);
+      }
+      case 'voidBook': {
+        const out = await voidBook(env, body.id,
+          (uid, amount, why) => adjust(env, uid, amount, why));
+        return json({ ok: true, ...out, books: await listBooks(env) }, null, request, env);
+      }
+      case 'deleteBook':
+        await deleteBook(env, body.id);
+        return json({ ok: true, books: await listBooks(env) }, null, request, env);
+
       case 'saveRarity': return json({ ok: true, id: await saveRarity(env, body.rarity || {}),
                                        rarities: await listRarities(env) }, null, request, env);
       case 'deleteRarity': {
@@ -977,7 +1014,8 @@ async function getEcon(request, env) {
     await loadRarities(env);
     const cfg = await adminConfig(env);
     return json({ ok: true, ...cfg, wallets: await allWallets(env),
-                  cardSeasons: await listCardSeasons(env) }, null, request, env);
+                  cardSeasons: await listCardSeasons(env),
+                  books: await listBooks(env) }, null, request, env);
   } catch (err) {
     return json({ ok: false, error: 'economy tables are not set up on this Worker yet' },
       { status: 503 }, request, env);
@@ -1387,6 +1425,15 @@ export default {
         if (swept) console.log(`swept ${swept} abandoned game(s)`);
       } catch (err) {
         console.error('sweep failed:', err && err.message || err);
+      }
+
+      // Move the betting prices toward wherever the money went this hour.
+      try {
+        const cfg = await settings(env);
+        const moved = await repriceAll(env, Number(cfg.book_settle_at) || 5000);
+        if (moved) console.log(`repriced ${moved} book(s)`);
+      } catch (err) {
+        console.error('repricing failed:', err && err.message || err);
       }
     })());
   },

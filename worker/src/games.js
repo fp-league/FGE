@@ -375,3 +375,125 @@ async function onShiftButton(env, interaction, id, choiceRaw) {
     footer: { text: `Shift ${done} · balance ${money(w.balance, cfg)}` },
   }, []);
 }
+
+/* ── Betting on a race ─────────────────────────────────── */
+
+import {
+  openBookFor, getBook, placeBet, betsFor, returns as betReturns,
+} from './book.js';
+
+const price = n => (Number(n) || 0).toFixed(2);
+
+/** The board, longest shot last, with where the money has gone. */
+export async function showOdds(env, interaction, cls) {
+  const cfg = await settings(env);
+  const book = await openBookFor(env, cls);
+  if (!book) {
+    return simple('Nothing open',
+      `No book is running on ${String(cls).toUpperCase()} right now.`);
+  }
+  const pot = book.runners.reduce((a, r) => a + (Number(r.staked) || 0), 0);
+  const lines = book.runners.map(r => {
+    const drift = Number(r.odds) - Number(r.open_odds);
+    const arrow = Math.abs(drift) < 0.05 ? '  ' : drift < 0 ? '▼' : '▲';
+    return `\`${price(r.odds).padStart(6)}\` ${arrow} **${r.name}**` +
+           (r.staked ? `  ·  ${money(r.staked, cfg)} on` : '');
+  });
+  return {
+    title: `🎟 ${book.race}`,
+    description: lines.join('\n'),
+    color: GOLD,
+    fields: [{
+      name: 'How it works',
+      value: `Prices move every hour toward wherever the money goes, so getting on early ` +
+             `is worth something. Your price is locked when you bet.\n` +
+             `\`/bet driver:<name> amount:<stake>\``,
+    }],
+    footer: { text: pot ? `${money(pot, cfg)} staked in total` : 'No money on yet' },
+  };
+}
+
+export async function placeRaceBet(env, interaction, cls, driverQuery, amount) {
+  const user = userOf(interaction);
+  if (!user.id) return simple('Who are you?', "Couldn't read your Discord account.");
+  const cfg = await settings(env);
+
+  const book = await openBookFor(env, cls);
+  if (!book) {
+    return simple('Nothing open', `No book is running on ${String(cls).toUpperCase()} right now.`);
+  }
+
+  const q = String(driverQuery || '').trim().toLowerCase();
+  const runner = book.runners.find(r => r.driver_id.toLowerCase() === q)
+              || book.runners.find(r => r.name.toLowerCase() === q)
+              || book.runners.find(r => r.name.toLowerCase().includes(q));
+  if (!runner) {
+    return simple('Not in this race',
+      `Nobody called “${driverQuery}” is running. \`/odds\` shows the field.`);
+  }
+
+  const taken = await takeStake(env, user.id, amount, cfg, `Bet: ${runner.name}`);
+  if (taken.error) return taken.error;
+
+  // The stake is already out of the wallet; if the row fails to write, it
+  // goes straight back rather than vanishing.
+  let placed;
+  try {
+    placed = await placeBet(env, { bookId: book.id, userId: user.id,
+                                   driverId: runner.driver_id, stake: taken.stake });
+  } catch (err) {
+    await adjust(env, user.id, taken.stake, 'Bet refunded', cfg);
+    return simple('Could not place that', String(err && err.message || err));
+  }
+
+  const w = await wallet(env, user.id, cfg);
+  return {
+    title: '🎟 Bet on',
+    description: `**${runner.name}** to win ${book.race}\n` +
+                 `${money(taken.stake, cfg)} at **${price(placed.odds)}**`,
+    color: GOLD,
+    fields: [{ name: 'Returns if it wins', value: money(placed.returns, cfg) }],
+    footer: { text: `${nameOf(user)} · balance ${money(w.balance, cfg)}` },
+  };
+}
+
+export async function showMyBets(env, interaction) {
+  const user = userOf(interaction);
+  if (!user.id) return simple('Who are you?', "Couldn't read your Discord account.");
+  const cfg = await settings(env);
+  const rows = await betsFor(env, user.id, 12);
+  if (!rows.length) {
+    return simple('Nothing on', 'You have not had a bet yet. `/odds` shows what is running.');
+  }
+  const lines = rows.map(b => {
+    const stake = money(b.stake, cfg);
+    const name = b.driver_name || b.driver_id;
+    if (!b.settled) {
+      return `⏳ **${name}** — ${stake} at ${price(b.odds)} · ` +
+             `${money(betReturns(b.stake, b.odds), cfg)} if it wins`;
+    }
+    return b.won
+      ? `✅ **${name}** — ${stake} at ${price(b.odds)} · won ${money(b.returned, cfg)}`
+      : `❌ **${name}** — ${stake} at ${price(b.odds)}`;
+  });
+  const open = rows.filter(b => !b.settled);
+  return {
+    title: '🎟 Your bets',
+    description: lines.join('\n'),
+    color: GOLD,
+    footer: { text: open.length
+      ? `${open.length} still running · ${money(open.reduce((a, b) => a + b.stake, 0), cfg)} at risk`
+      : 'Nothing outstanding' },
+  };
+}
+
+/** Runners in the open book, for the /bet typeahead. */
+export async function betChoices(env, cls, q) {
+  const book = await openBookFor(env, cls);
+  if (!book) return [];
+  const needle = String(q || '').trim().toLowerCase();
+  return book.runners
+    .filter(r => !needle || r.name.toLowerCase().includes(needle))
+    .slice(0, 25)
+    .map(r => ({ name: `${r.name} — ${price(r.odds)}`, value: r.driver_id }));
+}

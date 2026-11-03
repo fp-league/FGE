@@ -965,6 +965,48 @@ textarea { resize:vertical; min-height:80px; }
           <div id="ecWallets" style="margin-top:1rem"></div>
         </div>
 
+        <div class="form-card" id="bookCard">
+          <h3>BETTING</h3>
+          <p class="bk-note">Open a book on a race and people can back a driver with
+             <code>/bet</code>. Opening prices come from the championship unless you type your
+             own. Every hour the prices move toward wherever the money has gone, so a driver
+             everyone is backing shortens and the rest drift — a bet keeps the price it was
+             struck at whatever happens afterwards.</p>
+          <p class="bk-note"><b>The margin</b> is your edge, written as a percentage book. 100
+             pays out everything it takes; 115 keeps roughly thirteen percent. <b>Half-say
+             point</b> is how much has to be staked before the money moves the prices as much
+             as the form does — lower it and the board reacts faster.</p>
+          <div id="ecBooks" style="margin:1rem 0"></div>
+
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="fg-label">CLASS</label>
+              <select id="bkClass" onchange="bkFillRaces();bkLoadRunners()">
+                <option value="gt3">GT3</option>
+                <option value="gt4">GT4</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="fg-label">RACE</label>
+              <select id="bkRace"></select>
+            </div>
+            <div class="form-group">
+              <label class="fg-label">MARGIN (%)</label>
+              <input id="bkMargin" type="number" min="100" max="200" value="115">
+            </div>
+            <div class="form-group">
+              <label class="fg-label">HALF-SAY POINT</label>
+              <input id="bkSettleAt" type="number" min="1">
+            </div>
+          </div>
+          <div id="bkRunners" class="bulk-box" style="margin-top:1rem"></div>
+          <div class="form-actions">
+            <button class="btn btn-white" onclick="bkOpen()">OPEN THE BOOK</button>
+            <button class="btn btn-ghost" onclick="bkLoadRunners()">RELOAD THE FIELD</button>
+            <span class="img-size" id="bkStatus"></span>
+          </div>
+        </div>
+
         <div class="form-card" id="rarityCard">
           <h3>RARITIES</h3>
           <p class="bk-note">The ladder every card is graded on. The five that come with FGE
@@ -3792,6 +3834,7 @@ async function loadEcon(quiet) {
 function renderEconomy() {
     renderMaintenance();
     renderCardSeasons();
+    renderBooks();
     renderEconRarities();
     renderEconPacks();
     renderEconCards();
@@ -4380,6 +4423,205 @@ function renderEconJobs() {
           <button class="btn btn-danger btn-sm del-trigger" onclick="showDelConfirm(this, 'ecDeleteJob(\\'${esc(j.id)}\\')')">DEL</button>
         </div>
       </div>`).join('');
+}
+
+/* ── Betting ─────────────────────────────────────────── */
+
+const bkPrice = n => (Number(n) || 0).toFixed(2);
+
+function renderBooks() {
+    const box = document.getElementById('ecBooks');
+    if (!box) return;
+    const list = (econ && econ.books) || [];
+    if (!list.length) {
+        box.innerHTML = '<p class="bk-note">No book has been opened yet.</p>';
+    } else {
+        box.innerHTML = list.map(b => {
+            const pot = (b.runners || []).reduce((a, r) => a + (Number(r.staked) || 0), 0);
+            const field = (b.runners || []).slice(0, 6)
+                .map(r => `${esc(r.name)} ${bkPrice(r.odds)}`).join(' · ');
+            const live = b.status === 'open';
+            return `<div class="ec-row${live ? '' : ' ec-off'}">
+              <span class="ec-grow">${esc(b.cls.toUpperCase())} R${b.round} — ${esc(b.race)}
+                <span class="ec-mono"> · ${esc(b.status)}${pot ? ` · ${pot} staked` : ''}</span>
+                <br><span class="ec-mono" style="opacity:.7">${field}</span></span>
+              <div class="td-actions">
+                ${live ? `<button class="btn btn-ghost btn-sm"
+                    onclick="bkStatus('${esc(b.id)}','closed')">CLOSE</button>` : ''}
+                ${b.status === 'closed' ? `<button class="btn btn-ghost btn-sm"
+                    onclick="bkStatus('${esc(b.id)}','open')">REOPEN</button>` : ''}
+                ${b.status !== 'settled' ? `<button class="btn btn-white btn-sm"
+                    onclick="bkSettle('${esc(b.id)}')">SETTLE</button>` : ''}
+                ${b.status !== 'settled' ? `<button class="btn btn-ghost btn-sm"
+                    onclick="bkVoid('${esc(b.id)}')">VOID</button>` : ''}
+                <button class="btn btn-danger btn-sm del-trigger"
+                    onclick="showDelConfirm(this, 'bkDelete(\\'${esc(b.id)}\\')')">DEL</button>
+              </div>
+            </div>`;
+        }).join('');
+    }
+    bkFillRaces();
+    const sa = document.getElementById('bkSettleAt');
+    if (sa && !sa.value) sa.value = (econ && econ.settings && econ.settings.book_settle_at) || 5000;
+    const mg = document.getElementById('bkMargin');
+    if (mg && econ && econ.settings && econ.settings.book_margin) mg.value = econ.settings.book_margin;
+}
+
+/** Races from the league data for the class picked, soonest first. */
+function bkFillRaces() {
+    const sel = document.getElementById('bkRace');
+    const cls = (document.getElementById('bkClass') || {}).value || 'gt3';
+    if (!sel || !adminData) return;
+    const races = ((adminData[cls] || {}).races || []).slice()
+        .sort((a, b) => (a.round || 0) - (b.round || 0));
+    const prev = sel.value;
+    sel.innerHTML = races.map(r =>
+        `<option value="${esc(String(r.round))}">R${esc(String(r.round))} — ${esc(r.name || 'TBC')}` +
+        `${(r.results || []).length ? ' (run)' : ''}</option>`).join('')
+        || '<option value="">No races in this class</option>';
+    if (prev) sel.value = prev;
+}
+
+/**
+ * The field, with an editable price each.
+ *
+ * Left blank, the opening prices are worked out from the championship.
+ * Typing one overrides it — a driver who is quick but has not scored yet
+ * is the obvious case, and no formula is going to know that.
+ */
+function bkLoadRunners() {
+    const box = document.getElementById('bkRunners');
+    const cls = (document.getElementById('bkClass') || {}).value || 'gt3';
+    if (!box || !adminData) return;
+    const d = adminData[cls] || {};
+    const drivers = d.drivers || [];
+    if (!drivers.length) {
+        box.innerHTML = '<p class="bk-note">No drivers in this class yet.</p>';
+        return;
+    }
+    // cardRarityOf already ranks the field by points; reusing it keeps the
+    // opening prices and the card rarities reading the same championship.
+    const ranked = cardRarityOf(drivers, d.races || [], d.points);
+    const colour = name => {
+        const t = (d.teams || []).find(x => x.name === name);
+        const v = t && t.color;
+        return /^#[0-9a-f]{6}$/i.test(v || '') ? v : '#888888';
+    };
+    box.innerHTML = '<h4>THE FIELD</h4>' +
+      '<p class="bk-note">Leave a price blank and it is set from the championship.</p>' +
+      '<div class="ec-odds">' + ranked.map(row => {
+        const drv = row.drv;
+        const id = drv.id || drv.name;
+        return `<label><i style="--tc:${esc(colour(drv.team))}"></i>` +
+               `${esc(drv.name)} <input data-runner="${esc(id)}" data-name="${esc(drv.name)}" ` +
+               `data-points="${Number(row.points) || 0}" type="number" min="1.04" step="0.01" ` +
+               `placeholder="auto"></label>`;
+      }).join('') + '</div>';
+}
+
+async function bkOpen() {
+    const st = document.getElementById('bkStatus');
+    const cls = document.getElementById('bkClass').value;
+    const round = document.getElementById('bkRace').value;
+    if (!round) { toast('Pick a race first', 'err'); return; }
+    const race = document.getElementById('bkRace')
+        .selectedOptions[0].textContent.replace(/^R\d+\s*—\s*/, '').replace(/\s*\(run\)$/, '');
+
+    const inputs = [...document.querySelectorAll('#bkRunners input[data-runner]')];
+    if (!inputs.length) { toast('Press RELOAD THE FIELD first', 'err'); return; }
+    const runners = inputs.map(i => ({
+        driver_id: i.getAttribute('data-runner'),
+        name: i.getAttribute('data-name'),
+        points: Number(i.getAttribute('data-points')) || 0,
+        odds: i.value === '' ? 0 : Math.max(1.04, Number(i.value) || 0),
+    }));
+
+    st.textContent = 'opening…';
+    try {
+        const out = await econPost({ action: 'openBook', book: {
+            cls, round: Number(round), race,
+            margin: Number(document.getElementById('bkMargin').value) || 115,
+            runners,
+        } });
+        // The half-say point is a plain setting, saved alongside.
+        await econPost({ action: 'settings', settings: {
+            book_margin: String(Number(document.getElementById('bkMargin').value) || 115),
+            book_settle_at: String(Number(document.getElementById('bkSettleAt').value) || 5000),
+        } });
+        if (econ) econ.books = out.books;
+        renderBooks();
+        st.textContent = '';
+        toast(`Book open on ${race}`, 'ok');
+    } catch (e) {
+        st.textContent = '';
+        toast('Could not open it: ' + (e.message || 'unknown'), 'err');
+    }
+}
+
+async function bkStatus(id, status) {
+    try {
+        const out = await econPost({ action: 'bookStatus', id, status });
+        if (econ) econ.books = out.books;
+        renderBooks();
+        toast(status === 'open' ? 'Betting reopened' : 'Betting closed', 'ok');
+    } catch (e) { toast('Could not change it: ' + (e.message || 'unknown'), 'err'); }
+}
+
+/**
+ * Settling pays real money out, so the winner is picked explicitly and
+ * confirmed. The race result is offered as the default, because that is
+ * nearly always the answer and typing a driver id by hand at this point
+ * would be the easiest possible way to pay the wrong person.
+ */
+async function bkSettle(id) {
+    const book = ((econ && econ.books) || []).find(b => b.id === id);
+    if (!book) return;
+    const d = adminData[book.cls] || {};
+    const race = (d.races || []).find(r => String(r.round) === String(book.round));
+    const first = (race && (race.results || [])[0]) || null;
+    const winnerId = first
+        ? (typeof first === 'object' ? (first.driverId || first.driver) : first)
+        : '';
+    const match = book.runners.find(r => r.driver_id === winnerId)
+               || book.runners.find(r => r.name === winnerId);
+
+    const names = book.runners.map((r, i) => `${i + 1}. ${r.name}`).join('\n');
+    const suggested = match ? book.runners.indexOf(match) + 1 : '';
+    const pick = prompt(
+        `Who won ${book.race}?\n\n${names}\n\nType the number.` +
+        (match ? `\n\nThe result says ${match.name}.` : ''), String(suggested));
+    if (!pick) return;
+    const runner = book.runners[Number(pick) - 1];
+    if (!runner) { toast('That is not one of the runners', 'err'); return; }
+    if (!confirm(`Settle ${book.race} on ${runner.name}? This pays out and cannot be undone.`)) return;
+
+    try {
+        const out = await econPost({ action: 'settleBook', id, winner: runner.driver_id });
+        if (econ) econ.books = out.books;
+        renderBooks();
+        toast(`Settled — ${out.winners} of ${out.bets} bets paid, ${out.paidOut} out`, 'ok');
+    } catch (e) { toast('Could not settle: ' + (e.message || 'unknown'), 'err'); }
+}
+
+async function bkVoid(id) {
+    const book = ((econ && econ.books) || []).find(b => b.id === id);
+    if (!book) return;
+    if (!confirm(`Void ${book.race}? Every stake goes back and the book closes.`)) return;
+    try {
+        const out = await econPost({ action: 'voidBook', id });
+        if (econ) econ.books = out.books;
+        renderBooks();
+        toast(`Voided — ${out.refunded} stake${out.refunded === 1 ? '' : 's'} returned`, 'ok');
+    } catch (e) { toast('Could not void: ' + (e.message || 'unknown'), 'err'); }
+}
+
+async function bkDelete(id) {
+    try {
+        const out = await econPost({ action: 'deleteBook', id });
+        if (econ) econ.books = out.books;
+        renderBooks();
+        toast('Book deleted', 'ok');
+    } catch (e) { toast(e.message || 'Could not delete it', 'err'); }
 }
 
 /* ── Rarities ────────────────────────────────────────── */

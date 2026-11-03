@@ -154,6 +154,18 @@ commands.push(
       { name: 'bet', description: 'How much to stake', type: 4, required: true },
     ],
   },
+  { name: 'odds', description: 'The book on the next race', options: [CLASS_OPTION] },
+  {
+    name: 'bet',
+    description: 'Back a driver to win the next race',
+    options: [
+      { name: 'driver', description: 'Who to back — prices are shown in the list',
+        type: 3, required: true, autocomplete: true },
+      { name: 'amount', description: 'How much to stake', type: 4, required: true },
+      CLASS_OPTION,
+    ],
+  },
+  { name: 'mybets', description: 'Your bets, running and settled' },
   { name: 'rich', description: 'Who has the most credits' },
   { name: 'shop', description: 'Packs you can buy' },
   {

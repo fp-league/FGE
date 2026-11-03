@@ -17,7 +17,7 @@
 
 import { listPackTypes, listJobs, listSpares } from './economy.js';
 import { fullSet, RARITY } from './cards.js';
-import { rouletteChoices } from './games.js';
+import { rouletteChoices, betChoices } from './games.js';
 
 const MAX = 25;                      // Discord's hard limit on choices
 const cut = (s, n) => (String(s).length > n ? String(s).slice(0, n - 1) + '…' : String(s));
@@ -175,6 +175,10 @@ export async function handleAutocomplete(interaction, record, env) {
 
     // The named bets, plus whatever number is being typed offered back as
     // a straight bet — listing all thirty-seven would bury the rest.
+    case 'bet driver':
+      return reply((await betChoices(env, classOf(data, trail), q))
+        .map(c => choice(c.name, c.value)));
+
     case 'roulette on':
       return reply(rouletteChoices(q).map(c => choice(c.name, c.value)));
 

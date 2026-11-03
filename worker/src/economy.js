@@ -55,6 +55,12 @@ const DEFAULTS = {
   bet_min: '50',
   bet_max: '25000',
   shift_fail_pct: '40',       // a wrong answer still pays this much of the shift
+  // Betting. The margin is the house edge, stated as a percentage book:
+  // 115 keeps roughly thirteen percent of what is staked.
+  book_margin: '115',
+  // How much money has to be on a race before the room gets half the say
+  // in where the prices sit. Below this the opening view dominates.
+  book_settle_at: '5000',
   // Maintenance. One switch: the bot refuses every command and the site
   // puts up a holding screen, so the league can be worked on without
   // anyone pulling a pack out of a half-finished set.
@@ -1022,7 +1028,7 @@ export async function allWallets(env) {
 }
 
 export const ECON_COMMANDS = ['work', 'daily', 'balance', 'pay', 'rich', 'shop', 'buy', 'sell',
-                              'rob', 'blackjack', 'roulette'];
+                              'rob', 'blackjack', 'roulette', 'odds', 'bet', 'mybets'];
 
 /* ── Trading ───────────────────────────────────────────── */
 
