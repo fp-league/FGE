@@ -39,6 +39,17 @@ const DEFAULTS = {
   sell_values: '{"common":25,"uncommon":60,"rare":140,"epic":350,"legendary":900}',
   pay_min: '10',
   pay_max: '100000',
+  // Robbing. Every number is here rather than in the code because the
+  // right ones depend on how much a league's economy is already worth,
+  // and that is not something to redeploy for.
+  rob_enabled: '1',
+  rob_cooldown_min: '120',
+  rob_success_pct: '35',      // chance it comes off at all
+  rob_take_min_pct: '8',      // on success, this much of their balance…
+  rob_take_max_pct: '22',     // …up to this much
+  rob_fine_pct: '12',         // on failure, this much of YOURS, paid to them
+  rob_target_min: '400',      // they must have at least this to be worth robbing
+  rob_min_balance: '250',     // you must have at least this, so a fine can bite
   // Maintenance. One switch: the bot refuses every command and the site
   // puts up a holding screen, so the league can be worked on without
   // anyone pulling a pack out of a half-finished set.
@@ -362,6 +373,110 @@ export async function payUser(env, interaction, toId, amount) {
     description: `${nameOf(user)} → <@${toId}>  ·  ${money(n, cfg)}\n` +
                  `Your balance: ${money(out.balance, cfg)}`,
     color: GOLD,
+  };
+}
+
+/* ── /rob ──────────────────────────────────────────────── */
+
+const ROB_JOB = 'rob';     // the cooldown lives in work_log, like a job's
+
+/**
+ * Take someone else's credits, or lose some of your own trying.
+ *
+ * Three rules shape it, and all three exist to stop it being miserable for
+ * the person on the receiving end:
+ *
+ *  - A failed attempt fines the robber and pays the fine TO the target. A
+ *    fine that evaporated would make being robbed purely a tax on being
+ *    rich; this way the odds are a real gamble rather than a one-way drain.
+ *  - Only a percentage is ever taken, never a fixed sum and never the lot,
+ *    so nobody is stripped bare by one unlucky command.
+ *  - Below rob_target_min you cannot be robbed at all. Someone who is
+ *    broke should be left alone, and without a floor the poorest player
+ *    is the easiest mark.
+ */
+export async function robUser(env, interaction, targetId) {
+  const user = userOf(interaction);
+  if (!user.id) return simple('Who are you?', "Couldn't read your Discord account.");
+
+  const cfg = await settings(env);
+  if (num(cfg.rob_enabled, 1) !== 1) {
+    return simple('Not here', 'Robbing is switched off in this league.');
+  }
+  if (!targetId) return simple('Rob who?', 'Pick someone: `/rob user:@them`.');
+  if (String(targetId) === String(user.id)) {
+    return simple('That is you', 'Taking your own money is just moving it.');
+  }
+
+  const now = Date.now();
+  const cool = Math.max(0, num(cfg.rob_cooldown_min, 120)) * 60000;
+  const log = await env.DB.prepare(
+    `SELECT last_at, times FROM work_log WHERE user_id = ? AND job = ?`)
+    .bind(user.id, ROB_JOB).first();
+  const left = log ? (log.last_at + cool) - now : 0;
+  if (left > 0) {
+    return simple('Lie low', `You can try again in **${fmtLeft(left)}**.`);
+  }
+
+  const mine  = await wallet(env, user.id, cfg);
+  const yours = num(cfg.rob_min_balance, 250);
+  if (mine.balance < yours) {
+    return simple('Nothing to lose',
+      `You need ${money(yours, cfg)} of your own before you can try — ` +
+      `a fine has to be able to hurt. You have ${money(mine.balance, cfg)}.`);
+  }
+
+  const theirs = await wallet(env, targetId, cfg);
+  const floor = num(cfg.rob_target_min, 400);
+  if (theirs.balance < floor) {
+    return simple('Not worth it',
+      `<@${targetId}> is carrying under ${money(floor, cfg)}. Leave them be.`);
+  }
+
+  // The cooldown is set whether it works or not: an attempt is an attempt,
+  // and resetting only on success would make failure free.
+  await env.DB.prepare(
+    `INSERT INTO work_log (user_id, job, last_at, times, earned) VALUES (?, ?, ?, 1, 0)
+     ON CONFLICT (user_id, job) DO UPDATE SET
+       last_at = excluded.last_at, times = times + 1`
+  ).bind(user.id, ROB_JOB, now).run();
+
+  const odds = Math.min(100, Math.max(0, num(cfg.rob_success_pct, 35)));
+  const won = (Math.random() * 100) < odds;
+
+  if (!won) {
+    const finePct = Math.min(100, Math.max(0, num(cfg.rob_fine_pct, 12)));
+    const fine = Math.max(1, Math.round(mine.balance * finePct / 100));
+    const after = await adjust(env, user.id, -fine, `Caught robbing <@${targetId}>`, cfg);
+    // Only pay it over if it actually came out, so a race cannot mint money.
+    if (after) await adjust(env, targetId, fine, `Compensation from <@${user.id}>`, cfg);
+    return {
+      title: '🚨 Caught',
+      description: `You went after <@${targetId}> and got caught.\n` +
+                   `**${money(fine, cfg)}** of yours goes to them.\n` +
+                   `Balance: ${money(after ? after.balance : mine.balance, cfg)}`,
+      color: BRAND,
+      footer: { text: `Try again in ${fmtLeft(cool)}` },
+    };
+  }
+
+  const lo = Math.max(0, num(cfg.rob_take_min_pct, 8));
+  const hi = Math.max(lo, num(cfg.rob_take_max_pct, 22));
+  const take = Math.max(1, Math.round(theirs.balance * rand(lo, hi) / 100));
+
+  const left2 = await adjust(env, targetId, -take, `Robbed by <@${user.id}>`, cfg);
+  if (!left2) {
+    // Their balance moved between the read and the debit.
+    return simple('Too slow', `<@${targetId}> does not have that any more. Try again later.`);
+  }
+  const got = await adjust(env, user.id, take, `Robbed <@${targetId}>`, cfg);
+
+  return {
+    title: '🏃 Got away with it',
+    description: `You took **${money(take, cfg)}** off <@${targetId}>.\n` +
+                 `Balance: ${money(got.balance, cfg)}`,
+    color: GOLD,
+    footer: { text: `Try again in ${fmtLeft(cool)}` },
   };
 }
 
@@ -910,7 +1025,7 @@ export async function allWallets(env) {
   } catch { return []; }
 }
 
-export const ECON_COMMANDS = ['work', 'daily', 'balance', 'pay', 'rich', 'shop', 'buy', 'sell'];
+export const ECON_COMMANDS = ['work', 'daily', 'balance', 'pay', 'rich', 'shop', 'buy', 'sell', 'rob'];
 
 /* ── Trading ───────────────────────────────────────────── */
 

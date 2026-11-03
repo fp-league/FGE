@@ -1210,6 +1210,50 @@ textarea { resize:vertical; min-height:80px; }
           </div>
           <label class="fg-label" style="margin-top:0.8rem;display:block">WHAT A DUPLICATE SELLS FOR</label>
           <div class="ec-odds" id="esSellRow"></div>
+
+          <label class="fg-label" style="margin-top:1.4rem;display:block">ROBBING</label>
+          <p class="bk-note">A failed attempt fines the robber and pays the fine to the person
+             they went after, so being robbed is a gamble both ways rather than a tax on
+             having money. Nobody can be robbed below the floor, and only ever a slice of
+             what they hold — never a fixed sum and never the lot.</p>
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="fg-label">ALLOW IT</label>
+              <select id="esRobOn">
+                <option value="1">Yes</option>
+                <option value="0">No</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="fg-label">WAIT BETWEEN TRIES (MIN)</label>
+              <input id="esRobCool" type="number" min="0">
+            </div>
+            <div class="form-group">
+              <label class="fg-label">CHANCE IT WORKS (%)</label>
+              <input id="esRobOdds" type="number" min="0" max="100">
+            </div>
+            <div class="form-group">
+              <label class="fg-label">TAKES AT LEAST (% OF THEIRS)</label>
+              <input id="esRobLo" type="number" min="0" max="100">
+            </div>
+            <div class="form-group">
+              <label class="fg-label">TAKES AT MOST (% OF THEIRS)</label>
+              <input id="esRobHi" type="number" min="0" max="100">
+            </div>
+            <div class="form-group">
+              <label class="fg-label">FINE IF CAUGHT (% OF YOURS)</label>
+              <input id="esRobFine" type="number" min="0" max="100">
+            </div>
+            <div class="form-group">
+              <label class="fg-label">LEAVE THEM ALONE BELOW</label>
+              <input id="esRobFloor" type="number" min="0">
+            </div>
+            <div class="form-group">
+              <label class="fg-label">YOU NEED AT LEAST</label>
+              <input id="esRobMine" type="number" min="0">
+            </div>
+          </div>
+
           <div class="form-actions">
             <button class="btn btn-white" onclick="ecSaveSettings()">SAVE NUMBERS</button>
             <span class="img-size" id="esStatus"></span>
@@ -4491,6 +4535,14 @@ function fillEconSettings() {
     let sell = {};
     try { sell = JSON.parse(s.sell_values || '{}'); } catch (e) {}
     RORDER.forEach(r => set('esSell' + r[0].toUpperCase() + r.slice(1), sell[r] ?? ''));
+    set('esRobOn',    String(s.rob_enabled ?? '1'));
+    set('esRobCool',  s.rob_cooldown_min ?? '');
+    set('esRobOdds',  s.rob_success_pct ?? '');
+    set('esRobLo',    s.rob_take_min_pct ?? '');
+    set('esRobHi',    s.rob_take_max_pct ?? '');
+    set('esRobFine',  s.rob_fine_pct ?? '');
+    set('esRobFloor', s.rob_target_min ?? '');
+    set('esRobMine',  s.rob_min_balance ?? '');
 }
 
 async function ecSaveSettings() {
@@ -4512,6 +4564,16 @@ async function ecSaveSettings() {
         prize_table: JSON.stringify(prize.length ? prize : [1200,900,700,550,450,360,290,230,180,140]),
         sell_values: JSON.stringify(Object.keys(sell).length ? sell
           : { common:25, uncommon:60, rare:140, epic:350, legendary:900 }),
+        rob_enabled:      val('esRobOn') === '0' ? '0' : '1',
+        rob_cooldown_min: val('esRobCool'),
+        rob_success_pct:  val('esRobOdds'),
+        // "At most" below "at least" would make the range inside out and
+        // rand() would silently return the lower bound every time.
+        rob_take_min_pct: String(Math.min(+val('esRobLo') || 0, +val('esRobHi') || 0)),
+        rob_take_max_pct: String(Math.max(+val('esRobLo') || 0, +val('esRobHi') || 0)),
+        rob_fine_pct:     val('esRobFine'),
+        rob_target_min:   val('esRobFloor'),
+        rob_min_balance:  val('esRobMine'),
     };
     st.textContent = 'saving…';
     try {

@@ -135,6 +135,11 @@ commands.push(
       { name: 'amount', description: 'How much',    type: 4, required: true },
     ],
   },
+  {
+    name: 'rob',
+    description: 'Try to take credits off someone — it does not always work',
+    options: [{ name: 'user', description: 'Who to go after', type: 6, required: true }],
+  },
   { name: 'rich', description: 'Who has the most credits' },
   { name: 'shop', description: 'Packs you can buy' },
   {

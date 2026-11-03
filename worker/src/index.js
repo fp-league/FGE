@@ -23,7 +23,7 @@ import { takeBackup, listBackups, readBackup, deleteBackup } from './backup.js';
 import { listArchive, readArchive, saveArchive, deleteArchive } from './archive.js';
 import {
   doWork, doDaily, showBalance, showRich, payUser, showShop, buyPack, sellCard,
-  payRace, adminConfig, setSettings, savePack, deletePack, saveCustomCard,
+  robUser, payRace, adminConfig, setSettings, savePack, deletePack, saveCustomCard,
   deleteCustomCard, saveJob, deleteJob, allWallets, adjust, wallet, settings,
   ECON_COMMANDS, TRADE_VIEWS, endCardSeason, listCardSeasons,
   offerTrade, listTrades, acceptTrade, closeTrade,
@@ -716,6 +716,7 @@ async function handleEconomy(interaction, record, env) {
       case 'daily':   embed = await doDaily(env, interaction); break;
       case 'balance': embed = await showBalance(env, interaction, pick('user')); break;
       case 'pay':     embed = await payUser(env, interaction, pick('user'), pick('amount')); break;
+      case 'rob':     embed = await robUser(env, interaction, pick('user')); break;
       case 'rich':    embed = await showRich(env); break;
       case 'shop':    embed = await showShop(env, interaction); break;
       case 'buy':     embed = await buyPack(env, interaction, pick('pack'), record); break;
