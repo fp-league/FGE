@@ -391,6 +391,7 @@ function renderCurrentPage() {
 // ── HOME PAGE ────────────────────────────────────────────
 function renderHome() {
     const d = cls();
+    renderHero(d);
     renderLiveBanner();
     renderRaceStrip(d);
     renderCountdown(d);
@@ -398,17 +399,96 @@ function renderHome() {
     renderHomeStandings(d);
 }
 
+/**
+ * The headline is the league's current state, not its name.
+ *
+ * A site whose first line is its own title tells a returning driver
+ * nothing they did not know. When the championship has been scored, the
+ * leader's name goes there instead — it is the one fact everyone in the
+ * league is actually tracking. Before a round has scored there is nothing
+ * true to put in its place, so it falls back to the name.
+ */
+function renderHero(d) {
+    const eyebrow = document.getElementById('heroEyebrow');
+    const title   = document.getElementById('heroTitle');
+    const sub     = document.getElementById('heroSub');
+    const cta     = document.getElementById('heroCta');
+    if (!title) return;
+
+    const drivers = d.drivers || [];
+    const scored  = (d.races || []).filter(r => (r.results || []).length);
+    const { pts } = calcStandings(d.races || [], drivers, d.teams || []);
+
+    const ranked = drivers.slice()
+        .sort((a, b) => (pts[driverKey(b)] || 0) - (pts[driverKey(a)] || 0));
+    const leader = ranked[0];
+    const lead   = leader ? (pts[driverKey(leader)] || 0) : 0;
+
+    const set = (el, text) => { if (el) el.textContent = text; };
+    // The headline is set as large as the name allows, not as large as the
+    // longest name allows — so a short one still fills the hero.
+    const fit = text => {
+        if (!title) return;
+        const n = String(text).length;
+        title.classList.toggle('is-long',  n > 14 && n <= 18);
+        title.classList.toggle('is-xlong', n > 18);
+    };
+    const rounds = n => `${n} round${n === 1 ? '' : 's'}`;
+
+    if (leader && lead > 0) {
+        const second = ranked[1] ? (pts[driverKey(ranked[1])] || 0) : 0;
+        const margin = lead - second;
+        set(eyebrow, `${currentClass} championship leader`);
+        set(title, leader.name); fit(leader.name);
+        set(sub, ranked[1]
+            ? `${lead} points after ${rounds(scored.length)} — ` +
+              (margin ? `${margin} clear of ${ranked[1].name}.` : `level with ${ranked[1].name}.`)
+            : `${lead} points after ${rounds(scored.length)}.`);
+        set(cta, 'See the standings');
+        cta.setAttribute('data-page', 'standings');
+    } else {
+        set(eyebrow, `${currentClass} · Fortnite Global Endurance`);
+        set(title, 'Fortnite Global Endurance'); fit('Fortnite Global Endurance');
+        set(sub, drivers.length
+            ? `${drivers.length} driver${drivers.length === 1 ? '' : 's'} on the grid. ` +
+              'No points scored yet — the championship opens with the first round.'
+            : 'The grid is being put together. Check the calendar for the opening round.');
+        set(cta, 'See the calendar');
+        cta.setAttribute('data-page', 'calendar');
+    }
+}
+
+/**
+ * The next round, on the one light panel on the page.
+ *
+ * It used to be a thin strip of grey text among other thin strips of grey
+ * text, which is a poor showing for the single thing most people come to
+ * the site to check. White against the charcoal makes it the first thing
+ * the eye lands on after the hero.
+ */
 function renderRaceStrip(d) {
-    const next = findNextRace(d.races) || d.races?.[d.races.length-1];
     const el = document.getElementById('raceStrip');
-    if (!el || !next) return;
-    const isUp = next.date && new Date(next.date) >= new Date();
+    if (!el) return;
+
+    const upcoming = findNextRace(d.races);
+    const race = upcoming || (d.races || [])[(d.races || []).length - 1];
+    if (!race) {
+        el.innerHTML = `
+          <p class="nb-label">Next race</p>
+          <h3 class="nb-title">Calendar to come</h3>
+          <p class="nb-where">No rounds have been scheduled yet.</p>`;
+        return;
+    }
+
+    const when = fmtDate(race.date);
     el.innerHTML = `
-      <span class="rs-round">ROUND ${next.round || '?'}</span>
-      <span class="rs-name">${next.name || 'TBC'}</span>
-      <span class="rs-track">📍 ${next.track || ''}</span>
-      <span class="rs-date">${fmtDate(next.date)}</span>
-      <span class="rs-status ${isUp?'up':''}">${isUp?'UPCOMING':'COMPLETED'}</span>`;
+      <p class="nb-label">${upcoming ? 'Next race' : 'Last race'}</p>
+      <p class="nb-date">Round ${esc(String(race.round ?? '?'))}${when ? ` · ${esc(when)}` : ''}</p>
+      <h3 class="nb-title">${esc(race.name || 'To be confirmed')}</h3>
+      ${race.track ? `<p class="nb-where">${esc(race.track)}</p>` : ''}
+      <button class="nb-btn" data-page="${upcoming ? 'calendar' : 'results'}">
+        ${upcoming ? 'See the calendar' : 'See the result'}
+      </button>`;
 }
 
 function renderCountdown(d) {
@@ -417,12 +497,11 @@ function renderCountdown(d) {
     const next = findNextRace(d.races);
     if (!next) {
         el.style.display = 'flex';
-        el.innerHTML = '<span class="cb-label">NO UPCOMING RACE</span>';
+        el.innerHTML = '<span class="cb-label">Nothing scheduled</span>';
         return;
     }
     el.style.display = 'flex';
-    const label = next.name ? `NEXT RACE — ${next.name}` : 'NEXT RACE';
-    el.innerHTML = `<span class="cb-label">${label}</span><div class="cb-units">${countdownHTML(next.date)}</div>`;
+    el.innerHTML = `<div class="cb-units">${countdownHTML(next.date)}</div>`;
 }
 
 function renderHomeNews(d) {
@@ -456,7 +535,7 @@ function renderHomeNews(d) {
           </div>
           <h2>${esc(hero.title || 'FGE News')}</h2>
           <p>${esc(snippet(hero.excerpt || hero.body))}</p>
-          <span class="nh-read">READ FULL STORY &rarr;</span>
+          <span class="nh-read">READ FULL STORY</span>
         </div>
       </article>
 
@@ -827,7 +906,7 @@ function raceVideoHTML(race) {
         // A link we cannot embed is still a link worth offering.
         return /^https:\/\//.test(raw)
             ? `<div class="rv-wrap"><a class="btn btn-secondary" href="${esc(raw)}"
-                 target="_blank" rel="noopener noreferrer">WATCH THE RACE &rarr;</a></div>`
+                 target="_blank" rel="noopener noreferrer">WATCH THE RACE</a></div>`
             : '';
     }
     return `<div class="rv-wrap">
@@ -2203,7 +2282,7 @@ function liveLabel(status) {
     return (liveIsQuali() ? QUALI_LABELS[status] : LIVE_LABELS[status]) || '';
 }
 
-/** "1:42.391", "42.391" or "1:42" → ms. Anything else → null. */
+/** "1:42.391", "42.391" or "1:42" ms. Anything else null. */
 function lapMs(v) {
     const m = /^(?:(\d+):)?(\d{1,2})(?:[.,](\d{1,3}))?$/.exec(String(v || '').trim());
     if (!m) return null;
@@ -2266,7 +2345,7 @@ function renderLiveBanner() {
         <span class="lv-bl" data-page="live">${liveIsQuali() ? 'QUALIFYING' : 'LIVE NOW'}</span>
         <span class="lv-bn" data-page="live">${esc(s.raceName || 'Race in progress')}</span>
         <span class="lv-bs" data-page="live">${esc(label)}</span>
-        <span class="lv-bgo" data-page="live">WATCH TIMING &rarr;</span>
+        <span class="lv-bgo" data-page="live">WATCH TIMING</span>
       </div>`;
 }
 

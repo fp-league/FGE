@@ -55,32 +55,62 @@
     --line-strong: rgba(255,255,255,0.26);
     /* Surfaces are translucent white so they tint themselves against
        whichever class background is active — no per-class values needed. */
-    --surface: rgba(255,255,255,0.055);
-    --surface2: rgba(255,255,255,0.1);
+    --surface: rgba(255,255,255,0.045);
+    --surface2: rgba(255,255,255,0.085);
     --input-bg: rgba(0,0,0,0.35);
     /* Titillium Web: the motorsport standard, and far more legible than the
        old Porsche faces, which were so wide they kept overflowing phones. */
     --font-display: 'Titillium Web', 'Segoe UI', Arial, sans-serif;
     --font-ui: 'Titillium Web', 'Segoe UI', Arial, sans-serif;
     --font-body: 'Titillium Web', 'Segoe UI', Arial, sans-serif;
-    --radius: 3px;
-    --nav-h: 60px;
+    /* Square. The whole look is sharp rectangles; a 3px radius softened
+       every edge and was the main thing making it read as a web template
+       rather than a race team's site. */
+    --radius: 0px;
+    --nav-h: 64px;
     --gt4-bright: #5599FF;
     --class-color: var(--gt3);
+    /* One accent, four jobs, because one hex cannot do all four legibly.
+       --class-color fills and decorates (the slab, the logo block, the
+       section ticks) where nothing sits on top of it. The other three
+       carry text, and were measured against the surfaces they land on:
+
+         --class-fill     white text on it   (buttons, the footer bar)
+         --class-on-dark  it as text on #121214
+         --class-on-light it as text on the white panel
+
+       FGE red as text on charcoal is 3.8:1 and as text on the white panel
+       4.4:1 — both under the 4.5 a 12px label needs — so those two roles
+       use a brighter and a deeper red respectively. The brand red itself
+       is unchanged wherever it is a fill. */
+    --class-fill:     var(--gt3);
+    --class-on-dark:  #FF3B30;
+    --class-on-light: #C40500;
     /* Aliases for the pre-redesign names still used by app.js inline styles.
        Without these the colour is invalid and silently inherits. */
     --muted: var(--grey);
     --text: var(--off-white);
     --accent: var(--class-color);
     --accent2: var(--class-color);
-    /* Whole-page background, class coloured. GT3 = red. */
-    --page-bg: #450A07;
-    --page-deep: #2A0604;
+    /* The page is charcoal, not class-coloured.
+       It used to be painted the class colour from edge to edge — a deep red
+       for GT3, a deep blue for GT4 — which meant the accent sat on its own
+       hue and had nothing to push against. Red on red cannot shout. The
+       base is now neutral and the class colour is spent only where it
+       should carry meaning: the logo mark, the eyebrow, buttons, the
+       diagonal and the footer. */
+    --page-bg: #121214;
+    --page-deep: #0C0C0E;
+    --paper: #F2F2F0;          /* the one light surface, for the next race */
+    --ink: #121214;            /* text on --paper */
 }
 body.gt4-mode {
     --class-color: var(--gt4-bright);
-    --page-bg: #071C45;
-    --page-deep: #04102A;
+    /* The bright blue is only 2.8:1 under white, so anything carrying
+       text uses a deeper one. */
+    --class-fill:     #2050C8;
+    --class-on-dark:  var(--gt4-bright);
+    --class-on-light: #2050C8;
 }
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html { scroll-behavior: smooth; }
@@ -307,29 +337,47 @@ body {
     <main class="container" id="main">
         <!-- ══ HOME ══ -->
         <section id="home" class="page active">
-            <div class="hero-section">
-                <img src="fge-logo.webp" alt="FGE — Fortnite Global Endurance"
-                     class="hero-logo-img" width="841" height="309"
-                     srcset="fge-logo-560.webp 560w, fge-logo.webp 841w"
-                     sizes="(max-width: 600px) 70vw, 420px">
-                <div class="hero-tagline">FORTNITE GLOBAL ENDURANCE</div>
-                <div class="hero-divider"></div>
-            </div>
+            <header class="hero">
+                <div class="hero-slab" aria-hidden="true"></div>
+                <!-- The same car as the intro, so it is already cached by the
+                     time this paints. Decorative: the headline carries the
+                     meaning, so it is hidden from screen readers. -->
+                <img src="porsche.webp" class="hero-car" alt="" aria-hidden="true"
+                     width="1440" height="810"
+                     srcset="porsche-480.webp 480w, porsche-720.webp 720w,
+                             porsche-1080.webp 1080w, porsche.webp 1440w"
+                     sizes="(max-width: 820px) 118vw, 62vw"
+                     fetchpriority="high">
+                <div class="hero-inner">
+                    <p class="hero-eyebrow" id="heroEyebrow">Fortnite Global Endurance</p>
+                    <h1 class="hero-title" id="heroTitle">Fortnite Global Endurance</h1>
+                    <p class="hero-sub" id="heroSub"></p>
+                    <a class="hero-cta" id="heroCta" href="#" data-page="standings">See the standings</a>
+                </div>
+            </header>
 
             <!-- Shown only while race control has a session open -->
             <div id="liveBanner"></div>
 
             <div class="section-head"><h2>NEXT RACE</h2>
-                <a href="#" data-page="calendar">FULL CALENDAR &rarr;</a>
+                <a href="#" data-page="calendar">FULL CALENDAR</a>
             </div>
-            <div class="race-strip" id="raceStrip"></div>
-            <div class="countdown-bar" id="countdownBar"></div>
+            <!-- The ids stay put so the per-second countdown tick keeps
+                 writing to the same element it always did; only what the
+                 two renderers emit, and the styling around them, changed. -->
+            <div class="nextband">
+              <article class="nb-card" id="raceStrip"></article>
+              <aside class="nb-side">
+                <p class="nb-label">Counting down</p>
+                <div class="countdown-bar" id="countdownBar"></div>
+              </aside>
+            </div>
 
             <div class="section-head"><h2>LATEST NEWS</h2></div>
             <section class="home-news" id="homeNews"></section>
 
             <div class="section-head"><h2>CHAMPIONSHIP</h2>
-                <a href="#" data-page="standings">FULL STANDINGS &rarr;</a>
+                <a href="#" data-page="standings">FULL STANDINGS</a>
             </div>
             <div id="homeStandings"></div>
         </section>
@@ -366,7 +414,7 @@ body {
             <div class="drivers-banner" data-page="drivers">
                 <h2 data-page="drivers">FGE DRIVERS</h2>
                 <p data-page="drivers">Check out this season's line-up of drivers.</p>
-                <span class="db-btn" data-page="drivers">Find out more &rarr;</span>
+                <span class="db-btn" data-page="drivers">Find out more</span>
             </div>
         </section>
 
