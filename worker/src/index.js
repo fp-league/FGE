@@ -19,6 +19,7 @@ import { openPack, showCollection, showCard, showCollectors, grantPacks, CARD_VI
          loadRarities, giveCard, grantPackType, fullSet } from './cards.js';
 import { COMMANDS } from './commands.js';
 import { handleAutocomplete } from './autocomplete.js';
+import { runAgent, defer } from './agent.js';
 import { startBlackjack, playRoulette, handleComponent, sweepGames,
          showOdds, placeRaceBet, showMyBets } from './games.js';
 import { repriceAll, listBooks, openBook, setBookStatus, settleBook, voidBook, deleteBook }
@@ -1495,7 +1496,7 @@ export default {
     })());
   },
 
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const { pathname } = new URL(request.url);
 
     if (request.method === 'OPTIONS') {
@@ -1577,6 +1578,22 @@ export default {
           const held = await maintenanceReply(env);
           if (held) {
             return new Response(JSON.stringify(held), {
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+
+          // The agent is the one command that cannot answer inside
+          // Discord's three seconds — a model call takes several. So
+          // Discord is told to wait, and the real answer edits that
+          // message when it arrives. It needs no league data, so it is
+          // dispatched before the record is fetched.
+          if ((interaction.data || {}).name === 'agent') {
+            const asked = (((interaction.data.options || [])
+              .find(o => o.name === 'request') || {}).value) || '';
+            const work = runAgent(env, interaction, String(asked))
+              .catch(err => console.error('agent failed:', err && err.stack));
+            if (ctx && ctx.waitUntil) ctx.waitUntil(work);
+            return new Response(JSON.stringify(defer()), {
               headers: { 'Content-Type': 'application/json' },
             });
           }

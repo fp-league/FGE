@@ -208,4 +208,17 @@ commands.push({
   ],
 });
 
+// ── The agent ────────────────────────────────────────
+// Anyone may ask; only an owner may approve. Asking costs a little of the
+// day's free model allowance and changes nothing, so it is not gated.
+commands.push({
+  name: 'agent',
+  description: 'Ask for a change to the website — an owner approves it before anything happens',
+  options: [
+    { name: 'request',
+      description: 'What you want changed, in plain words',
+      type: 3, required: true },
+  ],
+});
+
 export const COMMANDS = commands;

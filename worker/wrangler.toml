@@ -55,3 +55,23 @@ id = "fb32572a6cd54157a4109a48c4dd3060"
 # [[r2_buckets]]
 # binding = "IMAGES"
 # bucket_name = "fge-images"
+
+# ── The agent ──────────────────────────────────────────
+# Workers AI runs the model inside the Worker: no API key, no account to
+# open, and 10,000 Neurons a day at no charge. A code edit costs roughly
+# 285 of them, so about 35 a day are free.
+[ai]
+binding = "AI"
+
+# Two secrets, and nothing else to configure — the application id comes
+# off the interaction payload, so it does not need setting.
+#
+#   npx wrangler secret put GITHUB_TOKEN     <- fine-grained, FGE only,
+#                                               Contents: read and write,
+#                                               Pull requests: read and write
+#   npx wrangler secret put AGENT_APPROVERS  <- comma-separated Discord
+#                                               user ids who may approve
+#
+# Until both are set the agent still answers; it says which one is missing
+# rather than failing quietly. Without the token it will propose changes
+# and refuse at the approve step, which is a safe place to stop.

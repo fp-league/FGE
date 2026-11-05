@@ -295,12 +295,14 @@ export async function handleComponent(interaction, env) {
   const [tag, gameId, action] = id.split(':');
   if (tag === 'bj') return onBlackjackButton(env, interaction, gameId, action);
   if (tag === 'wk') return onShiftButton(env, interaction, gameId, action);
+  if (tag === 'ag') return onAgentButton(env, interaction, gameId, action);
   return null;
 }
 
 /* ── The shift activity ────────────────────────────────── */
 // Imported late to keep the casino's rules free of job logic.
 import { shiftQuestion, SHIFT_FALLBACK } from './shift.js';
+import { onAgentButton } from './agent.js';
 
 /**
  * Clocking on now asks something before it pays.
