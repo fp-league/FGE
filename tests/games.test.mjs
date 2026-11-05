@@ -114,7 +114,13 @@ console.log('\nBLACKJACK');
 {
   let env = makeDB(); seed(env, 'a', 5000);
   const r = await games.startBlackjack(env, who('a'), 500);
-  ok('the stake leaves immediately', bal(env, 'a') <= 4500, String(bal(env, 'a')));
+  // Checked on the ledger, not the balance: a natural settles inside this
+  // same call and pays back, so about one deal in twenty left the balance
+  // ABOVE where it started and failed an assertion on the balance alone.
+  // The stake still left first, which is the thing being tested.
+  ok('the stake leaves immediately',
+     env._ledger.some(l => l.u === 'a' && l.d === -500),
+     JSON.stringify(env._ledger));
   const open = env._rows.size === 1;
   if (open) {
     ok('buttons are offered', btns(r).length === 3, btns(r).join());
@@ -208,15 +214,35 @@ console.log('\nROULETTE');
      await games.playRoulette(env, who('a'), 'banana', 500))));
   ok('and takes nothing', bal(env, 'a') === 10000);
 
-  // A straight-up number pays 35:1, so one win in many covers the losses.
+  // Money flow end to end, on an even-money bet.
+  //
+  // This was a straight-up number, which pays 36x on a 1-in-37 chance: a
+  // standard deviation of 13 points over 2000 spins, so any band tight
+  // enough to mean something failed several times in a hundred runs. A
+  // flaky test is worse than no test — it teaches you to re-run until
+  // green. Red has the same 97.3% return with a sd of 2.2, so the same
+  // sample says something without crying wolf.
   let stake = 0, ret = 0;
   for (let i = 0; i < 2000; i++) {
     const e = makeDB(); seed(e, 'a', 100000);
-    await games.playRoulette(e, who('a'), '17', 100);
+    await games.playRoulette(e, who('a'), 'red', 100);
     stake += 100; ret += bal(e, 'a') - 99900;
   }
   const rtp = ret / stake * 100;
-  ok('a straight bet returns about 97% over 2000 spins', rtp > 70 && rtp < 125, rtp.toFixed(1) + '%');
+  ok('an even-money bet returns about 97% over 2000 spins',
+     rtp > 87 && rtp < 108, rtp.toFixed(1) + '%');
+
+  // The long-odds arithmetic is checked exactly rather than statistically:
+  // back one number until it comes in, then look at what was paid.
+  let paid = null;
+  for (let i = 0; i < 4000 && paid === null; i++) {
+    const e = makeDB(); seed(e, 'a', 100000);
+    await games.playRoulette(e, who('a'), '17', 100);
+    const delta = bal(e, 'a') - 100000;
+    if (delta > 0) paid = delta;
+  }
+  ok('a winning straight bet pays exactly 35 to 1', paid === 3500,
+     paid === null ? 'never came in' : String(paid));
 }
 
 /* ── the shift ─────────────────────────────────────────── */
