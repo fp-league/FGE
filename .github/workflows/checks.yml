@@ -1,20 +1,35 @@
-# index.html carries a copy of a few rules from styles.css, inlined so the
-# page can paint before the full stylesheet arrives. A copy can drift from
-# its source, and drift here is invisible — the site still works, it just
-# paints the first frame with stale colours or a stale layout.
+# Everything that has to be true before a change lands.
 #
-# So the copy is generated, and this checks it was regenerated. If it fails,
-# run `node tools/boot-css.mjs` and commit the result.
+# These used to run only while someone was working on the project with an
+# assistant, in a scratch directory that did not survive the session — so
+# the checks existed but nothing enforced them. They run here now, on every
+# push and every pull request, which is what makes a change from anyone,
+# human or agent, something a machine can reject before a person is asked
+# to approve it.
 name: checks
 
 on:
   push:
-    paths: ['styles.css', 'index.html', 'tools/**']
   pull_request:
-    paths: ['styles.css', 'index.html', 'tools/**']
 
 jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci
+      - run: npm test
+
   boot-css:
+    # index.html carries a copy of a few rules from styles.css, inlined so
+    # the page can paint before the full stylesheet arrives. A copy drifts
+    # from its source, and drift here is invisible: the site still works,
+    # it just paints its first frame with stale colours. Fix by running
+    # `node tools/boot-css.mjs` and committing the result.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -22,3 +37,16 @@ jobs:
         with:
           node-version: '20'
       - run: node tools/boot-css.mjs --check
+
+  worker:
+    # A Worker that does not build cannot deploy, and finding that out at
+    # deploy time means finding out after the site has already moved.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Dry-run the Worker build
+        working-directory: worker
+        run: npx --yes wrangler@latest deploy --dry-run --outdir /tmp/worker-build
