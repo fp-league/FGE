@@ -415,13 +415,27 @@ export async function openPack(env, interaction, record) {
   // A pack handed out by an admin jumps the queue, and deliberately does not
   // consume the free one — being given a pack should not cost you your
   // 8-hourly.
-  let granted = null;
+  // A typed grant is spent before a generic one: it is the one somebody
+  // was deliberately given, and it carries its own odds.
+  let typed = null;
   try {
-    granted = await env.DB.prepare(
-      `SELECT packs FROM card_grants WHERE user_id = ?`
+    typed = await env.DB.prepare(
+      `SELECT g.pack_id, g.packs, p.name, p.emoji, p.size, p.odds, p.pool, p.guarantee
+         FROM pack_grant g JOIN pack_type p ON p.id = g.pack_id
+        WHERE g.user_id = ? AND g.packs > 0
+        ORDER BY g.updated_at LIMIT 1`
     ).bind(user.id).first();
-  } catch { /* table not migrated yet; carry on with the cooldown only */ }
-  const useGrant = Boolean(granted && granted.packs > 0);
+  } catch { /* not migrated yet */ }
+
+  let granted = null;
+  if (!typed) {
+    try {
+      granted = await env.DB.prepare(
+        `SELECT packs FROM card_grants WHERE user_id = ?`
+      ).bind(user.id).first();
+    } catch { /* table not migrated yet; carry on with the cooldown only */ }
+  }
+  const useGrant = Boolean(typed) || Boolean(granted && granted.packs > 0);
 
   if (!useGrant && row && now - row.last_opened < COOLDOWN_MS) {
     const left = COOLDOWN_MS - (now - row.last_opened);
@@ -430,7 +444,16 @@ export async function openPack(env, interaction, record) {
       0x9E9E9E);
   }
 
-  const pulled = drawPack(set);
+  // A typed grant draws on its own pack's rules; everything else is the
+  // ordinary free pack.
+  const pulled = typed
+    ? drawPack(set, {
+        size: typed.size,
+        odds: safeJson(typed.odds),
+        pool: safeJson(typed.pool),
+        guarantee: RARITIES.includes(typed.guarantee) ? typed.guarantee : null,
+      })
+    : drawPack(set);
 
   // One row per driver per collection; a duplicate bumps the count.
   const stmts = pulled.map(c => env.DB.prepare(
@@ -442,9 +465,14 @@ export async function openPack(env, interaction, record) {
 
   if (useGrant) {
     // Spend the grant, leave the cooldown clock alone.
-    stmts.push(env.DB.prepare(
-      `UPDATE card_grants SET packs = packs - 1, updated_at = ? WHERE user_id = ?`
-    ).bind(now, user.id));
+    stmts.push(typed
+      ? env.DB.prepare(
+          `UPDATE pack_grant SET packs = packs - 1, updated_at = ?
+            WHERE user_id = ? AND pack_id = ?`
+        ).bind(now, user.id, typed.pack_id)
+      : env.DB.prepare(
+          `UPDATE card_grants SET packs = packs - 1, updated_at = ? WHERE user_id = ?`
+        ).bind(now, user.id));
     stmts.push(env.DB.prepare(
       `INSERT INTO card_packs (user_id, last_opened, total_packs, total_cards)
        VALUES (?, 0, 1, ?)
@@ -482,9 +510,15 @@ export async function openPack(env, interaction, record) {
   });
 
   const have = Object.keys(copies).length;
-  const left = useGrant ? (granted.packs - 1) : 0;
+  // Whichever queue was spent is the one with a count left on it.
+  const left = typed ? (typed.packs - 1)
+             : granted ? (granted.packs - 1)
+             : 0;
   const summary = {
-    title: `${user.global_name || user.username} opened a pack`,
+    // Naming the pack matters when it was a particular one: "opened a
+    // Podium Pack" is the whole point of having been given it.
+    title: `${user.global_name || user.username} opened ` +
+           (typed ? `${typed.emoji || '🃏'} ${typed.name}` : 'a pack'),
     description: lines.join('\n'),
     color: RARITY[best.rarity].colour,
     footer: { text: `${have}/${set.length} collected · ` +
@@ -635,6 +669,60 @@ function simple(title, description, color) {
 }
 
 /** Hand someone packs from the admin panel. */
+const safeJson = v => { try { return v ? JSON.parse(v) : null; } catch { return null; } };
+
+/**
+ * Put a specific card straight into someone's collection.
+ *
+ * For the things a pack cannot express — a prize, a replacement after a
+ * mistake, a one-off for an event. It writes the rarity the card has right
+ * now, the same as a pulled card does, so a driver's card re-grades with
+ * the championship like every other copy.
+ */
+export async function giveCard(env, userId, cardId, copies, record) {
+  const n = Math.max(1, Math.min(99, Number(copies) || 1));
+  const set = await fullSet(env, record);
+  const card = set.find(c => c.id === String(cardId))
+            || set.find(c => c.name.toLowerCase() === String(cardId).toLowerCase());
+  if (!card) throw new Error('no card by that name is in the set');
+
+  const now = Date.now();
+  await env.DB.prepare(
+    `INSERT INTO card_collection (user_id, class, driver_id, rarity, copies, first_at)
+     VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT (user_id, class, driver_id)
+     DO UPDATE SET copies = copies + excluded.copies, rarity = excluded.rarity`
+  ).bind(String(userId), SET, card.id, card.rarity, n, now).run();
+
+  const row = await env.DB.prepare(
+    `SELECT copies FROM card_collection WHERE user_id = ? AND class = ? AND driver_id = ?`
+  ).bind(String(userId), SET, card.id).first();
+  return { card, given: n, nowHolds: row ? row.copies : n };
+}
+
+/** Hand over packs of a particular type, which open on that pack's odds. */
+export async function grantPackType(env, userId, packId, count) {
+  const n = Math.max(1, Math.min(50, Number(count) || 1));
+  const pack = await env.DB.prepare(
+    `SELECT id, name, emoji FROM pack_type WHERE id = ?`).bind(String(packId)).first();
+  if (!pack) throw new Error('no such pack');
+
+  const now = Date.now();
+  await env.DB.prepare(
+    `INSERT INTO pack_grant (user_id, pack_id, packs, total, updated_at)
+     VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT (user_id, pack_id) DO UPDATE SET
+       packs = packs + excluded.packs,
+       total = total + excluded.packs,
+       updated_at = excluded.updated_at`
+  ).bind(String(userId), pack.id, n, n, now).run();
+
+  const row = await env.DB.prepare(
+    `SELECT packs FROM pack_grant WHERE user_id = ? AND pack_id = ?`
+  ).bind(String(userId), pack.id).first();
+  return { granted: n, pack, waiting: row ? row.packs : n };
+}
+
 export async function grantPacks(env, userId, count) {
   const n = Math.max(1, Math.min(50, Number(count) || 1));
   const now = Date.now();

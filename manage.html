@@ -877,24 +877,43 @@ textarea { resize:vertical; min-height:80px; }
       <div class="adm-section" id="sec-cards">
         <div class="sec-head"><h2>TRADING CARDS</h2></div>
 
-        <div class="form-card">
-          <h3>GIVE PACKS</h3>
-          <p class="bk-note">Hands someone extra packs on top of their free one every 8 hours.
-             They stay waiting until the person runs <code>/cards pack</code> in Discord, and a
-             bonus pack doesn't use up their free one.</p>
+        <div class="form-card" id="giveCard">
+          <h3>GIVE SOMETHING</h3>
+          <p class="bk-note">Hands a specific thing to one person. <b>Credits</b> are added to
+             what they already have, not set — use the member list further down if you need to
+             correct a balance outright. <b>Packs</b> wait until they run
+             <code>/cards pack</code> and never use up their free 8-hourly one; a pack given
+             this way opens on its own odds, so a Podium Pack really is a Podium Pack.
+             <b>Cards</b> go straight into their collection.</p>
           <div class="form-grid">
             <div class="form-group">
               <label class="fg-label">WHO</label>
               <select id="grantMember"><option value="">Load members first…</option></select>
             </div>
             <div class="form-group">
-              <label class="fg-label">HOW MANY</label>
-              <input id="grantCount" type="number" min="1" max="50" value="1">
+              <label class="fg-label">WHAT</label>
+              <select id="giveWhat" onchange="giveWhatChanged()">
+                <option value="credits">Credits</option>
+                <option value="pack">A pack</option>
+                <option value="card">A card</option>
+              </select>
+            </div>
+            <div class="form-group" id="giveWhichWrap" style="display:none">
+              <label class="fg-label">WHICH</label>
+              <select id="giveWhich"></select>
+            </div>
+            <div class="form-group">
+              <label class="fg-label" id="giveCountLabel">HOW MANY</label>
+              <input id="grantCount" type="number" min="1" max="1000000" value="1">
+            </div>
+            <div class="form-group" id="giveReasonWrap">
+              <label class="fg-label">WHAT FOR</label>
+              <input id="giveReason" placeholder="Won the sprint at Monza" maxlength="80">
             </div>
           </div>
           <div class="form-actions">
             <button class="btn btn-ghost" onclick="loadGrantMembers()">LOAD MEMBERS</button>
-            <button class="btn btn-white" onclick="givePacks()">GIVE PACKS</button>
+            <button class="btn btn-white" onclick="giveSomething()">GIVE IT</button>
             <span class="img-size" id="grantStatus"></span>
           </div>
         </div>
@@ -2777,28 +2796,82 @@ async function loadGrantMembers() {
     }
 }
 
-async function givePacks() {
+let givableCache = null;
+
+/** The packs and cards on offer, fetched once and reused. */
+async function loadGivable() {
+    if (givableCache) return givableCache;
+    givableCache = await econPost({ action: 'givable' });
+    return givableCache;
+}
+
+function giveWhatChanged() {
+    const what = document.getElementById('giveWhat').value;
+    const wrap = document.getElementById('giveWhichWrap');
+    const label = document.getElementById('giveCountLabel');
+    const count = document.getElementById('grantCount');
+    const reason = document.getElementById('giveReasonWrap');
+
+    // Credits need no "which", and the count means something different for
+    // each of the three, so the label says which.
+    wrap.style.display = what === 'credits' ? 'none' : '';
+    reason.style.display = what === 'credits' ? '' : 'none';
+    label.textContent = what === 'credits' ? 'HOW MUCH'
+                      : what === 'pack' ? 'HOW MANY PACKS' : 'HOW MANY COPIES';
+    count.max = what === 'credits' ? 1000000 : what === 'pack' ? 50 : 99;
+    if (what === 'credits') return;
+
+    const sel = document.getElementById('giveWhich');
+    sel.innerHTML = '<option value="">loading…</option>';
+    loadGivable().then(g => {
+        const list = what === 'pack'
+            ? (g.packs || []).map(p => ({ id: p.id, label: `${p.emoji || '🃏'} ${p.name}` }))
+            : (g.cards || []).map(c => ({ id: c.id,
+                label: `${(RMETA[c.rarity] || {}).icon || '⚪'} ${c.name}` +
+                       (c.team ? ` — ${c.team}` : '') }));
+        sel.innerHTML = list.length
+            ? list.map(x => `<option value="${esc(x.id)}">${esc(x.label)}</option>`).join('')
+            : '<option value="">nothing to give</option>';
+    }).catch(e => {
+        sel.innerHTML = '<option value="">could not load</option>';
+        toast('Could not load the list: ' + (e.message || 'unknown'), 'err');
+    });
+}
+
+async function giveSomething() {
     const userId = document.getElementById('grantMember').value;
-    const count  = parseInt(document.getElementById('grantCount').value, 10) || 1;
+    const what   = document.getElementById('giveWhat').value;
+    const which  = document.getElementById('giveWhich').value;
+    const amount = parseInt(document.getElementById('grantCount').value, 10) || 1;
     const st     = document.getElementById('grantStatus');
     if (!userId) { toast('Load members and pick someone first', 'err'); return; }
+    if (what !== 'credits' && !which) { toast('Pick what to give', 'err'); return; }
 
     const who = (grantMembers.find(m => m.id === userId) || {}).displayName || 'them';
+    const label = what === 'credits' ? `${amount} credits`
+        : (document.getElementById('giveWhich').selectedOptions[0] || {}).textContent || 'it';
+
+    // This hands out real value and there is no undo, so it asks once.
+    if (!confirm(`Give ${who} ${what === 'credits' ? label : `${amount} × ${label}`}?`)) return;
+
     st.textContent = 'giving…';
     try {
-        const res = await fetch(`${API_BASE.replace(/\/+$/,'')}/api/cards/grant`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json',
-                       ...(ADMIN_TOKEN ? { 'X-Admin-Token': ADMIN_TOKEN } : {}) },
-            body: JSON.stringify({ userId, count }),
-        });
-        const body = await res.json();
-        if (!res.ok || !body.ok) throw new Error(body.error || `HTTP ${res.status}`);
-        st.textContent = `${who} now has ${body.waiting} waiting`;
-        toast(`Gave ${who} ${body.granted} pack${body.granted !== 1 ? 's' : ''}`, 'ok');
+        const body = await econPost({ action: 'give', userId, what, id: which, amount,
+            reason: document.getElementById('giveReason').value });
+        if (what === 'credits') {
+            st.textContent = `${who} now has ${body.balance}`;
+            toast(`Gave ${who} ${amount} credits`, 'ok');
+        } else if (what === 'pack') {
+            st.textContent = `${body.waiting} waiting`;
+            toast(`Gave ${who} ${body.amount} × ${body.name}`, 'ok');
+        } else {
+            st.textContent = `${who} now holds ${body.nowHolds}`;
+            toast(`Gave ${who} ${body.amount} × ${body.name}`, 'ok');
+        }
+        await loadEcon(true);
     } catch (e) {
         st.textContent = '';
-        toast('Could not give packs: ' + (e.message || 'unknown'), 'err');
+        toast('Could not give that: ' + (e.message || 'unknown'), 'err');
     }
 }
 
@@ -6294,6 +6367,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // so the card form and the odds editor are usable before the economy
     // has come back from the Worker.
     try { buildRarityInputs(); } catch (e) {}
+    // The GIVE form defaults to credits, so it has to start in the shape
+    // credits needs rather than waiting for the dropdown to be touched.
+    try { giveWhatChanged(); } catch (e) {}
 });
 </script>
 <script type="module">

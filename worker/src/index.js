@@ -16,7 +16,7 @@
 
 import { verifyRequest, handleCommand, buildResults } from './discord.js';
 import { openPack, showCollection, showCard, showCollectors, grantPacks, CARD_VIEWS,
-         loadRarities } from './cards.js';
+         loadRarities, giveCard, grantPackType, fullSet } from './cards.js';
 import { COMMANDS } from './commands.js';
 import { handleAutocomplete } from './autocomplete.js';
 import { startBlackjack, playRoulette, handleComponent, sweepGames,
@@ -779,6 +779,63 @@ async function postEcon(request, env) {
         }
         return json({ ok: true, ...out }, null, request, env);
       }
+      /**
+       * One admin hand-out for all three things.
+       *
+       * Credits ADD rather than set — setBalance already sets, and working
+       * out "they have 1,240, I want to give them 500, so type 1,740" is
+       * exactly the arithmetic a computer should be doing. Both still
+       * exist because correcting a balance and rewarding someone are
+       * different jobs.
+       */
+      case 'give': {
+        const userId = String(body.userId || '').trim();
+        if (!/^\d{5,25}$/.test(userId)) {
+          return bad('a Discord user id is required', request, env, 422);
+        }
+        const what = String(body.what || '');
+        const count = Math.max(1, Math.round(Number(body.amount) || 1));
+
+        if (what === 'credits') {
+          const out = await adjust(env, userId, count,
+            String(body.reason || 'A gift from the stewards').slice(0, 80));
+          if (!out) return bad('could not change that balance', request, env, 500);
+          return json({ ok: true, what, amount: count, balance: out.balance },
+                      null, request, env);
+        }
+
+        if (what === 'pack') {
+          const out = await grantPackType(env, userId, body.id, count);
+          return json({ ok: true, what, amount: out.granted,
+                        name: out.pack.name, waiting: out.waiting }, null, request, env);
+        }
+
+        if (what === 'card') {
+          await loadRarities(env);
+          const record = await league(env).catch(() => ({}));
+          const out = await giveCard(env, userId, body.id, count, record);
+          return json({ ok: true, what, amount: out.given,
+                        name: out.card.name, nowHolds: out.nowHolds }, null, request, env);
+        }
+
+        return bad('give what? credits, pack or card', request, env, 422);
+      }
+
+      /** The cards and packs the GIVE panel can choose from. */
+      case 'givable': {
+        await loadRarities(env);
+        const record = await league(env).catch(() => ({}));
+        const [set, packs] = await Promise.all([
+          fullSet(env, record).catch(() => []),
+          env.DB.prepare(`SELECT id, name, emoji, price FROM pack_type ORDER BY sort, name`)
+            .all().then(r => r.results || []).catch(() => []),
+        ]);
+        return json({ ok: true, packs,
+                      cards: set.map(c => ({ id: c.id, name: c.name, rarity: c.rarity,
+                                             team: c.team || '' })) },
+                    null, request, env);
+      }
+
       case 'setBalance': {
         const userId = String(body.userId || '').trim();
         if (!/^\d{5,25}$/.test(userId)) return bad('a Discord user id is required', request, env, 422);
