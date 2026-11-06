@@ -6,7 +6,8 @@
  * person. So most of these tests feed the agent a bad answer and assert
  * that nothing was written.
  */
-import { parseReply, runAgent, onAgentButton, defer } from '../worker/src/agent.js';
+import { parseReply, readReply, repairJson, runAgent, onAgentButton, defer }
+  from '../worker/src/agent.js';
 import { toBase64, fromBase64, EDITABLE, openPullRequest } from '../worker/src/github.js';
 
 let pass = 0, fail = 0;
@@ -145,6 +146,43 @@ console.log('PARSING WHAT THE MODEL SAID');
 }
 
 /* ── base64 ────────────────────────────────────────────── */
+
+console.log('\nTHE THING MODELS ACTUALLY GET WRONG');
+{
+  // A find-and-replace over code is multi-line by definition, and models
+  // write those line breaks out literally rather than as \\n. JSON.parse
+  // rejects the whole answer over it, so this was failing every time.
+  const withRealBreaks =
+    '{"summary":"x","edits":[{"path":"styles.css","find":".a {\n  color: red;\n}","replace":".a {\n  color: blue;\n}"}]}';
+  const r = readReply(withRealBreaks);
+  ok('a raw line break inside a string is repaired', r.value !== null, r.why);
+  ok('and the newlines are kept, not dropped',
+     r.value && r.value.edits[0].find === '.a {\n  color: red;\n}',
+     JSON.stringify(r.value && r.value.edits[0].find));
+  ok('tabs too',
+     readReply('{"a":"x\ty"}').value.a === 'x\ty');
+  ok('a carriage return too',
+     readReply('{"a":"x\r\ny"}').value.a === 'x\r\ny');
+
+  // Repairing must not touch anything outside a string, or corrupt an
+  // answer that was already correct.
+  ok('well-formed json is left alone',
+     repairJson('{"a": "x\\ny",\n  "b": 1}') === '{"a": "x\\ny",\n  "b": 1}');
+  ok('an already-escaped newline is not double-escaped',
+     readReply('{"a":"x\\ny"}').value.a === 'x\ny');
+  ok('an escaped backslash at the end of a string does not desync',
+     readReply('{"a":"back\\\\","b":2}').value.b === 2);
+
+  // Truncation must never be silently closed up: a `replace` cut short
+  // still applies cleanly and would delete half a rule.
+  const cut = readReply('{"summary":"x","edits":[{"path":"styles.css","find":".a {');
+  ok('a cut-off answer is refused', cut.value === null);
+  ok('and known to be cut off, not merely broken', cut.why === 'cut', cut.why);
+  ok('prose with no json at all is told apart',
+     readReply('I would do that for you!').why === 'none');
+  ok('an empty answer is told apart', readReply('').why === 'empty');
+  ok('and valid json reports no complaint', readReply('{"a":1}').why === null);
+}
 
 console.log('\nBASE64 SURVIVES THE REAL FILES');
 {
@@ -303,7 +341,7 @@ console.log('\nWHEN THE MODEL IS WRONG, NOTHING HAPPENS');
      { summary: 'x', edits: [{ path: 'styles.css', find: '.footer', replace: '.footer' }] },
      /changes nothing/],
     ['no edits at all', { summary: 'x', edits: [] }, /no change/],
-    ['not json', 'I would change the hero title for you!', /not valid JSON/],
+    ['prose instead of a change', 'I would change the hero title for you!', /prose instead of a change/],
   ];
   for (const [name, reply, why] of cases) {
     const { sent, gh, env } = fakeEnv(reply);
@@ -409,6 +447,67 @@ console.log('\nTHE FILE CHANGING UNDERNEATH');
   ok('nothing was committed', !gh.some(c => c.method === 'PUT'));
   ok('and no pull request was opened', !gh.some(c => /\/pulls$/.test(c.url)));
   ok('it can be tried again', env.DB.rows.get(id).status === 'pending');
+}
+
+console.log('\nTHE MODEL IS HELD TO THE SHAPE WHERE IT CAN BE');
+{
+  const calls = [];
+  const { sent, env } = fakeEnv({ answer: 'fine' });
+  const real = env.AI.run.bind(env.AI);
+  env.AI.run = (model, input) => { calls.push(input); return real(model, input); };
+  await runAgent(env, ask, 'what size is the hero title');
+  ok('a schema is sent', !!(calls[0] || {}).response_format, JSON.stringify(Object.keys(calls[0] || {})));
+  ok('which pins the file to the editable list',
+     JSON.stringify(calls[0].response_format).includes('styles.css'));
+  ok('and nothing else', !JSON.stringify(calls[0].response_format).includes('workflows'));
+  ok('with room to answer', calls[0].max_tokens >= 2000, String(calls[0].max_tokens));
+  ok('one call is enough when it is accepted', calls.length === 1, String(calls.length));
+  ok('and the answer comes through', /fine/.test(JSON.stringify(sent[0])));
+}
+
+console.log('\nAND ASKED PLAINLY WHEN IT CANNOT BE');
+{
+  // Not every model on every version of the platform accepts a schema.
+  const calls = [];
+  const { sent, env } = fakeEnv({ answer: 'fine' });
+  const real = env.AI.run.bind(env.AI);
+  env.AI.run = (model, input) => {
+    calls.push(input);
+    if (input.response_format) throw new Error('response_format is not supported');
+    return real(model, input);
+  };
+  await runAgent(env, ask, 'what size is the hero title');
+  ok('it asks again without the schema', calls.length === 2, String(calls.length));
+  ok('and the second try carries no schema', !calls[1].response_format);
+  ok('so the answer still arrives', /fine/.test(JSON.stringify(sent[0])), JSON.stringify(sent[0]));
+
+  // But a used-up allowance must not be retried \u2014 that just spends more.
+  const spent = [];
+  const d = fakeEnv({ answer: 'x' });
+  d.env.AI.run = input => { spent.push(input); throw new Error('Neuron quota exceeded'); };
+  await runAgent(d.env, ask, 'what size is the hero title');
+  ok('a used-up allowance is not retried', spent.length === 1, String(spent.length));
+  ok('and is explained', /allowance is used up/.test(JSON.stringify(d.sent[0])));
+}
+
+console.log('\nAN ANSWER THAT ARRIVES ALREADY PARSED');
+{
+  // Constrained decoding can hand back an object rather than a string.
+  const { sent, env } = fakeEnv({ answer: 'x' });
+  env.AI.run = async () => ({ response: { answer: 'already an object' } });
+  await runAgent(env, ask, 'what size is the hero title');
+  ok('is used as it stands', /already an object/.test(JSON.stringify(sent[0])),
+     JSON.stringify(sent[0]));
+}
+
+console.log('\nBEING TOLD WHY, NOT JUST THAT IT FAILED');
+{
+  const { sent, env } = fakeEnv('{"summary":"x","edits":[{"path":"styles.css","find":".hero {');
+  await runAgent(env, ask, 'make the hero title smaller');
+  const body = JSON.stringify(sent[0]);
+  ok('a cut-off answer says so', /cut off/.test(body), body.slice(0, 160));
+  ok('and suggests a smaller request', /smaller change/.test(body));
+  ok('and stores nothing', env.DB.rows.size === 0);
 }
 
 console.log('\nTHE APPLICATION ID NEEDS NO CONFIGURING');
