@@ -171,7 +171,7 @@ export function checkEdit(files, edit) {
   const replace = String((edit || {}).replace == null ? '' : edit.replace);
 
   if (!Object.prototype.hasOwnProperty.call(files || {}, path)) {
-    return { ok: false, why: `${path || 'that file'} is not one the agent may edit` };
+    return { ok: false, why: `${path || 'that file'} is not one of the files it was shown` };
   }
   if (!find) return { ok: false, why: 'the edit did not say what to look for' };
   if (find === replace) return { ok: false, why: 'the edit changes nothing' };
@@ -197,4 +197,46 @@ export function diffOf(edit, limit = 900) {
   let body = minus.concat(plus).join('\n');
   if (body.length > limit) body = body.slice(0, limit - 3) + '...';
   return body;
+}
+
+/**
+ * Which files to even open.
+ *
+ * The agent may now edit most of the repository, but a Worker is capped
+ * at 50 outbound requests and reading everything on every question would
+ * be both slow and wasteful. So paths are ranked before anything is
+ * fetched, on the only evidence available at that point: the path itself.
+ *
+ * Most requests name no file at all — "make the hero smaller" says
+ * nothing about paths — so when nothing scores, the core site files are
+ * used. Naming a file in the request is what reaches the rest.
+ */
+export function rankPaths(paths, request, core = [], limit = 6) {
+  const words = keywords(request);
+  const scored = [];
+
+  for (const path of paths || []) {
+    const lower = String(path).toLowerCase();
+    const base = lower.split('/').pop();
+    const stem = base.replace(/\.[^.]+$/, '');
+    let total = 0;
+
+    words.forEach((w, i) => {
+      const weight = 1 / (1 + i * 0.35);
+      if (stem === w) total += 6 * weight;            // "manage"
+      else if (base.includes(w)) total += 3 * weight; // "manage.html"
+      else if (lower.includes(w)) total += 1 * weight; // "worker/src/..."
+    });
+
+    if (total > 0) scored.push({ path, total });
+  }
+
+  scored.sort((a, b) => b.total - a.total || a.path.length - b.path.length);
+  const picked = scored.slice(0, limit).map(s => s.path);
+
+  for (const c of core) {
+    if (picked.length >= limit + core.length) break;
+    if (!picked.includes(c)) picked.push(c);
+  }
+  return picked;
 }

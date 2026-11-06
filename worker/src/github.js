@@ -16,8 +16,57 @@ const OWNER = 'fp-league';
 const REPO = 'FGE';
 const BASE = 'main';
 
-/** The only files the agent may change. */
-export const EDITABLE = ['index.html', 'styles.css', 'app.js'];
+/**
+ * What the agent may change, and the two things it may not.
+ *
+ * It used to be three files. That was too tight to be useful — the admin
+ * panel alone is 296 KB of HTML it could not touch. So the rule is now
+ * the other way round: everything, except what would let a bad change
+ * hide itself.
+ *
+ *   .github/      the checks. An agent that can edit its own CI can
+ *                 switch off the review that was meant to catch it, and
+ *                 one careless approval removes every later one too.
+ *   migrations/   replayed in full on every migration run, so a dropped
+ *                 table is not a bad deploy to roll back, it is the
+ *                 league's data gone.
+ *
+ * Nobody is going to ask a Discord bot to rewrite a workflow from their
+ * phone, so excluding these costs nothing and closes the only two doors
+ * that do not open again.
+ */
+const DENY = [/^\.github\//, /^worker\/migrations\//, /(^|\/)node_modules\//, /^\.git\//];
+
+/** Files worth showing a model: text it can reason about, nothing binary. */
+const TEXT = /\.(html?|css|m?js|json|md|txt|sql|toml|ya?ml|svg|xml)$/i;
+
+/** Bigger than this and a single file would eat the whole context budget. */
+const MAX_FILE = 400 * 1024;
+
+/**
+ * The files most requests are about.
+ *
+ * Used when nothing in the request names a file, which is most of the
+ * time — "make the hero smaller" says nothing about paths.
+ */
+export const CORE = ['index.html', 'styles.css', 'app.js'];
+
+export const mayEdit = path =>
+  typeof path === 'string' && !!path && TEXT.test(path) && !DENY.some(d => d.test(path));
+
+/**
+ * Changes that alter how the agent itself is checked.
+ *
+ * These are not forbidden — asking the agent to improve its own code is
+ * reasonable, and every change still goes past a person and through CI.
+ * But a diff that quietly moves the guard rails should not look like a
+ * diff that changes a colour, so the proposal says so out loud.
+ */
+const SENSITIVE = [
+  /^worker\/src\/(agent|github|context)\.js$/,
+  /^tests\//, /^package(-lock)?\.json$/, /^worker\/wrangler\.toml$/,
+];
+export const isSensitive = path => SENSITIVE.some(r => r.test(String(path)));
 
 const api = (path) => `https://api.github.com/repos/${OWNER}/${REPO}${path}`;
 
@@ -45,41 +94,91 @@ export function fromBase64(b64) {
 /* ── Reading ───────────────────────────────────────────── */
 
 /**
- * The editable files as they stand on main.
+ * Every path in the repository the agent is allowed to edit.
  *
- * Cached in KV for a few minutes: the agent reads all three on every
- * request and they change a few times a week, so going to the CDN each
- * time is three round trips to learn nothing new.
+ * One API call for the whole tree, cached, so that deciding which files
+ * to look at does not cost a request per file.
  */
-export async function readFiles(env, ttlMs = 5 * 60 * 1000) {
-  const key = 'agent/files';
+export async function listTree(env, ttlMs = 10 * 60 * 1000) {
+  const key = 'agent/tree';
   if (env.IMAGES_KV) {
     try {
       const hit = await env.IMAGES_KV.get(key, 'json');
-      if (hit && Date.now() - hit.at < ttlMs) return hit.files;
+      if (hit && Date.now() - hit.at < ttlMs) return hit.paths;
     } catch { /* fall through and fetch */ }
   }
 
-  const files = {};
-  await Promise.all(EDITABLE.map(async path => {
-    const res = await fetch(
-      `https://raw.githubusercontent.com/${OWNER}/${REPO}/${BASE}/${path}`,
-      { headers: { 'User-Agent': 'fge-agent' }, cf: { cacheTtl: 60 } });
-    if (!res.ok) throw new Error(`could not read ${path}: ${res.status}`);
-    files[path] = await res.text();
-  }));
+  // Deliberately not gh(): the repository is public, so listing it needs
+  // no token, and the agent should still be able to propose changes
+  // before anyone has set GITHUB_TOKEN. The token is used when it is
+  // there only to get the better rate limit.
+  const res = await fetch(api(`/git/trees/${BASE}?recursive=1`), {
+    headers: {
+      Accept: 'application/vnd.github+json',
+      'User-Agent': 'fge-agent',
+      ...(env.GITHUB_TOKEN ? { Authorization: `Bearer ${env.GITHUB_TOKEN}` } : {}),
+    },
+  });
+  if (!res.ok) throw new Error(`could not list the repository: HTTP ${res.status}`);
+  const tree = await res.json();
+  const paths = (tree.tree || [])
+    .filter(e => e.type === 'blob' && (e.size || 0) <= MAX_FILE && mayEdit(e.path))
+    .map(e => e.path);
 
   if (env.IMAGES_KV) {
     try {
-      await env.IMAGES_KV.put(key, JSON.stringify({ at: Date.now(), files }),
+      await env.IMAGES_KV.put(key, JSON.stringify({ at: Date.now(), paths }),
                               { expirationTtl: 3600 });
     } catch { /* caching is an optimisation, not a requirement */ }
   }
+  return paths;
+}
+
+/**
+ * Read the named files as they stand on main.
+ *
+ * Only the shortlist, never the whole repository: a Worker is capped at
+ * 50 outbound requests and there are more files than that. Each is cached
+ * on its own, so a second question about the same area costs nothing.
+ *
+ * A cached file can be out of date. That is safe rather than merely
+ * tolerable, because writing re-reads the file from GitHub and refuses if
+ * the text it meant to replace is no longer there.
+ */
+export async function readFiles(env, paths = CORE, ttlMs = 5 * 60 * 1000) {
+  const want = [...new Set(paths.filter(mayEdit))].slice(0, 12);
+  const files = {};
+  const now = Date.now();
+
+  await Promise.all(want.map(async path => {
+    const key = `agent/file/${path}`;
+    if (env.IMAGES_KV) {
+      try {
+        const hit = await env.IMAGES_KV.get(key, 'json');
+        if (hit && now - hit.at < ttlMs) { files[path] = hit.text; return; }
+      } catch { /* fall through and fetch */ }
+    }
+    const res = await fetch(
+      `https://raw.githubusercontent.com/${OWNER}/${REPO}/${BASE}/${path}`,
+      { headers: { 'User-Agent': 'fge-agent' }, cf: { cacheTtl: 60 } });
+    // One missing file must not sink the whole request: the tree may be
+    // a few minutes ahead of what the CDN is serving.
+    if (!res.ok) { console.warn(`agent: could not read ${path}: ${res.status}`); return; }
+    const text = await res.text();
+    files[path] = text;
+    if (env.IMAGES_KV) {
+      try { await env.IMAGES_KV.put(key, JSON.stringify({ at: now, text }),
+                                    { expirationTtl: 3600 }); }
+      catch { /* caching is an optimisation */ }
+    }
+  }));
+
+  if (!Object.keys(files).length) throw new Error('could not read any of those files');
   return files;
 }
 
 export const forgetFiles = env =>
-  (env.IMAGES_KV ? env.IMAGES_KV.delete('agent/files').catch(() => {}) : Promise.resolve());
+  (env.IMAGES_KV ? env.IMAGES_KV.delete('agent/tree').catch(() => {}) : Promise.resolve());
 
 /* ── Writing ───────────────────────────────────────────── */
 

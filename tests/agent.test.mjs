@@ -8,7 +8,7 @@
  */
 import { parseReply, readReply, repairJson, runAgent, onAgentButton, defer }
   from '../worker/src/agent.js';
-import { toBase64, fromBase64, EDITABLE, openPullRequest } from '../worker/src/github.js';
+import { toBase64, fromBase64, mayEdit, isSensitive, CORE } from '../worker/src/github.js';
 
 let pass = 0, fail = 0;
 const ok = (n, c, x) => { if (c) pass++; else { fail++; console.log('  FAIL  ' + n + (x ? '  →  ' + x : '')); } };
@@ -19,6 +19,8 @@ const FILES = {
   'index.html': '<h1 class="hero-title">FGE</h1>\n\n<p class="hero-sub">Endurance</p>\n',
   'styles.css': '.hero-title {\n  font-size: 64px;\n  color: #fff;\n}\n\n.footer {\n  background: #111;\n}\n',
   'app.js': 'function renderHero() {\n  return 1;\n}\n',
+  'manage.html': '<button id="save" class="save-button">Save</button>\n',
+  'worker/src/economy.js': 'export const PAYOUT = 100;\n',
 };
 
 /** Just enough D1 to exercise the insert, the guarded claim and the read. */
@@ -78,6 +80,13 @@ function fakeEnv(reply, opts = {}) {
     if (u.includes('/webhooks/')) {
       sent.push(JSON.parse(init.body));
       return { ok: true, status: 200, json: async () => ({}) };
+    }
+    if (u.includes('/git/trees/')) {
+      return { ok: true, status: 200, json: async () => ({ tree:
+        Object.keys(FILES).concat('manage.html', 'worker/src/economy.js',
+                                  '.github/workflows/checks.yml',
+                                  'worker/migrations/016-agent.sql')
+          .map(path => ({ type: 'blob', path, size: 100 })) }) };
     }
     if (u.startsWith('https://api.github.com/')) {
       gh.push({ url: u, method: init.method || 'GET',
@@ -202,9 +211,29 @@ console.log('\nBASE64 SURVIVES THE REAL FILES');
 
 console.log('\nWHAT THE AGENT MAY TOUCH');
 {
-  ok('is a fixed list of three', EDITABLE.length === 3, EDITABLE.join());
-  ok('and holds no workflow, worker or config file',
-     EDITABLE.every(p => !/\.github|worker|wrangler|\.yml|\.json/.test(p)), EDITABLE.join());
+  // It may now edit the repository, which is the point. The two
+  // exclusions are the ones a bad change could use to hide itself.
+  ok('the site files, obviously', ['index.html', 'styles.css', 'app.js'].every(mayEdit));
+  ok('the admin panel, which used to be out of reach', mayEdit('manage.html'));
+  ok('the worker source', mayEdit('worker/src/economy.js'));
+  ok('its own code', mayEdit('worker/src/agent.js'));
+
+  ok('but never the checks that review it',
+     !mayEdit('.github/workflows/checks.yml'));
+  ok('nor any workflow', !mayEdit('.github/workflows/migrate.yml'));
+  ok('nor a migration, which is replayed in full and could drop a table',
+     !mayEdit('worker/migrations/016-agent.sql'));
+  ok('nor anything binary', !mayEdit('porsche.webp') && !mayEdit('tests/fixtures/real.png'));
+  ok('nor a path that is not a string', !mayEdit(null) && !mayEdit(undefined) && !mayEdit(''));
+
+  // Allowed, but the approver should be told.
+  ok('its own code is flagged', isSensitive('worker/src/agent.js'));
+  ok('so are the tests', isSensitive('tests/agent.test.mjs'));
+  ok('and the worker config', isSensitive('worker/wrangler.toml'));
+  ok('a stylesheet is not', !isSensitive('styles.css'));
+  ok('nor the admin panel', !isSensitive('manage.html'));
+
+  ok('the fallback files are the site ones', CORE.length === 3, CORE.join());
 }
 
 /* ── Asking ────────────────────────────────────────────── */
@@ -331,12 +360,12 @@ console.log('\nWHEN THE MODEL IS WRONG, NOTHING HAPPENS');
     ['an ambiguous find',
      { summary: 'x', edits: [{ path: 'styles.css', find: '}', replace: '} ' }] },
      /appears \d+ times/],
-    ['a file it may not touch',
+    ['a workflow it may never touch',
      { summary: 'x', edits: [{ path: '.github/workflows/checks.yml', find: 'on:', replace: '' }] },
-     /may edit/],
-    ['a worker file',
+     /was shown/],
+    ['a file it was not shown',
      { summary: 'x', edits: [{ path: 'worker/src/index.js', find: 'fetch', replace: '' }] },
-     /may edit/],
+     /was shown/],
     ['an edit that changes nothing',
      { summary: 'x', edits: [{ path: 'styles.css', find: '.footer', replace: '.footer' }] },
      /changes nothing/],
@@ -424,8 +453,11 @@ console.log('\nA REQUEST THAT MATCHES NOTHING');
   await runAgent(env, ask, 'zzzqqq wibble');
   ok('does not call the model at all', !/wibble/.test(JSON.stringify(sent[0])),
      JSON.stringify(sent[0]));
-  ok('and suggests what to say instead',
-     /hero headline|footer bar/.test(JSON.stringify(sent[0])), JSON.stringify(sent[0]));
+  ok('and names the files it actually looked at',
+     /index\.html, styles\.css, app\.js/.test(JSON.stringify(sent[0])),
+     JSON.stringify(sent[0]));
+  ok('so the next try can name a different one',
+     /Name the file/.test(JSON.stringify(sent[0])));
   ok('nothing is stored', env.DB.rows.size === 0);
 }
 
@@ -508,6 +540,36 @@ console.log('\nBEING TOLD WHY, NOT JUST THAT IT FAILED');
   ok('a cut-off answer says so', /cut off/.test(body), body.slice(0, 160));
   ok('and suggests a smaller request', /smaller change/.test(body));
   ok('and stores nothing', env.DB.rows.size === 0);
+}
+
+console.log('\nIT CAN NOW REACH PAST THE THREE SITE FILES');
+{
+  const { sent, env } = fakeEnv({
+    summary: 'Make the save button green',
+    edits: [{ path: 'manage.html', find: 'class="save-button"',
+              replace: 'class="save-button green"', why: 'asked for green' }],
+  });
+  await runAgent(env, ask, 'in manage.html make the save button green');
+  const body = JSON.stringify(sent[0]);
+  ok('the admin panel can be edited', /Proposed change/.test(body), body.slice(0, 200));
+  ok('and the diff names it', /manage\.html/.test(body));
+  ok('it is not flagged as risky', !/guard rails/.test(body));
+}
+
+console.log('\nAND SAYS SO WHEN IT TOUCHES ITS OWN GUARD RAILS');
+{
+  FILES['worker/src/agent.js'] = "const MODEL = 'a';\n";
+  const { sent, env } = fakeEnv({
+    summary: 'Change the model',
+    edits: [{ path: 'worker/src/agent.js', find: "const MODEL = 'a';",
+              replace: "const MODEL = 'b';", why: 'asked' }],
+  });
+  await runAgent(env, ask, 'in worker/src/agent.js change the model');
+  const body = JSON.stringify(sent[0]);
+  ok('it is still allowed', /Proposed change/.test(body), body.slice(0, 200));
+  ok('but the approver is warned', /guard rails/.test(body), body.slice(0, 200));
+  ok('and told to read it closely', /Read it closely/.test(body));
+  delete FILES['worker/src/agent.js'];
 }
 
 console.log('\nTHE APPLICATION ID NEEDS NO CONFIGURING');

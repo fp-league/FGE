@@ -8,7 +8,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
-import { keywords, chunk, score, pickContext, checkEdit, diffOf }
+import { keywords, chunk, score, pickContext, checkEdit, diffOf, rankPaths }
   from '../worker/src/context.js';
 
 let pass = 0, fail = 0;
@@ -90,6 +90,30 @@ console.log('\nTHE BUDGET HOLDS');
   ok('rather than everything', none.text === '');
 }
 
+console.log('\nCHOOSING WHICH FILES TO EVEN OPEN');
+{
+  const tree = ['index.html', 'styles.css', 'app.js', 'manage.html', 'sw.js',
+                'worker/src/economy.js', 'worker/src/index.js', 'lib/fx.js',
+                'tests/econ.test.mjs', 'robots.txt'];
+  const CORE = ['index.html', 'styles.css', 'app.js'];
+
+  const named = rankPaths(tree, 'in manage.html make the save button green', CORE);
+  ok('a file named in the request is picked', named.includes('manage.html'), named.join());
+  ok('and comes first', named[0] === 'manage.html', named.join());
+
+  const economy = rankPaths(tree, 'fix the economy payout', CORE);
+  ok('a word matching a filename reaches the worker',
+     economy.includes('worker/src/economy.js'), economy.join());
+
+  const vague = rankPaths(tree, 'make the hero title smaller', CORE);
+  ok('a request naming no file falls back to the site files',
+     CORE.every(c => vague.includes(c)), vague.join());
+
+  const capped = rankPaths(tree, 'index styles app manage worker economy lib tests robots', CORE, 6);
+  ok('the shortlist is capped', capped.length <= 9, String(capped.length));
+  ok('well under the 50-request ceiling a Worker gets', capped.length < 50);
+}
+
 console.log('\nEDITS ARE CHECKED BEFORE ANYONE SEES THEM');
 {
   const files = { 'a.css': '.hero { color: red; }\n.foot { color: red; }\n' };
@@ -108,7 +132,7 @@ console.log('\nEDITS ARE CHECKED BEFORE ANYONE SEES THEM');
   ok('ambiguous text is caught', twice.ok === false);
   ok('and says how many times', /2 times/.test(twice.why), twice.why);
 
-  ok('a file off the list is refused',
+  ok('a file it was not shown is refused',
      checkEdit(files, { path: 'worker/src/index.js', find: 'x', replace: 'y' }).ok === false);
   ok('an empty find is refused', checkEdit(files, { path: 'a.css', find: '', replace: 'y' }).ok === false);
   ok('a no-op is refused',
