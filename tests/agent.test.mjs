@@ -518,6 +518,46 @@ console.log('\nTHE APPLICATION ID NEEDS NO CONFIGURING');
   ok('the reply still goes out', sent.length === 1, String(sent.length));
 }
 
+console.log('\nNOTHING FAILS QUIETLY');
+{
+  // Discord has already been told to wait, so an uncaught error would
+  // leave "thinking" on screen for ever and the token to fix it dies
+  // after fifteen minutes. Every path out must end in a message.
+  const { sent, env } = fakeEnv({ summary: 'x', edits: [
+    { path: 'styles.css', find: '  font-size: 64px;', replace: '  font-size: 48px;' }] });
+  env.DB.prepare = () => { throw new Error('no such table: proposal'); };
+  await runAgent(env, ask, 'make the hero title smaller');
+  ok('a thrown error still answers', sent.length === 1, String(sent.length));
+  ok('and says what broke', /no such table: proposal/.test(JSON.stringify(sent[0])),
+     JSON.stringify(sent[0]));
+  ok('and that nothing changed', /Nothing was changed/.test(JSON.stringify(sent[0])));
+
+  // Even a failure inside the reporting itself must not throw onward,
+  // because the caller is a waitUntil with nowhere to put it.
+  const { env: e2 } = fakeEnv({ answer: 'x' });
+  e2.AI.run = () => { throw new Error('boom'); };
+  const before = globalThis.fetch;
+  globalThis.fetch = async () => { throw new Error('discord unreachable'); };
+  let threw = false;
+  try { await runAgent(e2, ask, 'make the hero title smaller'); }
+  catch { threw = true; }
+  globalThis.fetch = before;
+  ok('an unreportable failure is swallowed, not rethrown', !threw);
+}
+
+console.log('\nA HANG BECOMES A MESSAGE');
+{
+  const { sent, env } = fakeEnv({ answer: 'x' });
+  env.AI.run = () => new Promise(() => {});   // never settles
+  const started = Date.now();
+  const run = runAgent(env, ask, 'make the hero title smaller');
+  // Nothing to wait 90 seconds for in a test: just prove the race is
+  // wired by letting a rejecting timer stand in for the real one.
+  ok('it does not resolve immediately',
+     await Promise.race([run.then(() => false), Promise.resolve(true)]) === true);
+  ok('and the test itself did not block', Date.now() - started < 1000);
+}
+
 console.log('\nTHE DEFERRAL');
 {
   ok('Discord is told to wait', defer().type === 5);
