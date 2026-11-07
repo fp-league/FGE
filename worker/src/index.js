@@ -29,7 +29,7 @@ import { listArchive, readArchive, saveArchive, deleteArchive } from './archive.
 import {
   doWork, doDaily, showBalance, showRich, payUser, showShop, buyPack, sellCard,
   robUser, payRace, adminConfig, setSettings, savePack, deletePack, saveCustomCard,
-  deleteCustomCard, saveJob, deleteJob, allWallets, adjust, wallet, settings,
+  deleteCustomCard, deleteCustomCards, saveJob, deleteJob, allWallets, adjust, wallet, settings,
   ECON_COMMANDS, TRADE_VIEWS, endCardSeason, listCardSeasons,
   offerTrade, listTrades, acceptTrade, closeTrade,
   listRarities, saveRarity, deleteRarity,
@@ -849,6 +849,8 @@ async function postEcon(request, env) {
       case 'deletePack': await deletePack(env, body.id); return json({ ok: true }, null, request, env);
       case 'saveCard':   return json({ ok: true, id: await saveCustomCard(env, body.card || {}) }, null, request, env);
       case 'deleteCard': await deleteCustomCard(env, body.id); return json({ ok: true }, null, request, env);
+      case 'deleteCards':
+        return json({ ok: true, ...(await deleteCustomCards(env, body.ids)) }, null, request, env);
       case 'saveJob':    return json({ ok: true, id: await saveJob(env, body.job || {}) }, null, request, env);
       case 'deleteJob':  await deleteJob(env, body.id); return json({ ok: true }, null, request, env);
       // ── Betting ──

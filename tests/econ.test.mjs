@@ -109,6 +109,12 @@ function makeDB() {
     }
     if (/DELETE FROM pack_type/.test(q)) { t.pack_type.delete(a[0]); return {}; }
 
+    // Before the SELECTs, not after: "DELETE FROM custom_card WHERE id = ?"
+    // also contains "FROM custom_card", so the loose pattern below was
+    // answering it with a list of rows and deleting nothing. Every delete
+    // of a custom card quietly did nothing here, which is why no test ever
+    // caught it.
+    if (/DELETE FROM custom_card/.test(q)) { t.custom_card.delete(a[0]); return {}; }
     if (/FROM custom_card WHERE class/.test(q))
       return { results: [...t.custom_card.values()].filter(c => c.class === a[0] && c.enabled !== 0) };
     if (/FROM custom_card/.test(q)) return { results: [...t.custom_card.values()] };
@@ -117,7 +123,6 @@ function makeDB() {
         image: a[5], blurb: a[6], enabled: a[7], sort: a[8] });
       return {};
     }
-    if (/DELETE FROM custom_card/.test(q)) { t.custom_card.delete(a[0]); return {}; }
 
     if (/SELECT driver_id, rarity, copies FROM card_collection/.test(q))
       return { results: [...t.card_collection.values()]
@@ -816,6 +821,50 @@ console.log('\nCard seasons');
   catch (err) { threw = err.message; }
   ok('ending a season nobody collected in is refused',
      /nobody holds any cards/.test(threw || ''), threw);
+}
+
+console.log('\nDELETING A BATCH OF CUSTOM CARDS');
+{
+  const e = env();
+  const mk = (id, rarity) => e._t.custom_card.set(id, { id, name: id, rarity, class: BUCKET });
+  mk('c:pfp-ben', 'common'); mk('c:pfp-sam', 'common'); mk('c:pfp-joe', 'common');
+  mk('c:gold-ben', 'legendary'); mk('c:gold-sam', 'legendary');
+
+  // Two people hold copies of the cards about to go.
+  e._t.card_collection.set('1|c:pfp-ben', { user_id: '1', class: BUCKET, driver_id: 'c:pfp-ben', copies: 2 });
+  e._t.card_collection.set('2|c:pfp-ben', { user_id: '2', class: BUCKET, driver_id: 'c:pfp-ben', copies: 1 });
+  e._t.card_collection.set('1|c:gold-ben', { user_id: '1', class: BUCKET, driver_id: 'c:gold-ben', copies: 1 });
+
+  const out = await econ.deleteCustomCards(e, ['c:pfp-ben', 'c:pfp-sam', 'c:pfp-joe']);
+  ok('it reports how many went', out.deleted === 3, JSON.stringify(out));
+  ok('the old commons are gone', !e._t.custom_card.has('c:pfp-ben') &&
+     !e._t.custom_card.has('c:pfp-sam') && !e._t.custom_card.has('c:pfp-joe'));
+  ok('the new ones are untouched', e._t.custom_card.has('c:gold-ben') &&
+     e._t.custom_card.has('c:gold-sam'), String(e._t.custom_card.size));
+
+  // A card nobody can render must not stay in a collection.
+  ok('copies people pulled go too',
+     ![...e._t.card_collection.values()].some(r => r.driver_id === 'c:pfp-ben'),
+     JSON.stringify([...e._t.card_collection.values()]));
+  ok('but only of the deleted cards',
+     [...e._t.card_collection.values()].some(r => r.driver_id === 'c:gold-ben'));
+
+  // The things that would make a bulk delete dangerous.
+  ok('nothing selected deletes nothing', (await econ.deleteCustomCards(e, [])).deleted === 0);
+  ok('and neither does rubbish', (await econ.deleteCustomCards(e, null)).deleted === 0);
+  ok('the other cards survived all that', e._t.custom_card.size === 2, String(e._t.custom_card.size));
+
+  const dupes = await econ.deleteCustomCards(e, ['c:gold-sam', 'c:gold-sam', '']);
+  ok('a repeated id counts once', dupes.deleted === 1, JSON.stringify(dupes));
+
+  // More than one chunk, since D1 will not take an unbounded batch.
+  const e2 = env();
+  const many = [];
+  for (let i = 0; i < 60; i++) { const id = `c:x${i}`; many.push(id);
+    e2._t.custom_card.set(id, { id, name: id, rarity: 'common', class: BUCKET }); }
+  const big = await econ.deleteCustomCards(e2, many);
+  ok('a batch larger than one chunk still clears', big.deleted === 60, JSON.stringify(big));
+  ok('and leaves nothing behind', e2._t.custom_card.size === 0, String(e2._t.custom_card.size));
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

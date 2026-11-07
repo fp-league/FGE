@@ -227,6 +227,28 @@ console.log('\nRACE CONTROL — shortcuts and quali grid (source)');
   ok('announce sends only class and round', /JSON\.stringify\(\{ class: adminClass\.toLowerCase\(\), round \}\)/.test(m));
 }
 
+console.log('\nCUSTOM CARDS — clearing a batch of old art');
+{
+  const m = read('manage.html');
+  ok('rows can be ticked', /class="cc-tick" data-id=/.test(m));
+  ok('a rarity chip takes the whole tier', /function ecPickRarity/.test(m));
+  ok('clicking it again lets them go', /allOn \? ccPicked\.delete\(c\.id\) : ccPicked\.add\(c\.id\)/.test(m));
+  ok('the bar only exists when something is picked', /bar\.style\.display = n \? 'flex' : 'none'/.test(m));
+  ok('deleting a batch still asks first', /showDelConfirm\(this, 'ecDeletePicked\(\)'\)/.test(m));
+  ok('a card deleted elsewhere cannot stay selected',
+     /ccPicked\.forEach\(id => \{ if \(!live\.has\(id\)\) ccPicked\.delete\(id\); \}\)/.test(m));
+  ok('the one-at-a-time delete is still there', /ecDeleteCard\(/.test(m));
+  ok('the tick has a label for screen readers', /aria-label="Select \$\{esc\(c\.name\)\}"/.test(m));
+  ok('and the chip is reachable by keyboard', /onkeydown="if\(event\.key==='Enter'/.test(m));
+
+  const i = read('worker/src/index.js');
+  ok('the worker takes a list', /case 'deleteCards'/.test(i));
+  const e = read('worker/src/economy.js');
+  ok('which is capped', /\.slice\(0, 200\)/.test(e));
+  ok('and chunked, because D1 will not take an unbounded batch',
+     /const CHUNK = 25/.test(e));
+}
+
 console.log('\nWORKER — announce endpoint');
 {
   const i = read('worker/src/index.js');

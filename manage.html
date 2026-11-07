@@ -219,6 +219,12 @@ textarea { resize:vertical; min-height:80px; }
 .ec-odds label i { width:9px; height:9px; border-radius:50%; background:var(--tc,#888);
   display:inline-block; flex:0 0 auto; }
 .ec-odds input { width:82px; }
+.cc-chip { cursor:pointer; user-select:none; }
+.cc-chip:hover, .cc-chip:focus-visible { outline:2px solid var(--tc); outline-offset:2px; }
+.cc-tick { width:1rem; height:1rem; accent-color:#E10600; cursor:pointer; flex:none; }
+.cc-pickbar { display:flex; align-items:center; justify-content:space-between;
+  gap:0.7rem; padding:0.5rem 0.6rem; margin-bottom:0.5rem; border-radius:6px;
+  background:rgba(225,6,0,0.10); border:1px solid rgba(225,6,0,0.35); }
 .ec-row { display:flex; align-items:center; gap:0.7rem; padding:0.45rem 0.6rem;
   border-bottom:1px solid rgba(255,255,255,0.07); }
 .ec-row:hover { background:rgba(255,255,255,0.03); }
@@ -4183,20 +4189,90 @@ async function ecDeleteCard(id) {
     } catch (e) { toast('Could not delete: ' + (e.message || 'unknown'), 'err'); }
 }
 
+let ccPicked = new Set();
+
+/** Tick or untick one card. */
+function ecPick(id, on) {
+    if (on) ccPicked.add(id); else ccPicked.delete(id);
+    ecPickBar();
+}
+
+/**
+ * Clicking a rarity chip takes the whole tier.
+ *
+ * Replacing art happens a tier at a time — every old Common goes, the new
+ * ones come in — so the counts already on screen are the right handle for
+ * it. Clicking again lets them go.
+ */
+function ecPickRarity(tier) {
+    const list = ((econ && econ.cards) || []).filter(c => c.rarity === tier);
+    const allOn = list.length && list.every(c => ccPicked.has(c.id));
+    list.forEach(c => (allOn ? ccPicked.delete(c.id) : ccPicked.add(c.id)));
+    renderEconCards();
+}
+
+function ecPickNone() { ccPicked = new Set(); renderEconCards(); }
+
+/** The bar only exists while something is selected. */
+function ecPickBar() {
+    const bar = document.getElementById('ccPickBar');
+    if (!bar) return;
+    const n = ccPicked.size;
+    bar.style.display = n ? 'flex' : 'none';
+    const label = document.getElementById('ccPickCount');
+    if (label) label.textContent = `${n} selected`;
+    document.querySelectorAll('#ecCards input[type=checkbox]').forEach(b => {
+        b.checked = ccPicked.has(b.dataset.id);
+    });
+}
+
+async function ecDeletePicked() {
+    const ids = [...ccPicked];
+    if (!ids.length) return;
+    try {
+        const out = await econPost({ action: 'deleteCards', ids });
+        if (ids.includes(editingCard)) ecNewCard();
+        ccPicked = new Set();
+        toast(`${out.deleted} cards deleted, and pulled from everyone who had them`, 'ok');
+        await loadEcon(true);
+    } catch (e) { toast('Could not delete: ' + (e.message || 'unknown'), 'err'); }
+}
+
 function renderEconCards() {
     const box = document.getElementById('ecCards');
     if (!box) return;
     const list = (econ && econ.cards) || [];
     if (!list.length) {
+        ccPicked = new Set();
         box.innerHTML = '<p class="bk-note">No custom cards yet. The set is drivers only.</p>';
+        ecPickBar();
         return;
     }
+    // A card that has since been deleted must not stay selected.
+    const live = new Set(list.map(c => c.id));
+    ccPicked.forEach(id => { if (!live.has(id)) ccPicked.delete(id); });
+
     const counts = {};
     list.forEach(c => { counts[c.rarity] = (counts[c.rarity] || 0) + 1; });
     box.innerHTML = `<div class="rc-entry-acts" style="margin-bottom:0.6rem">${
         RORDER.slice().reverse().filter(t => counts[t]).map(t =>
-          `<span class="tc-chip-adm" style="--tc:${RTIER[t][1]}"><i></i>${RTIER[t][0]} <b>${counts[t]}</b></span>`).join('')
-      }</div>` + list.map(c => `<div class="ec-row${c.enabled ? '' : ' ec-off'}">
+          `<span class="tc-chip-adm cc-chip" style="--tc:${RTIER[t][1]}" role="button" tabindex="0"
+                 title="Select every ${RTIER[t][0]} card"
+                 onclick="ecPickRarity('${esc(t)}')"
+                 onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();ecPickRarity('${esc(t)}')}"
+            ><i></i>${RTIER[t][0]} <b>${counts[t]}</b></span>`).join('')
+      }</div>
+      <div class="cc-pickbar" id="ccPickBar" style="display:none">
+        <span class="ec-mono" id="ccPickCount"></span>
+        <div class="td-actions">
+          <button class="btn btn-ghost btn-sm" onclick="ecPickNone()">CLEAR</button>
+          <button class="btn btn-danger btn-sm del-trigger"
+                  onclick="showDelConfirm(this, 'ecDeletePicked()')">DELETE SELECTED</button>
+        </div>
+      </div>` + list.map(c => `<div class="ec-row${c.enabled ? '' : ' ec-off'}">
+          <input type="checkbox" class="cc-tick" data-id="${esc(c.id)}"
+                 aria-label="Select ${esc(c.name)}"
+                 onchange="ecPick('${esc(c.id)}', this.checked)">
           <span class="rc-dot" style="background:${RTIER[c.rarity] ? RTIER[c.rarity][1] : '#888'}"></span>
           <span class="ec-grow">${esc(c.name)}
             <span class="ec-mono">${c.subtitle ? ' · ' + esc(c.subtitle) : ''}</span></span>
@@ -4207,6 +4283,7 @@ function renderEconCards() {
             <button class="btn btn-danger btn-sm del-trigger" onclick="showDelConfirm(this, 'ecDeleteCard(\\'${esc(c.id)}\\')')">DEL</button>
           </div>
         </div>`).join('');
+    ecPickBar();
 }
 
 

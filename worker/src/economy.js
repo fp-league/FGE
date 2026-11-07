@@ -915,6 +915,34 @@ export async function deleteCustomCard(env, id) {
   ]);
 }
 
+/**
+ * Delete several custom cards at once.
+ *
+ * Replacing a batch of card art means deleting a batch of old cards, and
+ * one confirmation per card is how people end up clicking through
+ * confirmations without reading them. One decision, one batch.
+ *
+ * D1 takes a limited number of statements in a batch, so this goes in
+ * chunks. Each card is two statements: the card, and every copy anyone
+ * pulled of it — leaving those would put a card in collections that
+ * nothing can render.
+ */
+export async function deleteCustomCards(env, ids) {
+  const keys = [...new Set((Array.isArray(ids) ? ids : [])
+    .map(String).filter(Boolean))].slice(0, 200);
+  if (!keys.length) return { deleted: 0 };
+
+  const CHUNK = 25;
+  for (let i = 0; i < keys.length; i += CHUNK) {
+    const slice = keys.slice(i, i + CHUNK);
+    await env.DB.batch(slice.flatMap(key => [
+      env.DB.prepare(`DELETE FROM custom_card WHERE id = ?`).bind(key),
+      env.DB.prepare(`DELETE FROM card_collection WHERE driver_id = ?`).bind(key),
+    ]));
+  }
+  return { deleted: keys.length };
+}
+
 export async function saveJob(env, j) {
   const id = slug(j.id || j.name);
   const lo = Math.max(0, Math.round(num(j.min_pay, 0)));
