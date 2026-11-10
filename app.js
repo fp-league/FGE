@@ -17,6 +17,7 @@ const API_BASE    = 'https://fge-api.benjaminjameswestley.workers.dev';
 const CLASSES = ['gt3', 'gt4', 'truck'];
 const CLASS_LABEL = { gt3: 'GT3', gt4: 'GT4', truck: 'TRUCK' };
 const classKey = cls => String(cls || '').toLowerCase();
+const dataFor = cls => (rawData && rawData[classKey(cls)]) || null;
 
 /**
  * The car in the hero, per division.
@@ -38,7 +39,7 @@ const CLASS_CAR = {
     gt3: GT_CAR,
     gt4: GT_CAR,
     truck: { src: 'truck-car.webp', srcset: '', sizes: '',
-             width: 498, height: 245 },
+             width: 470, height: 293 },
 };
 
 /** Point the hero image at the current division's art. */
@@ -387,6 +388,146 @@ function switchClass(cls) {
     renderCurrentPage();
 }
 
+// ── END OF SEASON ───────────────────────────────────────
+/**
+ * The sequence that plays when a season is put to bed.
+ *
+ * The admin panel writes a recap into the class record when END SEASON is
+ * pressed; this plays it. Deliberately not driven by "no rounds remain",
+ * because that is true for weeks before anyone actually ends the season,
+ * and a celebration that fires on a quiet Tuesday is not a celebration.
+ *
+ * Three rules it has to obey, in this order of importance:
+ *   - It must never trap anyone. Escape closes it, the button closes it,
+ *     and clicking the backdrop closes it.
+ *   - It must never play twice for the same person.
+ *   - It must never stop the site working if any of the data is missing.
+ */
+const FINALE_DAYS = 14;          // after this it is history, not news
+let finaleTimers = [];
+
+const finaleSeen = key => {
+    try { return localStorage.getItem(key) === '1'; } catch (e) { return false; }
+};
+const markFinaleSeen = key => {
+    try { localStorage.setItem(key, '1'); } catch (e) { /* private mode */ }
+};
+
+function closeFinale() {
+    finaleTimers.forEach(clearTimeout);
+    finaleTimers = [];
+    const el = document.getElementById('finale');
+    if (!el) return;
+    el.remove();
+    document.body.style.overflow = '';
+    document.removeEventListener('keydown', finaleKeys);
+}
+
+function finaleKeys(e) {
+    if (e.key === 'Escape') { closeFinale(); return; }
+    // A dialog that can be tabbed out of leaves a keyboard user lost
+    // behind it, so focus is kept inside while it is open.
+    if (e.key !== 'Tab') return;
+    const f = document.getElementById('finale');
+    if (!f) return;
+    const stops = f.querySelectorAll('button');
+    if (!stops.length) return;
+    const first = stops[0], last = stops[stops.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+}
+
+/** Play it, if there is one to play and this visitor has not seen it. */
+function maybePlayFinale(cls, data) {
+    const f = data && data.finale;
+    if (!f || !f.champion) return;
+    if (f.endedAt && Date.now() - f.endedAt > FINALE_DAYS * 864e5) return;
+
+    const key = `fge_finale_${classKey(cls)}_${f.season}`;
+    if (finaleSeen(key)) return;
+    if (document.getElementById('finale')) return;
+
+    const calm = window.matchMedia
+        && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    const stat = (label, value, sub) => !value ? '' : `
+        <div class="fin-stat">
+          <span class="fin-stat-label">${esc(label)}</span>
+          <span class="fin-stat-value">${esc(value)}</span>
+          ${sub ? `<span class="fin-stat-sub">${esc(sub)}</span>` : ''}
+        </div>`;
+
+    const el = document.createElement('div');
+    el.id = 'finale';
+    el.className = 'fin' + (calm ? ' fin-calm' : '');
+    el.setAttribute('role', 'dialog');
+    el.setAttribute('aria-modal', 'true');
+    el.setAttribute('aria-label', `${f.season} complete`);
+    el.innerHTML = `
+      <div class="fin-sheet">
+        <button class="fin-close" type="button" aria-label="Close">\u00d7</button>
+
+        <div class="fin-stage fin-1">
+          <p class="fin-eyebrow">${esc(CLASS_LABEL[classKey(cls)] || cls)} \u00b7 ${esc(f.season)}</p>
+          <p class="fin-done">Season complete</p>
+        </div>
+
+        <div class="fin-stage fin-2">
+          <p class="fin-label">Champion</p>
+          <h2 class="fin-champ">${esc(f.champion.name)}</h2>
+          <p class="fin-champ-sub">${esc(f.champion.team || '')}${
+            f.champion.team ? ' \u00b7 ' : ''}${f.champion.points} points</p>
+        </div>
+
+        <div class="fin-stage fin-3">
+          <div class="fin-stats">
+            ${stat('Runner-up', f.runnerUp && f.runnerUp.name,
+                   f.runnerUp ? `${f.gap} point${f.gap === 1 ? '' : 's'} behind` : '')}
+            ${stat('Teams', f.teamChampion && f.teamChampion.team,
+                   f.teamChampion ? `${f.teamChampion.points} points` : '')}
+            ${stat('Most wins', f.mostWins && f.mostWins.name,
+                   f.mostWins ? `${f.mostWins.wins} win${f.mostWins.wins === 1 ? '' : 's'}` : '')}
+            ${stat('Biggest climber', f.climber && f.climber.name,
+                   f.climber ? `P${f.climber.from} to P${f.climber.to}` : '')}
+          </div>
+          ${(f.winners || []).length ? `
+            <div class="fin-rounds">
+              <p class="fin-label">${f.rounds} round${f.rounds === 1 ? '' : 's'}</p>
+              <ul class="fin-round-list">
+                ${f.winners.map(w => `
+                  <li><span class="fin-round-name">${esc(w.name)}</span>
+                      <span class="fin-round-win">${esc(w.winner)}</span></li>`).join('')}
+              </ul>
+            </div>` : ''}
+          <button class="btn btn-primary fin-dismiss" type="button">Into the next one</button>
+        </div>
+      </div>`;
+
+    document.body.appendChild(el);
+    // Marked only once it is actually on screen. Marking it earlier meant
+    // that if building the markup threw, the visitor was recorded as
+    // having seen a celebration they never got.
+    markFinaleSeen(key);
+    document.body.style.overflow = 'hidden';
+    document.addEventListener('keydown', finaleKeys);
+
+    el.querySelector('.fin-close').addEventListener('click', closeFinale);
+    el.querySelector('.fin-dismiss').addEventListener('click', closeFinale);
+    // Clicking the backdrop, but not the sheet itself.
+    el.addEventListener('click', e => { if (e.target === el) closeFinale(); });
+    el.querySelector('.fin-close').focus();
+
+    if (calm) {
+        // Reduced motion: no reveal, no timers. Everything at once.
+        el.classList.add('fin-all');
+        return;
+    }
+    // Each stage is added rather than swapped, so the champion stays on
+    // screen while the recap arrives underneath.
+    finaleTimers.push(setTimeout(() => el.classList.add('fin-show-2'), 900));
+    finaleTimers.push(setTimeout(() => el.classList.add('fin-show-3'), 2300));
+}
+
 // ── FETCH DATA ──────────────────────────────────────────
 async function fetchData() {
     try {
@@ -422,6 +563,12 @@ function navigate(page, extra) {
 }
 
 function renderCurrentPage() {
+    // Checked on every render rather than only on load, so switching to a
+    // division whose season has just ended plays its finale too. It bails
+    // immediately once seen, so the cost of asking is a map lookup.
+    try { maybePlayFinale(currentClass, dataFor(currentClass)); }
+    catch (e) { console.error('finale', e); }   // never block the page
+
     switch(currentPage) {
         case 'home':       renderHome(); break;
         case 'standings':  renderStandings(); break;
