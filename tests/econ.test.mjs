@@ -867,5 +867,54 @@ console.log('\nDELETING A BATCH OF CUSTOM CARDS');
   ok('and leaves nothing behind', e2._t.custom_card.size === 0, String(e2._t.custom_card.size));
 }
 
+console.log('\nA WALLET CANNOT HOLD A NON-NUMBER');
+{
+  const bad = [Infinity, -Infinity, NaN, '1e999', null, undefined, 'abc', {}, []];
+  ok('nothing unstorable survives the guard',
+     bad.every(v => econ.safeAmount(v) === 0), JSON.stringify(bad.map(v => econ.safeAmount(v))));
+  ok('a real number passes through', econ.safeAmount('5000') === 5000);
+  ok('a fraction rounds', econ.safeAmount(12.7) === 13);
+  ok('a negative stays negative', econ.safeAmount(-40) === -40);
+  ok('past the safe integer it is pulled back',
+     econ.safeAmount(1e308) === econ.MAX_BALANCE, String(econ.safeAmount(1e308)));
+  ok('and so is the negative end',
+     econ.safeAmount(-1e308) === -econ.MAX_BALANCE);
+  ok('the fallback is used, not zero, when asked',
+     econ.safeAmount('rubbish', 1) === 1);
+
+  // An amount that cannot be stored must not reach the column.
+  const e = env();
+  await econ.adjust(e, '1', 500, 'seed');
+  const before = e._t.wallet.get('1').balance;
+  await econ.adjust(e, '1', Infinity, 'nonsense');
+  ok('an infinite gift changes nothing', e._t.wallet.get('1').balance === before,
+     `${before} -> ${e._t.wallet.get('1').balance}`);
+  await econ.adjust(e, '1', NaN, 'nonsense');
+  ok('and neither does NaN', e._t.wallet.get('1').balance === before);
+  ok('nor is either written to the ledger',
+     !e._t.ledger.some(l => !Number.isFinite(l.delta)),
+     JSON.stringify(e._t.ledger.map(l => l.delta)));
+
+  // A wallet that already holds a bad value from before the guard existed
+  // has to read back as a number, or it poisons every embed downstream.
+  const sick = env();
+  sick._t.wallet.set('2', { balance: Infinity, lifetime: Infinity });
+  const w = await econ.wallet(sick, '2');
+  ok('a poisoned wallet reads back as a number', Number.isFinite(w.balance),
+     String(w.balance));
+  ok('clamped to the ceiling rather than zeroed', w.balance === econ.MAX_BALANCE,
+     String(w.balance));
+  ok('and its lifetime too', Number.isFinite(w.lifetime));
+
+  // The two directions differ on purpose, and that is worth pinning down.
+  ok('an infinite INPUT is refused', econ.safeAmount(Infinity) === 0);
+  ok('an infinite STORED balance is kept, at the ceiling',
+     econ.safeBalance(Infinity) === econ.MAX_BALANCE);
+  ok('stored nonsense still reads as nothing', econ.safeBalance('abc') === 0);
+  ok('a stored negative infinity does not become a debt',
+     econ.safeBalance(-Infinity) === 0);
+  ok('an ordinary stored balance is untouched', econ.safeBalance(1234) === 1234);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

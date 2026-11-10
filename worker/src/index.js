@@ -33,7 +33,7 @@ import {
   deleteCustomCard, deleteCustomCards, saveJob, deleteJob, allWallets, adjust, wallet, settings,
   ECON_COMMANDS, TRADE_VIEWS, endCardSeason, listCardSeasons,
   offerTrade, listTrades, acceptTrade, closeTrade,
-  listRarities, saveRarity, deleteRarity,
+  listRarities, saveRarity, deleteRarity, safeAmount,
 } from './economy.js';
 
 const MAX_NAME = 24;
@@ -774,7 +774,10 @@ async function postEcon(request, env) {
       case 'credit': {
         const userId = String(body.userId || '').trim();
         if (!/^\d{5,25}$/.test(userId)) return bad('a Discord user id is required', request, env, 422);
-        const delta = Math.round(Number(body.amount) || 0);
+        if (!Number.isFinite(Number(body.amount))) {
+          return bad('that amount is not a number', request, env, 422);
+        }
+        const delta = safeAmount(body.amount);
         if (!delta) return bad('amount must not be zero', request, env, 422);
         const out = await adjust(env, userId, delta,
           String(body.reason || (delta > 0 ? 'Admin gift' : 'Admin adjustment')));
@@ -809,7 +812,7 @@ async function postEcon(request, env) {
         if (!Number.isFinite(asked)) {
           return bad('that amount is not a number', request, env, 422);
         }
-        const count = Math.max(1, Math.min(Number.MAX_SAFE_INTEGER, Math.round(asked)));
+        const count = Math.max(1, safeAmount(asked, 1));
 
         if (what === 'credits') {
           const out = await adjust(env, userId, count,
@@ -854,7 +857,10 @@ async function postEcon(request, env) {
       case 'setBalance': {
         const userId = String(body.userId || '').trim();
         if (!/^\d{5,25}$/.test(userId)) return bad('a Discord user id is required', request, env, 422);
-        const want = Math.max(0, Math.round(Number(body.amount) || 0));
+        if (!Number.isFinite(Number(body.amount))) {
+          return bad('that amount is not a number', request, env, 422);
+        }
+        const want = Math.max(0, safeAmount(body.amount));
         const w = await wallet(env, userId);
         const out = await adjust(env, userId, want - w.balance, 'Admin set balance');
         return json({ ok: true, ...(out || w) }, null, request, env);

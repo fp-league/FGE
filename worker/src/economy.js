@@ -95,6 +95,50 @@ export function money(n, cfg) {
 /* ── Wallets ───────────────────────────────────────────── */
 
 /**
+ * The widest a balance is allowed to be.
+ *
+ * Past 2^53 JavaScript cannot tell one integer from the next, so a number
+ * above it is not a big balance, it is a wrong one. Infinity and NaN are
+ * worse: SQLite has no way to store either as an INTEGER, so they go in
+ * as something else and every read afterwards comes back a shape the code
+ * does not expect.
+ */
+export const MAX_BALANCE = Number.MAX_SAFE_INTEGER;
+
+/**
+ * Force anything into a storable whole number.
+ *
+ * Used on the way in AND on the way out. On the way in it stops a bad
+ * amount reaching the column; on the way out it means a wallet that
+ * already holds one from before this existed reads as a number rather
+ * than poisoning everything that touches it.
+ */
+export function safeAmount(n, fallback = 0) {
+  const v = Math.round(Number(n));
+  if (!Number.isFinite(v)) return fallback;
+  return Math.max(-MAX_BALANCE, Math.min(MAX_BALANCE, v));
+}
+
+/**
+ * The same thing for a value coming OUT of the column, where the right
+ * answer is different.
+ *
+ * An infinite amount arriving from a form is a mistake and is refused.
+ * An infinite amount already sitting in a wallet is somebody's money, and
+ * zeroing it because of a storage bug would be worse than the bug. So a
+ * stored infinity clamps to the ceiling — which is what it was trying to
+ * say — and only genuine nonsense reads as nothing.
+ */
+export function safeBalance(n) {
+  const v = Number(n);
+  if (Number.isNaN(v)) return 0;
+  if (v === Infinity) return MAX_BALANCE;
+  if (v === -Infinity) return 0;          // a debt is not a thing here
+  return safeAmount(v);
+}
+
+
+/**
  * Somebody's balance, creating the wallet with the starting balance the
  * first time they do anything. A new player with nothing could not buy a
  * pack, so the opening balance is the economy's front door.
@@ -103,7 +147,12 @@ export async function wallet(env, userId, cfg) {
   const id = String(userId);
   const row = await env.DB.prepare(
     `SELECT balance, lifetime FROM wallet WHERE user_id = ?`).bind(id).first();
-  if (row) return { balance: row.balance, lifetime: row.lifetime, isNew: false };
+  if (row) {
+    // Read through the same guard as the write. A balance stored before
+    // this check existed could be Infinity or a float, and every embed,
+    // comparison and payout downstream assumes a number.
+    return { balance: safeBalance(row.balance), lifetime: safeBalance(row.lifetime), isNew: false };
+  }
 
   const start = Math.max(0, num((cfg || await settings(env)).starting_balance, 750));
   const now = Date.now();
@@ -128,7 +177,8 @@ export async function wallet(env, userId, cfg) {
  */
 export async function adjust(env, userId, delta, reason, cfg) {
   const id = String(userId);
-  const d = Math.round(Number(delta) || 0);
+  const d = safeAmount(delta);
+  if (!d) return wallet(env, id, cfg);     // nothing to move, and nothing to log
   const now = Date.now();
   await wallet(env, id, cfg);
 

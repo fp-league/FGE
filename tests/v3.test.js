@@ -322,9 +322,19 @@ console.log('\nGIVING CREDITS');
   // The thing a removed cap actually risks.
   ok('a non-number is refused outright',
      /if \(!Number\.isFinite\(asked\)\)/.test(i));
-  ok('and anything past 2\u00b2\u2075\u00b3 is pulled back to it',
-     /Math\.min\(Number\.MAX_SAFE_INTEGER, Math\.round\(asked\)\)/.test(i));
-  ok('a gift is still at least one', /Math\.max\(1, Math\.min\(Number\.MAX_SAFE_INTEGER/.test(i));
+  ok('and every amount goes through the shared guard',
+     /const count = Math\.max\(1, safeAmount\(asked, 1\)\);/.test(i));
+  ok('as does an admin credit', /const delta = safeAmount\(body\.amount\);/.test(i));
+  ok('and setting a balance outright', /const want = Math\.max\(0, safeAmount\(body\.amount\)\);/.test(i));
+  ok('all three refuse a non-number first',
+     (i.match(/that amount is not a number/g) || []).length === 3,
+     String((i.match(/that amount is not a number/g) || []).length));
+
+  const ec = read('worker/src/economy.js');
+  ok('the guard is one function', /export function safeAmount\(/.test(ec));
+  ok('with a separate one for reading a stored balance', /export function safeBalance\(/.test(ec));
+  ok('a wallet reads through it', /balance: safeBalance\(row\.balance\)/.test(ec));
+  ok('and a move cannot write a non-number', /const d = safeAmount\(delta\);/.test(ec));
 
   ok('big numbers are shown with separators', /amount\.toLocaleString\(\)/.test(m));
 }
