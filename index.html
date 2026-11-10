@@ -570,8 +570,9 @@ body {
   // the same way — archived summaries are written by one and read by the
   // other, and a records page that disagreed with the archive would be
   // worse than no records page.
-  import { seasonSummary, records, careerTotals } from './lib/season.js';
+  import { seasonSummary, seasonFinale, records, careerTotals } from './lib/season.js';
   window.seasonSummary = seasonSummary;
+  window.seasonFinale = seasonFinale;
   window.seasonRecords = records;
   window.careerTotals = careerTotals;
   // app.js may already have rendered before this module ran.

@@ -249,6 +249,47 @@ console.log('\nCUSTOM CARDS — clearing a batch of old art');
      /const CHUNK = 25/.test(e));
 }
 
+console.log('\nEND OF SEASON');
+{
+  const a = read('app.js'), m = read('manage.html'), c = read('styles.css'),
+        h = read('index.html');
+
+  // The recap is computed from races that are about to be deleted, so
+  // order is the whole correctness story here.
+  ok('the recap is written before the calendar is cleared',
+     m.indexOf('cd.finale = window.seasonFinale') < m.indexOf('cd.races = [];'));
+  ok('and a broken recap cannot stop a season ending',
+     /catch \(err\) \{[\s\S]{0,400}cd\.finale = null;/.test(m));
+  ok('both pages can reach it', /window\.seasonFinale/.test(h) && /window\.seasonFinale/.test(m));
+
+  ok('it plays from the render path', /maybePlayFinale\(currentClass, dataFor\(currentClass\)\)/.test(a));
+  ok('and never blocks the page if it throws',
+     /try \{ maybePlayFinale[\s\S]{0,120}catch \(e\)/.test(a));
+  ok('nothing to celebrate shows nothing', /if \(!f \|\| !f\.champion\) return;/.test(a));
+  ok('an old season is not news', /FINALE_DAYS \* 864e5/.test(a));
+  ok('it plays once per visitor', /if \(finaleSeen\(key\)\) return;/.test(a));
+  ok('and only counts as seen once it is on screen',
+     a.indexOf('document.body.appendChild(el)') < a.indexOf('markFinaleSeen(key)'));
+  ok('storage that throws does not break it',
+     /catch \(e\) \{ return false; \}/.test(a));
+
+  // It must never trap anyone.
+  ok('escape closes it', /if \(e\.key === 'Escape'\) \{ closeFinale\(\); return; \}/.test(a));
+  ok('focus is kept inside while it is open', /e\.key !== 'Tab'/.test(a));
+  ok('the backdrop closes it', /if \(e\.target === el\) closeFinale\(\)/.test(a));
+  ok('closing releases the scroll lock', /document\.body\.style\.overflow = '';/.test(a));
+  ok('and unbinds the key handler', /removeEventListener\('keydown', finaleKeys\)/.test(a));
+  ok('and clears its timers', /finaleTimers\.forEach\(clearTimeout\)/.test(a));
+  ok('it is announced as a dialog', /setAttribute\('aria-modal', 'true'\)/.test(a));
+
+  ok('reduced motion skips the reveal', /el\.classList\.add\('fin-all'\);\s*\n\s*return;/.test(a));
+  ok('and the stylesheet agrees',
+     /@media \(prefers-reduced-motion: reduce\) \{[\s\S]{0,160}\.fin-stage \{ opacity: 1/.test(c));
+  ok('the overlay is opaque, so the page cannot ghost through',
+     /\.fin \{[\s\S]{0,400}background: var\(--page-deep\);/.test(c));
+  ok('names that do not fit still wrap', /\.fin-champ \{[\s\S]{0,260}overflow-wrap: anywhere/.test(c));
+}
+
 console.log('\nTHREE DIVISIONS, NOT TWO');
 {
   const a = read('app.js'), h = read('index.html'), c = read('styles.css');

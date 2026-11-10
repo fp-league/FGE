@@ -6134,6 +6134,20 @@ async function endSeason() {
         st.textContent = 'archiving…';
         const out = await pushArchive(name);
 
+        // Worked out before the calendar is cleared, because every figure
+        // in it comes from the races that are about to be deleted. The
+        // site plays this once per visitor and then it just sits there
+        // until the next season ends.
+        st.textContent = 'writing the season recap…';
+        try {
+            cd.finale = window.seasonFinale ? window.seasonFinale(cd, name) : null;
+        } catch (err) {
+            // A recap is a nice-to-have; losing the archive is not. Never
+            // let this stop a season being ended.
+            console.error('could not build the season recap', err);
+            cd.finale = null;
+        }
+
         st.textContent = 'clearing the calendar…';
         cd.races = [];
         cd.seasonName = next;
@@ -6476,6 +6490,7 @@ document.addEventListener('DOMContentLoaded', () => {
   window.ocrMatchAll = mt.matchAll;
   window.ocrScore = mt.score;
   window.seasonSummary = season.seasonSummary;
+  window.seasonFinale = season.seasonFinale;
   window.watchCellHash = watch.cellHash;
   window.watchBuildOrder = watch.buildOrder;
   window.watchShouldPush = watch.shouldPush;
