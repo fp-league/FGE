@@ -1386,6 +1386,21 @@ body.truck-mode .cal-card.next { border-left-width: 3px; }
    rather than a graphic. */
 body.truck-mode .hero-slab { opacity: 0.92; }
 
+/* The Porsche is 1440px wide and deliberately runs off the right edge —
+   a hero car with a margin round it is a product shot, not a hero. The
+   truck is 498px, so the same treatment cut it off mid-bed and pushed its
+   pale load onto the white slab, where it disappeared. Pulled in and
+   sized down: it clears the slab, stays whole, and at ~500px renders
+   close to one-to-one with the source instead of being upscaled 3x. */
+body.truck-mode .hero-car {
+    right: 20%;
+    bottom: 14%;
+    width: min(38%, 500px);
+}
+@media (max-width: 820px) {
+    body.truck-mode .hero-car { right: 2%; bottom: 8%; width: min(64%, 420px); }
+}
+
 /* On a phone the slab is 46% of a 390px hero and the copy wraps almost
    full width, so the two overlap. For red and blue that is survivable —
    white type on a red field still reads. White on white does not: the

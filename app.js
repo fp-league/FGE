@@ -18,6 +18,43 @@ const CLASSES = ['gt3', 'gt4', 'truck'];
 const CLASS_LABEL = { gt3: 'GT3', gt4: 'GT4', truck: 'TRUCK' };
 const classKey = cls => String(cls || '').toLowerCase();
 
+/**
+ * The car in the hero, per division.
+ *
+ * GT3 and GT4 share the Porsche. Truck has its own art, supplied at
+ * 498x245 — far smaller than the Porsche's 1440, so it carries no srcset:
+ * offering widths the file does not have would just make the browser pick
+ * a size it then has to upscale anyway. Swap in a larger render and this
+ * is the only place that needs to know.
+ */
+const GT_CAR = {
+    src: 'porsche.webp',
+    srcset: 'porsche-480.webp 480w, porsche-720.webp 720w, ' +
+            'porsche-1080.webp 1080w, porsche.webp 1440w',
+    sizes: '(max-width: 820px) 118vw, 62vw',
+    width: 1440, height: 810,
+};
+const CLASS_CAR = {
+    gt3: GT_CAR,
+    gt4: GT_CAR,
+    truck: { src: 'truck-car.webp', srcset: '', sizes: '',
+             width: 498, height: 245 },
+};
+
+/** Point the hero image at the current division's art. */
+function applyClassCar(cls) {
+    const img = document.getElementById('heroCar');
+    const car = CLASS_CAR[classKey(cls)] || GT_CAR;
+    if (!img || img.getAttribute('src') === car.src) return;
+    // srcset first: leaving a stale one set would override the new src.
+    if (car.srcset) { img.srcset = car.srcset; img.sizes = car.sizes; }
+    else { img.removeAttribute('srcset'); img.removeAttribute('sizes'); }
+    img.src = car.src;
+    // Keep the intrinsic size honest so the box does not jump as it loads.
+    img.width = car.width;
+    img.height = car.height;
+}
+
 // ── STATE ────────────────────────────────────────────────
 let rawData       = null;           // full JSONBin record { gt3:{…}, gt4:{…}, truck:{…} }
 let currentClass  = (() => {
@@ -338,6 +375,7 @@ function switchClass(cls) {
     // white for Truck. One mode class per division, all mutually exclusive.
     CLASSES.forEach(k => document.body.classList.toggle(
         `${k}-mode`, classKey(cls) === k));
+    applyClassCar(cls);
     applyThemeColor(cls);
     syncFviNav();
     syncStewardsNav();
@@ -2662,6 +2700,7 @@ async function init() {
     // Init class switcher UI — apply the saved class colour on first paint
     CLASSES.forEach(k => document.body.classList.toggle(
         `${k}-mode`, classKey(currentClass) === k));
+    applyClassCar(currentClass);
     applyThemeColor(currentClass);
     document.getElementById('csGT3')?.classList.toggle('active', currentClass === 'GT3');
     document.getElementById('csGT4')?.classList.toggle('active', currentClass === 'GT4');

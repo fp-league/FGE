@@ -302,6 +302,21 @@ console.log('\nTHREE DIVISIONS, NOT TWO');
   ok('and nothing styles truck without that scope',
      !/^\.truck-/m.test(c), 'an unscoped .truck- rule exists');
 
+  // The hero car is per division, and only Truck's changed.
+  ok('the hero image can be addressed', /class="hero-car" id="heroCar"/.test(h));
+  ok('gt3 and gt4 still share the Porsche',
+     /gt3: GT_CAR,\s*\n\s*gt4: GT_CAR,/.test(a));
+  ok('truck has its own art', /truck: \{ src: 'truck-car\.webp'/.test(a));
+  // A stale srcset silently wins over a new src, so it has to be removed,
+  // not just left behind when swapping to an image that has none.
+  ok('swapping away from the Porsche clears its srcset',
+     /img\.removeAttribute\('srcset'\)/.test(a));
+  ok('and its sizes with it', /img\.removeAttribute\('sizes'\)/.test(a));
+  ok('the swap runs on a class change', /applyClassCar\(cls\)/.test(a));
+  ok('and on first paint', /applyClassCar\(currentClass\)/.test(a));
+  ok('truck art is positioned clear of the slab',
+     /body\.truck-mode \.hero-car \{[\s\S]{0,120}right: 20%/.test(c));
+
   ok('the bot offers a /truck command',
      /name: 'truck', description: 'Trucks/.test(read('worker/src/commands.js')));
 }
