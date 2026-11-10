@@ -207,3 +207,100 @@ export function drawWheel(n) {
     '└──────┘',
   ].join('\n') + `\n${dot} ${c}`;
 }
+
+/* ── Slots ─────────────────────────────────────────────── */
+/**
+ * Three reels, six symbols, every symbol equally likely.
+ *
+ * Equal weights are a deliberate choice: a weighted reel can be tuned to
+ * any return you like, but nobody reading the code can tell what the
+ * return IS without simulating it. With a flat reel the whole paytable is
+ * 216 outcomes and the return is arithmetic — see slotReturn(), which the
+ * tests check exactly rather than by rolling dice ten thousand times and
+ * hoping.
+ */
+export const REELS = ['🏁', '🏆', '⚙️', '🛞', '⛽', '🔧'];
+export const JACKPOT = '🏁';
+
+/** Multipliers on the stake, paid as the total returned. */
+export const SLOT_PAYS = { jackpot: 33, trio: 13, pair: 1.2 };
+
+export const pullSlots = (rng = Math.random) =>
+  [0, 0, 0].map(() => REELS[Math.floor(rng() * REELS.length)]);
+
+export function slotPayout(reels) {
+  const [a, b, c] = reels;
+  if (a === b && b === c) {
+    return a === JACKPOT
+      ? { mult: SLOT_PAYS.jackpot, why: 'Three chequered flags — the jackpot.' }
+      : { mult: SLOT_PAYS.trio, why: `Three ${a} in a row.` };
+  }
+  if (a === b || b === c || a === c) {
+    return { mult: SLOT_PAYS.pair, why: 'Two of a kind.' };
+  }
+  return { mult: 0, why: 'Nothing lines up.' };
+}
+
+/**
+ * The exact return to player, worked out rather than measured.
+ *
+ * n symbols on 3 reels: n ways to line up three of a kind (one of them
+ * the jackpot), 3n(n-1) ways to get exactly two, and the rest nothing.
+ */
+export function slotReturn() {
+  const n = REELS.length, total = n ** 3;
+  const trios = n - 1;                 // three of a kind that is not the jackpot
+  const pairs = 3 * n * (n - 1);       // exactly two matching
+  return (SLOT_PAYS.jackpot + trios * SLOT_PAYS.trio + pairs * SLOT_PAYS.pair) / total;
+}
+
+/* ── Higher or lower ───────────────────────────────────── */
+/**
+ * The multiplier is priced off the real odds of the card on the table.
+ *
+ * A 2 showing makes "higher" nearly certain, so it pays nearly nothing; an
+ * 8 is a coin flip and pays close to double. Quoting one flat multiplier
+ * would mean the same button was a gift on one card and a mugging on the
+ * next, and only the people who had worked that out would ever win.
+ *
+ * Both prices are shown on the buttons before anything is pressed, so the
+ * house edge is the same whichever way you go and there is nothing to
+ * work out.
+ */
+export const HL_RETURN = 0.95;        // the house keeps 5%, whatever you back
+
+export const cardValue = card => {
+  const r = rankOf(card);
+  if (r === 'A') return 14;
+  if (r === 'K') return 13;
+  if (r === 'Q') return 12;
+  if (r === 'J') return 11;
+  return Number(r);
+};
+
+/** Chance the next card off `deck` is higher / lower than `card`. Ties lose. */
+export function hiLoOdds(card, deck) {
+  const v = cardValue(card);
+  const left = deck.length;
+  if (!left) return { higher: 0, lower: 0 };
+  let hi = 0, lo = 0;
+  for (const c of deck) {
+    const n = cardValue(c);
+    if (n > v) hi++; else if (n < v) lo++;
+  }
+  return { higher: hi / left, lower: lo / left };
+}
+
+/**
+ * What one correct call pays, as a multiplier on the pot.
+ *
+ * Capped at 1.01 so a near-certain call still nudges the pot upward — a
+ * button that says "x1.00" is not a choice, it is a dare with no prize.
+ */
+export const hiLoMultiplier = p =>
+  (p <= 0 ? 0 : Math.max(1.01, Math.round((HL_RETURN / p) * 100) / 100));
+
+/** Did the call come in? Ties go to the house, which is where the edge is. */
+export const hiLoWon = (shown, next, call) =>
+  (call === 'higher' ? cardValue(next) > cardValue(shown)
+                     : cardValue(next) < cardValue(shown));

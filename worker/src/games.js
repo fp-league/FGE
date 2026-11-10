@@ -15,6 +15,8 @@
 import {
   dealBlackjack, hit, dealerPlay, settle, drawCards, sayScore, score, isBlackjack,
   parseBet, spin, settleSpin, drawWheel, colourOf, BETS,
+  pullSlots, slotPayout, SLOT_PAYS, freshDeck, shuffle,
+  hiLoOdds, hiLoMultiplier, hiLoWon, cardValue,
 } from './casino.js';
 import { settings, money, wallet, adjust } from './economy.js';
 
@@ -284,6 +286,153 @@ export const rouletteChoices = q => {
     .map(b => ({ name: b.pays === 35 ? b.name : `${b.name} — pays ${b.pays}:1`, value: b.value }));
 };
 
+/* ── Slots ─────────────────────────────────────────────── */
+
+export async function playSlots(env, interaction, amount) {
+  const user = userOf(interaction);
+  if (!user.id) return simple('Who are you?', "Couldn't read your Discord account.");
+  const cfg = await settings(env);
+  if (casinoOff(cfg)) return simple('Closed', 'The casino is shut in this league.');
+
+  const taken = await takeStake(env, user.id, amount, cfg, 'Slots stake');
+  if (taken.error) return taken.error;
+
+  const reels = pullSlots();
+  const pay = slotPayout(reels);
+  const back = Math.round(taken.stake * pay.mult);
+  if (back > 0) await adjust(env, user.id, back, 'Slots', cfg);
+
+  const won = back > taken.stake;
+  return {
+    title: pay.mult >= SLOT_PAYS.jackpot ? '🎰 JACKPOT' : won ? '🎰 Paid out' : '🎰 Slots',
+    description: `\n# ${reels.join('  ')}\n`,
+    color: pay.mult >= SLOT_PAYS.jackpot ? GOLD : won ? GREEN : pay.mult > 0 ? GREY : BRAND,
+    fields: [{
+      name: pay.why,
+      value: back === 0 ? `Lost ${money(taken.stake, cfg)}.`
+           : `Returned ${money(back, cfg)} on a ${money(taken.stake, cfg)} stake.`,
+    }],
+  };
+}
+
+/* ── Higher or lower ───────────────────────────────────── */
+// Two guards on the pot. The deck one is a rule of the game; the streak
+// one is a ceiling, because eight correct calls at these prices is
+// already a four-figure multiple of the stake and the economy has to
+// survive somebody getting lucky.
+const HL_MAX_STREAK = 8;
+const HL_MIN_DECK = 2;
+
+function hiLoEmbed(g, cfg, { done, next, won, why } = {}) {
+  const shown = g.state.shown;
+  const odds = hiLoOdds(shown, g.state.deck);
+  const pot = g.state.pot;
+  const lines = ['```', next ? `${drawCards([shown])}   ->   ${drawCards([next])}`
+                             : drawCards([shown]), '```'];
+  const e = {
+    title: done ? (won ? '🂡 Cashed out' : '🂡 Gone')
+                : `🂡 Higher or lower · ${g.state.streak} in a row`,
+    description: lines.join('\n'),
+    color: done ? (won ? GREEN : BRAND) : GOLD,
+  };
+  if (done) {
+    e.fields = [{ name: why,
+      value: won ? `Paid ${money(pot, cfg)} on a ${money(g.bet, cfg)} stake.`
+                 : `Lost ${money(g.bet, cfg)}.` }];
+  } else {
+    e.fields = [{ name: `Pot ${money(pot, cfg)}`,
+      value: `Higher pays ×${hiLoMultiplier(odds.higher).toFixed(2)} · ` +
+             `lower pays ×${hiLoMultiplier(odds.lower).toFixed(2)}\n` +
+             'A card the same as this one loses.' }];
+  }
+  return e;
+}
+
+function hiLoButtons(g) {
+  const odds = hiLoOdds(g.state.shown, g.state.deck);
+  return [row(
+    button(`hl:${g.id}:higher`, `Higher ×${hiLoMultiplier(odds.higher).toFixed(2)}`, 1,
+           odds.higher <= 0),
+    button(`hl:${g.id}:lower`, `Lower ×${hiLoMultiplier(odds.lower).toFixed(2)}`, 1,
+           odds.lower <= 0),
+    button(`hl:${g.id}:cash`, 'Take it', 3),
+  )];
+}
+
+export async function startHiLo(env, interaction, amount) {
+  const user = userOf(interaction);
+  if (!user.id) return simple('Who are you?', "Couldn't read your Discord account.");
+  const cfg = await settings(env);
+  if (casinoOff(cfg)) return simple('Closed', 'The casino is shut in this league.');
+
+  const taken = await takeStake(env, user.id, amount, cfg, 'Higher or lower stake');
+  if (taken.error) return taken.error;
+
+  const deck = shuffle(freshDeck());
+  const shown = deck.pop();
+  const id = newId();
+  const g = { id, bet: taken.stake, user_id: user.id,
+              state: { deck, shown, pot: taken.stake, streak: 0 } };
+  await saveGame(env, id, user.id, 'hilo', taken.stake, g.state);
+  return withButtons(hiLoEmbed(g, cfg), hiLoButtons(g));
+}
+
+async function onHiLoButton(env, interaction, id, action) {
+  const user = userOf(interaction);
+  const g = await loadGame(env, id);
+  if (!g || g.kind !== 'hilo') {
+    return withButtons(simple('Gone', 'That one has already finished.'), [], true);
+  }
+  if (String(g.user_id) !== String(user.id)) {
+    return withButtons(simple('Not your game', 'Start your own with `/higherlower`.'), [], true);
+  }
+  const cfg = await settings(env);
+
+  if (action === 'cash') {
+    await adjust(env, user.id, g.state.pot, 'Higher or lower', cfg);
+    await dropGame(env, g.id);
+    return replaceWith(hiLoEmbed(g, cfg,
+      { done: true, won: true, why: `Walked away on ${g.state.streak}.` }), []);
+  }
+
+  // Priced before the card is drawn, so the number on the button is the
+  // number that pays. Reading the odds afterwards would quietly reprice
+  // the bet against whoever pressed it.
+  const odds = hiLoOdds(g.state.shown, g.state.deck);
+  const mult = hiLoMultiplier(action === 'higher' ? odds.higher : odds.lower);
+
+  const deck = g.state.deck.slice();
+  const next = deck.pop();
+  const won = hiLoWon(g.state.shown, next, action);
+
+  if (!won) {
+    await dropGame(env, g.id);
+    return replaceWith(hiLoEmbed(g, cfg, { done: true, next, won: false,
+      why: cardValue(next) === cardValue(g.state.shown)
+        ? 'The same card — that one goes to the house.'
+        : `${drawCards([next])} was not ${action}.` }), []);
+  }
+
+  const pot = Math.round(g.state.pot * mult);
+  const streak = g.state.streak + 1;
+  const spent = deck.length < HL_MIN_DECK || streak >= HL_MAX_STREAK;
+
+  if (spent) {
+    await adjust(env, user.id, pot, 'Higher or lower', cfg);
+    await dropGame(env, g.id);
+    const out = { ...g, state: { ...g.state, pot, streak, shown: next, deck } };
+    return replaceWith(hiLoEmbed(out, cfg, { done: true, won: true,
+      why: streak >= HL_MAX_STREAK
+        ? `${streak} in a row — that is the limit, paid out.`
+        : 'The deck is finished, paid out.' }), []);
+  }
+
+  const state = { deck, shown: next, pot, streak };
+  await saveGame(env, g.id, g.user_id, 'hilo', g.bet, state);
+  const out = { ...g, state };
+  return replaceWith(hiLoEmbed(out, cfg), hiLoButtons(out));
+}
+
 /* ── Routing ───────────────────────────────────────────── */
 
 /**
@@ -295,6 +444,7 @@ export async function handleComponent(interaction, env) {
   const [tag, gameId, action] = id.split(':');
   if (tag === 'bj') return onBlackjackButton(env, interaction, gameId, action);
   if (tag === 'wk') return onShiftButton(env, interaction, gameId, action);
+  if (tag === 'hl') return onHiLoButton(env, interaction, gameId, action);
   if (tag === 'ag') return onAgentButton(env, interaction, gameId, action);
   return null;
 }

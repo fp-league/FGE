@@ -154,6 +154,16 @@ commands.push(
       { name: 'bet', description: 'How much to stake', type: 4, required: true },
     ],
   },
+  {
+    name: 'slots',
+    description: 'Three reels. Two matching pays, three pays properly',
+    options: [{ name: 'bet', description: 'How much to stake', type: 4, required: true }],
+  },
+  {
+    name: 'higherlower',
+    description: 'Call the next card higher or lower, and take it whenever you like',
+    options: [{ name: 'bet', description: 'How much to stake', type: 4, required: true }],
+  },
   { name: 'odds', description: 'The book on the next race', options: [CLASS_OPTION] },
   {
     name: 'bet',

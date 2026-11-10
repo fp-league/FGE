@@ -8,6 +8,8 @@ import {
   freshDeck, shuffle, score, isBlackjack, drawCards, sayScore,
   dealBlackjack, hit, dealerPlay, settle,
   colourOf, BETS, parseBet, spin, settleSpin, drawWheel,
+  REELS, JACKPOT, SLOT_PAYS, pullSlots, slotPayout, slotReturn,
+  cardValue, hiLoOdds, hiLoMultiplier, hiLoWon, HL_RETURN,
 } from '../worker/src/casino.js';
 
 let pass = 0, fail = 0;
@@ -173,6 +175,122 @@ console.log('\nROULETTE');
   const widths = new Set();
   for (let n = 0; n <= 36; n++) drawWheel(n).split('\n').slice(0, 3).forEach(l => widths.add(l.length));
   ok('the wheel is the same width for every pocket', widths.size === 1, [...widths].join());
+}
+
+/* ── slots ─────────────────────────────────────────────── */
+console.log('\nSLOTS');
+{
+  ok('six symbols, all distinct', REELS.length === 6 && new Set(REELS).size === 6);
+  ok('the jackpot symbol is one of them', REELS.includes(JACKPOT));
+
+  // Worked out, not sampled: every one of the 216 outcomes enumerated and
+  // paid, which must agree with the closed form the code advertises.
+  let total = 0, counts = { jackpot: 0, trio: 0, pair: 0, nothing: 0 };
+  for (const a of REELS) for (const b of REELS) for (const c of REELS) {
+    const pay = slotPayout([a, b, c]);
+    total += pay.mult;
+    if (pay.mult === SLOT_PAYS.jackpot) counts.jackpot++;
+    else if (pay.mult === SLOT_PAYS.trio) counts.trio++;
+    else if (pay.mult === SLOT_PAYS.pair) counts.pair++;
+    else counts.nothing++;
+  }
+  const n = REELS.length, combos = n ** 3;
+  ok('every combination is covered', counts.jackpot + counts.trio + counts.pair + counts.nothing === combos);
+  ok('exactly one jackpot line', counts.jackpot === 1, String(counts.jackpot));
+  ok('five other three-of-a-kinds', counts.trio === n - 1, String(counts.trio));
+  ok('ninety two-of-a-kinds', counts.pair === 3 * n * (n - 1), String(counts.pair));
+  ok('the advertised return matches the enumeration',
+     Math.abs(slotReturn() - total / combos) < 1e-12,
+     `${slotReturn()} vs ${total / combos}`);
+
+  // The number that actually matters: the house takes a cut, but a
+  // sensible one. A league economy that pays out over 100% prints money.
+  const rtp = slotReturn();
+  ok('the house has an edge at all', rtp < 1, String(rtp));
+  ok('and it is not a daylight robbery', rtp > 0.9, String(rtp));
+
+  ok('three flags is the jackpot',
+     slotPayout([JACKPOT, JACKPOT, JACKPOT]).mult === SLOT_PAYS.jackpot);
+  const other = REELS.find(r => r !== JACKPOT);
+  ok('three of anything else pays less',
+     slotPayout([other, other, other]).mult === SLOT_PAYS.trio);
+  ok('two of a kind pays a little', slotPayout([other, other, JACKPOT]).mult === SLOT_PAYS.pair);
+  ok('a pair counts whichever reels it is on',
+     slotPayout([other, JACKPOT, other]).mult === SLOT_PAYS.pair &&
+     slotPayout([JACKPOT, other, other]).mult === SLOT_PAYS.pair);
+  ok('three different symbols pay nothing',
+     slotPayout([REELS[0], REELS[1], REELS[2]]).mult === 0);
+  ok('and every outcome says why', [[JACKPOT,JACKPOT,JACKPOT],[other,other,other],
+      [other,other,JACKPOT],[REELS[0],REELS[1],REELS[2]]]
+      .every(r => typeof slotPayout(r).why === 'string' && slotPayout(r).why.length > 0));
+
+  // The reels must actually use the whole strip.
+  const seen = new Set();
+  let i = 0;
+  const cycle = () => { const v = (i % 600) / 600; i++; return v; };
+  for (let k = 0; k < 600; k++) pullSlots(cycle).forEach(x => seen.add(x));
+  ok('every symbol can come up', seen.size === REELS.length, String(seen.size));
+  ok('a pull is three reels', pullSlots(() => 0).length === 3);
+}
+
+/* ── higher or lower ───────────────────────────────────── */
+console.log('\nHIGHER OR LOWER');
+{
+  ok('aces are high', cardValue('A♠') === 14);
+  ok('and the court cards rank under them',
+     cardValue('K♠') === 13 && cardValue('Q♠') === 12 && cardValue('J♠') === 11);
+  ok('numbers are themselves', cardValue('2♥') === 2 && cardValue('10♦') === 10);
+  ok('suit makes no difference', cardValue('7♠') === cardValue('7♣'));
+
+  const deck = freshDeck();
+  const low = hiLoOdds('2♠', deck.filter(c => c !== '2♠'));
+  ok('almost everything beats a two', low.higher > 0.9, String(low.higher));
+  ok('and almost nothing is under it', low.lower === 0, String(low.lower));
+  const high = hiLoOdds('A♠', deck.filter(c => c !== 'A♠'));
+  ok('almost nothing beats an ace', high.higher < 0.06, String(high.higher));
+  const mid = hiLoOdds('8♠', deck.filter(c => c !== '8♠'));
+  ok('eight is close to a coin flip', Math.abs(mid.higher - mid.lower) < 0.1,
+     `${mid.higher} / ${mid.lower}`);
+  // Ties are the house edge, so the two sides must NOT sum to one.
+  ok('the matching ranks go to the house', mid.higher + mid.lower < 1,
+     String(mid.higher + mid.lower));
+  ok('an empty deck offers nothing', hiLoOdds('8♠', []).higher === 0);
+
+  // The price has to track the odds, or one button is a gift.
+  ok('a likely call pays little', hiLoMultiplier(0.92) < 1.1, String(hiLoMultiplier(0.92)));
+  ok('an even call pays about double', Math.abs(hiLoMultiplier(0.47) - 2.02) < 0.1,
+     String(hiLoMultiplier(0.47)));
+  ok('a long shot pays a lot', hiLoMultiplier(0.1) > 8, String(hiLoMultiplier(0.1)));
+  ok('the edge is the same whichever way you go',
+     [0.2, 0.4, 0.6, 0.8].every(p => Math.abs(p * hiLoMultiplier(p) - HL_RETURN) < 0.02));
+  ok('the house keeps a cut', HL_RETURN < 1 && HL_RETURN > 0.9, String(HL_RETURN));
+  ok('a certainty still nudges the pot', hiLoMultiplier(1) >= 1.01, String(hiLoMultiplier(1)));
+  ok('an impossible call pays nothing', hiLoMultiplier(0) === 0);
+
+  ok('higher means higher', hiLoWon('7♠', '8♥', 'higher') === true);
+  ok('lower means lower', hiLoWon('7♠', '6♥', 'lower') === true);
+  ok('wrong way round loses', hiLoWon('7♠', '8♥', 'lower') === false);
+  ok('a tie loses on higher', hiLoWon('7♠', '7♥', 'higher') === false);
+  ok('and a tie loses on lower', hiLoWon('7♠', '7♥', 'lower') === false);
+
+  // The whole game priced end to end: pick the better side every time and
+  // the return still has to land near the advertised edge.
+  let staked = 0, returned = 0;
+  let seed = 12345;
+  const rng = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; };
+  for (let r = 0; r < 4000; r++) {
+    const d = shuffle(freshDeck(), rng);
+    const shown = d.pop();
+    const o = hiLoOdds(shown, d);
+    const call = o.higher >= o.lower ? 'higher' : 'lower';
+    const m = hiLoMultiplier(call === 'higher' ? o.higher : o.lower);
+    staked += 1;
+    if (hiLoWon(shown, d.pop(), call)) returned += m;
+  }
+  const rtp = returned / staked;
+  ok('playing it well returns close to the advertised edge',
+     Math.abs(rtp - HL_RETURN) < 0.05, `${rtp.toFixed(3)} vs ${HL_RETURN}`);
+  ok('and never better than even', rtp < 1.02, String(rtp));
 }
 
 console.log(`\n${pass}/${pass + fail} passed`);

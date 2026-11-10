@@ -21,7 +21,7 @@ import { openPack, showCollection, showCard, showCollectors, grantPacks, CARD_VI
 import { COMMANDS } from './commands.js';
 import { handleAutocomplete } from './autocomplete.js';
 import { runAgent, defer } from './agent.js';
-import { startBlackjack, playRoulette, handleComponent, sweepGames,
+import { startBlackjack, playRoulette, playSlots, startHiLo, handleComponent, sweepGames,
          showOdds, placeRaceBet, showMyBets } from './games.js';
 import { repriceAll, listBooks, openBook, setBookStatus, settleBook, voidBook, deleteBook }
   from './book.js';
@@ -729,6 +729,8 @@ async function handleEconomy(interaction, record, env) {
       case 'rob':     embed = await robUser(env, interaction, pick('user')); break;
       case 'blackjack': embed = await startBlackjack(env, interaction, pick('bet')); break;
       case 'roulette':  embed = await playRoulette(env, interaction, pick('on'), pick('bet')); break;
+      case 'slots':     embed = await playSlots(env, interaction, pick('bet')); break;
+      case 'higherlower': embed = await startHiLo(env, interaction, pick('bet')); break;
       case 'odds':      embed = await showOdds(env, interaction, normClass(pick('class'))); break;
       case 'bet':       embed = await placeRaceBet(env, interaction, normClass(pick('class')),
                                                    pick('driver'), pick('amount')); break;

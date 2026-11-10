@@ -249,6 +249,32 @@ console.log('\nCUSTOM CARDS — clearing a batch of old art');
      /const CHUNK = 25/.test(e));
 }
 
+console.log('\nTHE NEW CASINO GAMES');
+{
+  const cm = read('worker/src/commands.js'), i = read('worker/src/index.js'),
+        g = read('worker/src/games.js');
+  ok('slots is registered', /name: 'slots'/.test(cm));
+  ok('higher or lower is registered', /name: 'higherlower'/.test(cm));
+  ok('both take a stake',
+     /name: 'slots'[\s\S]{0,220}name: 'bet'/.test(cm) &&
+     /name: 'higherlower'[\s\S]{0,240}name: 'bet'/.test(cm));
+  ok('slots is routed', /case 'slots':/.test(i));
+  ok('higher or lower is routed', /case 'higherlower':/.test(i));
+  ok('its buttons are routed', /tag === 'hl'/.test(g));
+
+  // Both must respect the same switch and the same limits as the rest.
+  ok('slots closes with the casino', /playSlots[\s\S]{0,400}casinoOff\(cfg\)/.test(g));
+  ok('so does higher or lower', /startHiLo[\s\S]{0,400}casinoOff\(cfg\)/.test(g));
+  ok('both take the stake through the shared limits',
+     /playSlots[\s\S]{0,500}takeStake\(/.test(g) && /startHiLo[\s\S]{0,500}takeStake\(/.test(g));
+
+  // The pot cannot run away.
+  ok('a run is capped', /HL_MAX_STREAK = \d+/.test(g));
+  ok('and so is the deck', /HL_MIN_DECK = \d+/.test(g));
+  ok('the price is fixed before the card is drawn',
+     g.indexOf('const mult = hiLoMultiplier(') < g.indexOf('const next = deck.pop();'));
+}
+
 console.log('\nEND OF SEASON');
 {
   const a = read('app.js'), m = read('manage.html'), c = read('styles.css'),

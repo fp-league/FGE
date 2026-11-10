@@ -311,5 +311,114 @@ console.log('\nSWEEPING');
   ok('and it is gone', env._rows.size === 0);
 }
 
+/* ── slots ─────────────────────────────────────────────── */
+console.log('\nSLOTS — the money');
+{
+  const env = makeDB(); seed(env, 'a', 10000);
+  const before = bal(env, 'a');
+  const r = await games.playSlots(env, who('a'), 500);
+  ok('it pays out or it does not, but it always answers', !!r && !!r.title, txt(r));
+  // The only four things that can happen to the balance on a 500 stake.
+  // Anything else means the stake or the payout was applied twice, or not
+  // at all \u2014 which is the bug class worth catching here.
+  const legal = [-500, Math.round(500 * 1.2) - 500, 500 * 13 - 500, 500 * 33 - 500];
+  const moved = bal(env, 'a') - before;
+  ok('the balance moved by exactly one of the paytable outcomes',
+     legal.includes(moved), `${moved}, expected one of ${legal.join()}`);
+
+  // Forced outcomes, so every branch is actually exercised rather than
+  // left to whatever the shuffle happened to give.
+  for (const [mult, label] of [[0, 'a loss'], [1.2, 'a pair'], [13, 'a trio'], [33, 'the jackpot']]) {
+    const e = makeDB(); seed(e, 'x', 100000);
+    const open = bal(e, 'x');
+    const real = Math.random;
+    // Three equal reels for a win, three different for a loss.
+    let i = 0;
+    Math.random = () => (mult === 0 ? [0, 1, 2][i++ % 3] / 6
+                       : mult === 1.2 ? [0, 0, 2][i++ % 3] / 6
+                       : mult === 13 ? 1 / 6 : 0);
+    await games.playSlots(e, who('x'), 500);
+    Math.random = real;
+    ok(`${label} pays ${mult}x`, bal(e, 'x') - open === Math.round(500 * mult) - 500,
+       `${bal(e, 'x') - open}`);
+  }
+
+  // Over many spins the ledger has to track the paytable, not drift.
+  const e2 = makeDB(); seed(e2, 'b', 5_000_000);
+  const start = bal(e2, 'b');
+  const N = 3000, stake = 100;
+  for (let i = 0; i < N; i++) await games.playSlots(e2, who('b'), stake);
+  const net = bal(e2, 'b') - start;
+  const rtp = 1 + net / (N * stake);
+  // Wide band on purpose: a 33x jackpot makes the variance large, and a
+  // tight assertion here would fail on an unlucky week rather than on a bug.
+  ok('the realised return is in the right country',
+     rtp > 0.6 && rtp < 1.4, String(rtp.toFixed(3)));
+  ok('the house is not giving money away on average over 3000 spins',
+     net < N * stake, String(net));
+
+  ok('too small a stake is refused',
+     /smallest stake/i.test(txt(await games.playSlots(makeDB(), who('z'), 1))));
+  const broke = makeDB(); seed(broke, 'c', 10);
+  ok('and so is one you cannot cover',
+     /Not enough/i.test(txt(await games.playSlots(broke, who('c'), 500))));
+  ok('a refused spin takes nothing', bal(broke, 'c') === 10, String(bal(broke, 'c')));
+}
+
+/* ── higher or lower ───────────────────────────────────── */
+console.log('\nHIGHER OR LOWER — the money');
+{
+  const env = makeDB(); seed(env, 'a', 10000);
+  const r = await games.startHiLo(env, who('a'), 500);
+  ok('the stake leaves immediately', bal(env, 'a') === 9500, String(bal(env, 'a')));
+  const ids = btns(r);
+  ok('there are three ways out', ids.length === 3, ids.join());
+  ok('higher, lower and take it',
+     ids.some(i => i.endsWith(':higher')) && ids.some(i => i.endsWith(':lower')) &&
+     ids.some(i => i.endsWith(':cash')), ids.join());
+  ok('the price is on the button',
+     /Higher ×\d/.test(JSON.stringify(r.data.components)), JSON.stringify(r.data.components));
+
+  // Cashing out straight away returns exactly the stake, never more.
+  const cash = ids.find(i => i.endsWith(':cash'));
+  const out = await games.handleComponent(press('a', cash), env);
+  ok('taking it immediately returns the stake', bal(env, 'a') === 10000, String(bal(env, 'a')));
+  ok('and says so', /Cashed out/.test(txt(out)), txt(out));
+  ok('the buttons go', ((out.data.components || []).length === 0));
+  ok('and it cannot be cashed twice',
+     /already finished/i.test(txt(await games.handleComponent(press('a', cash), env))));
+  ok('which did not pay again', bal(env, 'a') === 10000, String(bal(env, 'a')));
+
+  // Somebody else's game is not yours to press.
+  const e2 = makeDB(); seed(e2, 'a', 10000); seed(e2, 'b', 10000);
+  const g = await games.startHiLo(e2, who('a'), 500);
+  const theirs = btns(g).find(i => i.endsWith(':cash'));
+  ok('a stranger cannot cash your game',
+     /Not your game/i.test(txt(await games.handleComponent(press('b', theirs), e2))));
+  ok('and your pot is untouched', bal(e2, 'a') === 9500, String(bal(e2, 'a')));
+  ok('as is theirs', bal(e2, 'b') === 10000, String(bal(e2, 'b')));
+
+  // Play it out: whatever happens, the balance only ever moves by the
+  // stake out and at most one payout in.
+  for (let t = 0; t < 40; t++) {
+    const e = makeDB(); seed(e, 'a', 100000);
+    const open = bal(e, 'a');
+    let res = await games.startHiLo(e, who('a'), 1000);
+    let guard = 0;
+    while ((res.data.components || []).length && guard++ < 20) {
+      const b = btns(res);
+      const go = b.find(i => i.endsWith(':higher')) || b.find(i => i.endsWith(':cash'));
+      res = await games.handleComponent(press('a', go), e);
+    }
+    const end = bal(e, 'a');
+    ok(`run ${t}: never ends mid-hand`, (res.data.components || []).length === 0);
+    ok(`run ${t}: a loss costs exactly the stake, never more`,
+       end >= open - 1000, `${open} -> ${end}`);
+  }
+
+  ok('too small a stake is refused',
+     /smallest stake/i.test(txt(await games.startHiLo(makeDB(), who('z'), 1))));
+}
+
 console.log(`\n${pass}/${pass + fail} passed`);
 if (fail) process.exit(1);
