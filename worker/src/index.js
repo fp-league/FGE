@@ -16,7 +16,7 @@
 
 import { verifyRequest, handleCommand, buildResults } from './discord.js';
 import { CLASSES, normClass, classLabel, announceChannel } from './classes.js';
-import { openPack, showCollection, showCard, showCollectors, grantPacks, CARD_VIEWS,
+import { openPack, showCollection, showMissing, showCard, showCollectors, grantPacks, CARD_VIEWS,
          loadRarities, giveCard, grantPackType, fullSet } from './cards.js';
 import { COMMANDS } from './commands.js';
 import { handleAutocomplete } from './autocomplete.js';
@@ -670,6 +670,7 @@ async function handleCards(interaction, record, env) {
     switch (view) {
       case 'pack':       embed = await openPack(env, interaction, record); break;
       case 'collection': embed = await showCollection(env, interaction, record, pick('user')); break;
+      case 'missing':    embed = await showMissing(env, interaction, record, pick('user')); break;
       case 'card':       embed = await showCard(env, interaction, record, pick('name')); break;
       case 'collectors': embed = await showCollectors(env, record); break;
     }

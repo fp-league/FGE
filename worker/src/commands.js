@@ -102,6 +102,9 @@ commands.push({
     { name: 'collection', description: 'See a collection', type: 1, options: [
       { name: 'user', description: 'Whose collection (defaults to yours)', type: 6, required: false },
     ] },
+    { name: 'missing', description: 'Which cards are still missing from a collection', type: 1, options: [
+      { name: 'user', description: 'Whose gaps (defaults to yours)', type: 6, required: false },
+    ] },
     { name: 'card', description: 'Look at one card', type: 1, options: [
       { name: 'name', description: 'Start typing — pick from the list', type: 3,
         required: true, autocomplete: true },

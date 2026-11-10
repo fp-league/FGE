@@ -365,6 +365,7 @@ function fmtLeft(ms) {
 
 // One set means one colour on the embeds rather than a class red/blue.
 const BRAND = 0xE10600;
+const GOLD  = 0xFFC400;        // a completed set is worth a different colour
 
 /**
  * A pack as Discord renders it: a summary, then one embed per card so the
@@ -587,6 +588,84 @@ export async function showCollection(env, interaction, record, targetId) {
   };
 }
 
+/* ── /missing ──────────────────────────────────────────── */
+/**
+ * The other half of a collection: what is not in it yet.
+ *
+ * Listing the gaps is the easy part. The useful part is the last column —
+ * whether anyone in the league is sitting on a spare of it, because that
+ * turns "I need four more" into four people to go and ask. Without that
+ * this is a list of things you cannot do anything about.
+ */
+export async function showMissing(env, interaction, record, targetId) {
+  const user = userOf(interaction);
+  const id = targetId || user.id;
+  if (!id) return simple('Who are you?', "Couldn't read your Discord account.", 0x9E9E9E);
+
+  const set = await fullSet(env, record);
+  if (!set.length) {
+    return simple('No cards yet', 'There is no card set to be missing anything from.', BRAND);
+  }
+
+  const rows = await env.DB.prepare(
+    `SELECT driver_id FROM card_collection WHERE user_id = ? AND class = ?`
+  ).bind(id, SET).all();
+  const have = new Set((rows.results || []).map(r => r.driver_id));
+
+  const missing = set.filter(c => !have.has(c.id));
+  const whose = targetId ? 'They are' : 'You are';
+
+  if (!missing.length) {
+    return {
+      title: targetId ? 'Complete set' : 'You have the lot',
+      description: `**${set.length} of ${set.length}** \u2014 every card in the set.`,
+      color: GOLD,
+    };
+  }
+
+  // One query for every spare in the league, rather than one per missing
+  // card. A card counts as spare only above one copy: nobody is trading
+  // away the only one they have.
+  let spare = new Set();
+  try {
+    const dup = await env.DB.prepare(
+      `SELECT DISTINCT driver_id FROM card_collection
+        WHERE class = ? AND copies > 1 AND user_id <> ?`
+    ).bind(SET, String(id)).all();
+    spare = new Set((dup.results || []).map(r => r.driver_id));
+  } catch { /* the hint is a bonus, not the point of the command */ }
+
+  const groups = {};
+  missing.forEach(c => { (groups[c.rarity] ||= []).push(c); });
+
+  const fields = RARITIES.slice().reverse()
+    .filter(r => groups[r])
+    .map(r => ({
+      name: `${RARITY[r].icon} ${RARITY[r].label} (${groups[r].length})`,
+      value: groups[r]
+        .sort((a, b) => a.position - b.position)
+        .map(c => (spare.has(c.id) ? `${c.name} \u00b7 *spare going*` : c.name))
+        .join(', ')
+        .slice(0, 1020),
+    }));
+
+  const going = missing.filter(c => spare.has(c.id)).length;
+  const pct = Math.round((set.length - missing.length) / set.length * 100);
+
+  return {
+    title: targetId ? 'Still missing' : `${user.global_name || user.username} \u2014 still missing`,
+    description: `${whose} **${missing.length}** short of the full set ` +
+                 `\u2014 ${set.length - missing.length} of ${set.length}, ${pct}% complete.`,
+    color: BRAND,
+    fields,
+    footer: going
+      ? { text: going === 1
+            ? 'One of those is sitting in somebody\u2019s spares \u2014 try /trade offer.'
+            : `${going} of those are sitting in other people\u2019s spares \u2014 try /trade offer.` }
+      : { text: 'Nobody has a spare of any of these. Packs only.' },
+  };
+}
+
 /* ── /card ─────────────────────────────────────────────── */
 export async function showCard(env, interaction, record, query) {
   const user = userOf(interaction);
@@ -741,4 +820,4 @@ export async function grantPacks(env, userId, count) {
   return { granted: n, waiting: row ? row.packs : n, everGranted: row ? row.total : n };
 }
 
-export const CARD_VIEWS = ['pack', 'collection', 'card', 'collectors'];
+export const CARD_VIEWS = ['pack', 'collection', 'missing', 'card', 'collectors'];

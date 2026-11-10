@@ -1,4 +1,4 @@
-import { cardSet, openPack, showCollection, showCard, showCollectors, grantPacks,
+import { cardSet, openPack, showCollection, showMissing, showCard, showCollectors, grantPacks,
          grantPackType, giveCard } from '../worker/src/cards.js';
 let pass=0,fail=0;
 const ok=(n,c,x)=>{if(c){pass++;console.log('  ✓ '+n);}else{fail++;console.log('  ✗ '+n+(x?'  → '+x:''));}};
@@ -84,6 +84,20 @@ function fakeDB() {
   };
   const all = (sql,b) => {
     const q = sql.replace(/\s+/g,' ').trim();
+    // Every spare in the league except this person's own.
+    if (q.includes('SELECT DISTINCT driver_id')) {
+      const out = [];
+      for (const [k, v] of coll) { const [u, c, d] = k.split('|');
+        if (c === b[0] && v.copies > 1 && u !== String(b[1])) out.push({ driver_id: d }); }
+      return { results: [...new Map(out.map(r => [r.driver_id, r])).values()] };
+    }
+    // Just the ids somebody holds, which is all /cards missing needs.
+    if (/^SELECT driver_id FROM card_collection/.test(q)) {
+      const out = [];
+      for (const [k, v] of coll) { const [u, c, d] = k.split('|');
+        if (u === b[0] && c === b[1]) out.push({ driver_id: d }); }
+      return { results: out };
+    }
     if (q.includes('SELECT driver_id, rarity, copies') || q.includes('SELECT driver_id, copies')) {
       const out=[];
       for (const [k,v] of coll) { const [u,c,d]=k.split('|');
@@ -201,6 +215,92 @@ console.log('\nCOLLECTION');
   const empty=await showCollection({DB:db}, inter('u9','Nobody'), RECORD);
   ok('empty collection explains how to start', /pack/.test(empty.description), empty.description);
 }
+console.log('\nWHAT IS MISSING');
+{
+  const db = fakeDB();
+  const env = { DB: db };
+
+  // Nothing opened yet: everything is missing.
+  const all = await showMissing(env, inter('u1','Ben'), RECORD);
+  ok('a new collector is short the whole set',
+     /\*\*8\*\* short/.test(all.description), all.description);
+  ok('and is told how far along they are', /0 of 8, 0% complete/.test(all.description),
+     all.description);
+  ok('the gaps are grouped by rarity', (all.fields || []).length > 0);
+  ok('rarest first', RARITY_ORDER(all.fields), (all.fields||[]).map(f=>f.name).join(' | '));
+  const named = (all.fields || []).map(f => f.value).join(', ');
+  ok('and every card in the set is named somewhere',
+     cardSet(RECORD.gt3, null).every(c => named.includes(c.name)), named);
+
+  // Open one pack: the collection and the gaps must add up to the set.
+  await openPack(env, inter('u1','Ben'), RECORD);
+  const some = await showMissing(env, inter('u1','Ben'), RECORD);
+  const held = await showCollection(env, inter('u1','Ben'), RECORD);
+  const haveN = Number((held.description.match(/\*\*(\d+) of/) || [])[1]);
+  const gapN  = Number((some.description.match(/\*\*(\d+)\*\* short/) || [])[1]);
+  ok('what you have and what you are missing add up to the set',
+     haveN + gapN === 8, `${haveN} + ${gapN}`);
+  ok('nothing you already own is listed as missing', (() => {
+    const names = (some.fields || []).map(f => f.value).join(', ');
+    const mine  = (held.fields || []).map(f => f.value).join(', ')
+      .split(', ').map(x => x.replace(/ ×\d+$/, '')).filter(Boolean);
+    return mine.every(n => !names.split(', ').map(v => v.replace(/ · .*$/, '')).includes(n));
+  })(), JSON.stringify((some.fields||[]).map(f=>f.value)));
+
+  // The hint that makes it useful: someone else holding a spare.
+  const fresh = fakeDB();
+  const e2 = { DB: fresh };
+  const set = cardSet(RECORD.gt3, null);
+  const wanted = set[0];
+  // u2 holds two of the first card; u1 holds none of it.
+  fresh._coll.set(`u2|all|${wanted.id}`, { rarity: wanted.rarity, copies: 2 });
+  const hint = await showMissing(e2, inter('u1','Ben'), RECORD);
+  const line = (hint.fields || []).map(f => f.value).join(' | ');
+  ok('a card somebody has spare is marked', /spare going/.test(line), line);
+  ok('and the footer points at trading', /\/trade offer/.test(hint.footer.text), hint.footer.text);
+  ok('only that one is marked', (line.match(/spare going/g) || []).length === 1, line);
+
+  // A single copy is not a spare: nobody trades their only one.
+  const only = fakeDB();
+  only._coll.set(`u2|all|${wanted.id}`, { rarity: wanted.rarity, copies: 1 });
+  const noHint = await showMissing({ DB: only }, inter('u1','Ben'), RECORD);
+  ok('one copy is not a spare',
+     !/spare going/.test((noHint.fields||[]).map(f=>f.value).join(' ')));
+  ok('and it says so plainly', /Nobody has a spare/.test(noHint.footer.text), noHint.footer.text);
+
+  // Your own duplicates must not be offered to you as a trade.
+  const mineOnly = fakeDB();
+  mineOnly._coll.set(`u1|all|${wanted.id}`, { rarity: wanted.rarity, copies: 3 });
+  const self = await showMissing({ DB: mineOnly }, inter('u1','Ben'), RECORD);
+  ok('a card you hold is not in your own gaps',
+     !(self.fields||[]).map(f=>f.value).join(' ').includes(wanted.name),
+     JSON.stringify((self.fields||[]).map(f=>f.value)));
+
+  // The complete set, which is the path that never gets exercised by hand.
+  const full = fakeDB();
+  set.forEach(c => full._coll.set(`u1|all|${c.id}`, { rarity: c.rarity, copies: 1 }));
+  const done = await showMissing({ DB: full }, inter('u1','Ben'), RECORD);
+  ok('a finished set is celebrated, not listed', /every card in the set/.test(done.description),
+     done.description);
+  ok('and has no gap fields', !(done.fields || []).length);
+
+  // Looking at someone else reads in the third person.
+  const theirs = await showMissing(env, inter('u1','Ben'), RECORD, 'u9');
+  ok('someone else is "they"', /They are/.test(theirs.description), theirs.description);
+  const mineText = await showMissing(env, inter('u1','Ben'), RECORD);
+  ok('and you are "you"', /You are/.test(mineText.description), mineText.description);
+
+  // The spare lookup is a bonus; losing it must not lose the command.
+  const broken = fakeDB();
+  const realAll = broken.prepare;
+  broken.prepare = sql => (/SELECT DISTINCT driver_id/.test(sql)
+    ? { bind: () => ({ all: async () => { throw new Error('no such table'); } }) }
+    : realAll.call(broken, sql));
+  const survived = await showMissing({ DB: broken }, inter('u1','Ben'), RECORD);
+  ok('a failed spare lookup still lists the gaps',
+     (survived.fields || []).length > 0, JSON.stringify(survived));
+}
+
 function RARITY_ORDER(fields){
   const order=['Legendary','Epic','Rare','Uncommon','Common'];
   const seen=(fields||[]).map(f=>order.findIndex(o=>f.name.includes(o)));

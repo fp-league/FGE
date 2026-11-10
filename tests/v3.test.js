@@ -249,6 +249,19 @@ console.log('\nCUSTOM CARDS — clearing a batch of old art');
      /const CHUNK = 25/.test(e));
 }
 
+console.log('\nWHAT CARDS ARE MISSING');
+{
+  const cm = read('worker/src/commands.js'), i = read('worker/src/index.js'),
+        cd = read('worker/src/cards.js');
+  ok('it is a cards subcommand', /name: 'missing', description: 'Which cards are still missing/.test(cm));
+  ok('and can be pointed at someone else', /name: 'missing'[\s\S]{0,240}type: 6, required: false/.test(cm));
+  ok('it is routed', /case 'missing':/.test(i));
+  ok('and listed as a view', /CARD_VIEWS = \['pack', 'collection', 'missing'/.test(cd));
+  ok('a spare needs more than one copy', /copies > 1 AND user_id <> \?/.test(cd));
+  ok('and the spare lookup cannot sink the command',
+     /catch \{ \/\* the hint is a bonus/.test(cd));
+}
+
 console.log('\nTHE NEW CASINO GAMES');
 {
   const cm = read('worker/src/commands.js'), i = read('worker/src/index.js'),
