@@ -7,15 +7,14 @@
  * command list is a bot that answers the wrong thing.
  */
 
+import { CLASS_CHOICES } from './classes.js';
+
 const CLASS_OPTION = {
   name: 'class',
   description: 'Which class (defaults to GT3)',
   type: 3,                      // STRING
   required: false,
-  choices: [
-    { name: 'GT3', value: 'gt3' },
-    { name: 'GT4', value: 'gt4' },
-  ],
+  choices: CLASS_CHOICES,
 };
 
 const commands = [
@@ -90,6 +89,7 @@ const subcommands = [
 commands.push(
   { name: 'gt3', description: 'GT3 — standings, results, calendar and lineups', options: subcommands },
   { name: 'gt4', description: 'GT4 — standings, results, calendar and lineups', options: subcommands },
+  { name: 'truck', description: 'Trucks — standings, results, calendar and lineups', options: subcommands },
 );
 
 // ── Trading cards ────────────────────────────────────────

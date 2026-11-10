@@ -10,6 +10,8 @@
  * moves and a Legendary genuinely means something.
  */
 
+import { CLASSES, classLabel, classColour } from './classes.js';
+
 /**
  * The rarity ladder.
  *
@@ -308,7 +310,7 @@ export function combinedSet(record, custom) {
   const out = [];
   const seen = new Map();
 
-  for (const cls of ['gt3', 'gt4']) {
+  for (const cls of CLASSES) {
     const cd = (record && record[cls]) || {};
     cardSet(cd, null).forEach(c => {
       const card = { ...c, cls };
@@ -360,8 +362,6 @@ function fmtLeft(ms) {
   return `${h}h${rem ? ` ${rem}m` : ''}`;
 }
 
-const classLabel = c => (c === 'gt4' ? 'GT4' : 'GT3');
-const classColour = c => (c === 'gt4' ? 0x0033A0 : 0xE10600);
 
 // One set means one colour on the embeds rather than a class red/blue.
 const BRAND = 0xE10600;

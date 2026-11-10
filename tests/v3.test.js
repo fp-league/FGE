@@ -249,6 +249,63 @@ console.log('\nCUSTOM CARDS — clearing a batch of old art');
      /const CHUNK = 25/.test(e));
 }
 
+console.log('\nTHREE DIVISIONS, NOT TWO');
+{
+  const a = read('app.js'), h = read('index.html'), c = read('styles.css');
+  ok('the site lists its divisions once', /const CLASSES = \['gt3', 'gt4', 'truck'\]/.test(a));
+  ok('and nothing still spells the old pair out',
+     !/\['gt3', ?'gt4'\]/.test(a.replace(/const CLASSES = .*/, '')));
+  ok('the switcher has a Truck button', /id="csTRUCK"/.test(h));
+  ok('which carries the supplied artwork', /src="truck-logo\.webp"/.test(h));
+  ok('shown at its own size rather than scaled up',
+     /class="cs-logo cs-logo-sm" width="42" height="18"/.test(h));
+  ok('signup offers it too', /<option value="truck">/.test(h));
+  ok('the body gets one mode class per division',
+     /`\$\{k\}-mode`, classKey\(cls\) === k/.test(a));
+
+  // White accent: the thing every other class could take for granted is
+  // that white text reads on the fill. Here the fill IS white.
+  ok('there is a token for text on the fill', /--class-fill-ink: #fff;/.test(c));
+  ok('truck flips it to near-black', /body\.truck-mode[\s\S]{0,400}--class-fill-ink: #121214/.test(c));
+  ok('and no rule still hardcodes white on the fill',
+     !/background: var\(--class-fill\); color: #fff/.test(c));
+  ok('the footer text follows the token too',
+     /\.footer-content p \{\s*color: var\(--class-fill-ink\)/.test(c));
+  ok('primary button keeps a hover, since white cannot brighten',
+     /body\.truck-mode \.btn-primary:hover \{ filter: brightness\(0\.88\); \}/.test(c));
+
+  const cl = read('worker/src/classes.js');
+  ok('the worker lists its divisions once too', /CLASSES = \['gt3', 'gt4', 'truck'\]/.test(cl));
+  ok('an unknown division falls back rather than throwing',
+     /CLASSES\.includes\(k\) \? k : CLASSES\[0\]/.test(cl));
+  ok('truck has an embed colour', /truck: 0xFFFFFF/.test(cl));
+  ok('and its own announce channel by name',
+     /ANNOUNCE_CHANNEL_\$\{CLASS_LABEL\[normClass\(cls\)\]\}/.test(cl));
+  // The white accent broke two things no other class could break.
+  ok('the logo block is dropped, not painted white over white artwork',
+     /body\.truck-mode \.nav-logo \.logo-img \{[\s\S]{0,120}background: transparent/.test(c));
+  ok('and replaced with a rule so the mark still reads',
+     /body\.truck-mode \.nav-logo \.logo-img \{[\s\S]{0,200}border-left: 3px solid var\(--class-color\)/.test(c));
+  ok('the hero copy is held clear of the slab on a phone',
+     /body\.truck-mode \.hero-inner \{ max-width: 68%; \}/.test(c));
+  ok('and tighter still on the smallest screens',
+     /body\.truck-mode \.hero-inner \{ max-width: 74%; \}/.test(c));
+
+  ok('the angled strip under the bar is truck-only',
+     /body\.truck-mode \.navbar::after/.test(c));
+  ok('buttons get a cut corner', /body\.truck-mode \.btn-primary,[\s\S]{0,120}clip-path: polygon/.test(c));
+  ok('the calendar is denser', /body\.truck-mode \.cal-card \{[\s\S]{0,80}padding: 0\.8rem 0\.9rem/.test(c));
+
+  // Scoping: none of it may leak to the other two divisions.
+  const truckRules = (c.match(/^body\.truck-mode[^\n]*/gm) || []);
+  ok('every truck rule is scoped to the body class', truckRules.length >= 8, String(truckRules.length));
+  ok('and nothing styles truck without that scope',
+     !/^\.truck-/m.test(c), 'an unscoped .truck- rule exists');
+
+  ok('the bot offers a /truck command',
+     /name: 'truck', description: 'Trucks/.test(read('worker/src/commands.js')));
+}
+
 console.log('\nWORKER — announce endpoint');
 {
   const i = read('worker/src/index.js');
@@ -259,10 +316,10 @@ console.log('\nWORKER — announce endpoint');
   ok('can post as the bot without a webhook secret',
      /const viaBot = Boolean\(env\.DISCORD_TOKEN && channel\)/.test(i));
   ok('picks the channel for the class',
-     /cls === 'gt4' \? env\.ANNOUNCE_CHANNEL_GT4 : env\.ANNOUNCE_CHANNEL_GT3/.test(i));
+     /const channel = announceChannel\(env, cls\)/.test(i));
   ok('class is defined before the channel lookup uses it',
      i.indexOf("const cls = normClass(body.class)") <
-     i.indexOf("cls === 'gt4' ? env.ANNOUNCE_CHANNEL_GT4"));
+     i.indexOf("announceChannel(env, cls)"));
   ok('cache busted before reading', /leagueCache = \{ at: 0, data: null \}/.test(i));
   ok('reuses buildResults', /buildResults\(cd, cls, round\)/.test(i));
   ok('health reports either route', /announce: Boolean\(env\.DISCORD_WEBHOOK_URL \|\| \(env\.DISCORD_TOKEN/.test(i));

@@ -10,8 +10,16 @@ const BIN_URL     = `https://api.jsonbin.io/v3/b/${BIN_ID}`;
 // Worker that holds the state a static site can't: race control / live timing.
 const API_BASE    = 'https://fge-api.benjaminjameswestley.workers.dev';
 
+// ── DIVISIONS ────────────────────────────────────────────
+// Every division the league runs, in the order they appear in the
+// switcher. These were spelled out as CLASSES in eight places, so
+// adding Truck meant finding all eight; now it is this line.
+const CLASSES = ['gt3', 'gt4', 'truck'];
+const CLASS_LABEL = { gt3: 'GT3', gt4: 'GT4', truck: 'TRUCK' };
+const classKey = cls => String(cls || '').toLowerCase();
+
 // ── STATE ────────────────────────────────────────────────
-let rawData       = null;           // full JSONBin record { gt3:{…}, gt4:{…} }
+let rawData       = null;           // full JSONBin record { gt3:{…}, gt4:{…}, truck:{…} }
 let currentClass  = (() => {
     // Reading storage throws outright in some privacy modes. This runs at the
     // very top of the file, so an exception here would stop app.js loading at
@@ -48,6 +56,9 @@ function closeNav() {
     document.getElementById('navOverlay')?.classList.remove('open');
     document.getElementById('navToggle')?.classList.remove('open');
 }
+
+const blankByClass = () =>
+    Object.fromEntries(CLASSES.map(k => [CLASS_LABEL[k], 0]));
 
 function emptyClass() {
     return { drivers:[], teams:[], races:[], news:[], fantasy:{}, archive:{}, seasonName:'Season 1' };
@@ -323,14 +334,16 @@ function switchClass(cls) {
     if (cls === currentClass) return;
     currentClass = cls;
     try { localStorage.setItem('fge_class', cls); } catch(e) {}
-    // Drives --class-color and --page-bg: red for GT3, blue for GT4
-    document.body.classList.toggle('gt4-mode', cls === 'GT4');
+    // Drives --class-color and --page-bg: red for GT3, blue for GT4,
+    // white for Truck. One mode class per division, all mutually exclusive.
+    CLASSES.forEach(k => document.body.classList.toggle(
+        `${k}-mode`, classKey(cls) === k));
     applyThemeColor(cls);
     syncFviNav();
     syncStewardsNav();
     syncRecordsNav();
-    document.getElementById('csGT3')?.classList.toggle('active', cls === 'GT3');
-    document.getElementById('csGT4')?.classList.toggle('active', cls === 'GT4');
+    CLASSES.forEach(k => document.getElementById(`cs${CLASS_LABEL[k]}`)
+        ?.classList.toggle('active', classKey(cls) === k));
     // Tallies are per class, so the cached one is wrong now.
     dotdData = null; dotdLoaded = false;
     renderCurrentPage();
@@ -346,7 +359,7 @@ async function fetchData() {
         rawData = json.record;
     } catch(e) {
         console.error('FGE data fetch error', e);
-        rawData = { gt3: emptyClass(), gt4: emptyClass() };
+        rawData = Object.fromEntries(CLASSES.map(k => [k, emptyClass()]));
     }
 }
 
@@ -1394,7 +1407,7 @@ function renderDriverProfile(id) {
 // without appearing on the site.
 function fviEnabled() {
     // The battle spans both classes, so it's live if either says so.
-    return ['gt3','gt4'].some(k =>
+    return CLASSES.some(k =>
         ((rawData && rawData[k] && rawData[k].fireVsIce) || {}).enabled === true);
 }
 
@@ -1416,12 +1429,12 @@ function fireIceStandings() {
     // Fire and Ice are league-wide: each side is made up of GT3 *and* GT4
     // teams, and every point either of them scores counts for the faction.
     const out = {
-        fire: { pts: 0, teams: [], byClass: { GT3: 0, GT4: 0 } },
-        ice:  { pts: 0, teams: [], byClass: { GT3: 0, GT4: 0 } },
+        fire: { pts: 0, teams: [], byClass: blankByClass() },
+        ice:  { pts: 0, teams: [], byClass: blankByClass() },
         unassigned: [],
     };
 
-    ['gt3','gt4'].forEach(key => {
+    CLASSES.forEach(key => {
         const d = (rawData && rawData[key]) || {};
         const label = key.toUpperCase();
         const { tpts } = calcStandings(d.races||[], d.drivers||[], d.teams||[], pointsCfg(d));
@@ -1499,8 +1512,8 @@ function renderFantasy() {
     const sideColumn = key => {
         const side = SIDES[key];
         const data = s[key];
-        const gt3 = data.teams.filter(t => t.cls === 'GT3');
-        const gt4 = data.teams.filter(t => t.cls === 'GT4');
+        const byCls = CLASSES.map(k => [CLASS_LABEL[k],
+            data.teams.filter(t => t.cls === CLASS_LABEL[k])]);
         const group = (label, list) => !list.length ? '' : `
             <div class="fvi-group">${label} <span>${list.length}</span></div>
             ${list.map(t => `
@@ -1517,18 +1530,18 @@ function renderFantasy() {
               <span class="fvi-col-pts">${data.pts}</span>
             </div>
             <div class="fvi-split">
-              <span>GT3 <b>${data.byClass.GT3}</b></span>
-              <span>GT4 <b>${data.byClass.GT4}</b></span>
+              ${CLASSES.map(k => `<span>${CLASS_LABEL[k]} <b>${
+                  data.byClass[CLASS_LABEL[k]] || 0}</b></span>`).join('')}
             </div>
             ${data.teams.length
-              ? group('GT3', gt3) + group('GT4', gt4)
+              ? byCls.map(([label, list]) => group(label, list)).join('')
               : `<p class="fvi-none">No teams on this side yet.</p>`}
           </div>`;
     };
 
     // Rounds from both classes, newest first.
     const rounds = [];
-    ['gt3','gt4'].forEach(k => {
+    CLASSES.forEach(k => {
         const d = (rawData && rawData[k]) || {};
         (d.races||[]).filter(r => (r.results||[]).length).forEach(r => {
             rounds.push({ race: r, cls: k.toUpperCase(), sw: roundSwing(r, d) });
@@ -1841,7 +1854,7 @@ function customFor() {
 function wholeSet() {
     const out = [];
     const seen = new Map();
-    ['gt3', 'gt4'].forEach(k => {
+    CLASSES.forEach(k => {
         const cd = rawData && rawData[k];
         if (!cd) return;
         cardSetFor(cd).forEach(c => {
@@ -2197,7 +2210,7 @@ function renderRecords() {
 function syncStewardsNav() {
     const li = document.getElementById('navStewards');
     if (!li) return;
-    const any = ['gt3','gt4'].some(k => ((rawData && rawData[k] && rawData[k].stewards) || []).length);
+    const any = CLASSES.some(k => ((rawData && rawData[k] && rawData[k].stewards) || []).length);
     li.style.display = any ? '' : 'none';
 }
 
@@ -2647,7 +2660,8 @@ async function init() {
     });
 
     // Init class switcher UI — apply the saved class colour on first paint
-    document.body.classList.toggle('gt4-mode', currentClass === 'GT4');
+    CLASSES.forEach(k => document.body.classList.toggle(
+        `${k}-mode`, classKey(currentClass) === k));
     applyThemeColor(currentClass);
     document.getElementById('csGT3')?.classList.toggle('active', currentClass === 'GT3');
     document.getElementById('csGT4')?.classList.toggle('active', currentClass === 'GT4');

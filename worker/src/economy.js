@@ -12,12 +12,13 @@
  * decide the numbers.
  */
 
+import { classLabel } from './classes.js';
+
 import { RARITY, RARITIES, CORE_RARITIES, clearRarityCache,
          drawPack, fullSet, SET, packEmbeds } from './cards.js';
 
 const userOf = i => (i.member && i.member.user) || i.user || {};
 const nameOf = u => u.global_name || u.username || 'Someone';
-const classLabel = c => (c === 'gt4' ? 'GT4' : 'GT3');
 const GOLD = 0xFFC400;
 const BRAND = 0xE10600;   // one set, one colour
 const GREY = 0x9E9E9E;

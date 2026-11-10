@@ -11,6 +11,8 @@
  * slower every year.
  */
 
+import { normClass } from './classes.js';
+
 const PREFIX = 'arch/';
 
 const slug = s => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-')
@@ -50,7 +52,7 @@ export async function readArchive(env, id) {
  */
 export async function saveArchive(env, { cls, name, record, summary }) {
   if (!env.IMAGES_KV) throw new Error('no KV namespace bound to store seasons in');
-  const klass = cls === 'gt4' ? 'gt4' : 'gt3';
+  const klass = normClass(cls);
   const label = String(name || '').trim() || 'Season';
   const id = `${klass}-${slug(label)}`;
   const key = PREFIX + id;

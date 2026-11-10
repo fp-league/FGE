@@ -34,7 +34,10 @@
        section ticks) where nothing sits on top of it. The other three
        carry text, and were measured against the surfaces they land on:
 
-         --class-fill     white text on it   (buttons, the footer bar)
+         --class-fill     --class-fill-ink text on it (buttons, the footer bar)
+         --class-fill-ink text that sits on --class-fill. White for every
+                          class whose accent is dark enough to carry it;
+                          near-black for Truck, whose fill is white.
          --class-on-dark  it as text on #121214
          --class-on-light it as text on the white panel
 
@@ -43,6 +46,7 @@
        use a brighter and a deeper red respectively. The brand red itself
        is unchanged wherever it is a fill. */
     --class-fill:     var(--gt3);
+    --class-fill-ink: #fff;
     --class-on-dark:  #FF3B30;
     --class-on-light: #C40500;
     /* Aliases for the pre-redesign names still used by app.js inline styles.
@@ -75,6 +79,27 @@ body.gt4-mode {
     --class-on-dark:  var(--gt4-bright);
     --class-on-light: #2050C8;
 }
+
+/* Truck is monochrome: the accent is white, which inverts the one
+   assumption the other two classes share — that the fill is dark enough
+   to carry white text. Here the fill IS white, so the ink on it goes
+   near-black. Everything else about the token contract is unchanged. */
+body.truck-mode {
+    --class-color:    #FFFFFF;
+    --class-fill:     #FFFFFF;
+    --class-fill-ink: #121214;
+    --class-on-dark:  #FFFFFF;
+    --class-on-light: #121214;
+    /* A touch deeper than the other two, so white has more to push
+       against. The reference is near-black and the accent earns its
+       contrast from that, not from hue. */
+    --page-bg:   #0D0D0F;
+    --page-deep: #08080A;
+}
+/* brightness() cannot brighten white, so the primary button would have had
+   no hover at all. It darkens instead. */
+body.truck-mode .btn-primary:hover { filter: brightness(0.88); }
+
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html { scroll-behavior: smooth; }
@@ -451,7 +476,7 @@ body > .footer { flex-shrink: 0; width: 100%; }
 
 .hero-cta {
     display: inline-block;
-    background: var(--class-fill); color: #fff;
+    background: var(--class-fill); color: var(--class-fill-ink);
     font-family: var(--font-ui); font-weight: 700;
     font-size: 0.76rem; letter-spacing: 0.16em; text-transform: uppercase;
     padding: 0.85rem 1.9rem; text-decoration: none;
@@ -580,7 +605,7 @@ body > .footer { flex-shrink: 0; width: 100%; }
 .nh-meta { display: flex; align-items: center; gap: 0.7rem; margin-bottom: 0.7rem; flex-wrap: wrap; }
 .nh-tag {
     font-family: var(--font-display); font-size: 0.6rem; letter-spacing: 0.09em;
-    background: var(--class-fill); color: #fff;
+    background: var(--class-fill); color: var(--class-fill-ink);
     padding: 0.18rem 0.55rem; border-radius: 0;
     display: inline-block; transition: background 0.3s; text-transform: uppercase;
 }
@@ -704,7 +729,7 @@ body > .footer { flex-shrink: 0; width: 100%; }
 .nb-where { font-family: var(--font-ui); font-size: 0.86rem; color: #55555C; }
 .nb-btn {
     margin-top: 1.1rem;
-    background: var(--class-fill); color: #fff;
+    background: var(--class-fill); color: var(--class-fill-ink);
     font-family: var(--font-ui); font-weight: 700;
     font-size: 0.72rem; letter-spacing: 0.14em; text-transform: uppercase;
     padding: 0.75rem 1.6rem; border: 0; cursor: pointer;
@@ -749,7 +774,7 @@ select:focus { outline: none; border-color: var(--class-on-dark); }
 /* The selected tab takes the class colour rather than going white. White
    was the loudest thing on the page and it was being spent on a tab. */
 .tab-btn.active {
-    background: var(--class-fill); color: #fff;
+    background: var(--class-fill); color: var(--class-fill-ink);
     border-color: var(--class-fill); font-weight: 700;
 }
 
@@ -809,7 +834,7 @@ select:focus { outline: none; border-color: var(--class-on-dark); }
 .rt-gp { color: var(--white); }
 .rt-date { color: var(--grey); font-size: 0.8rem; white-space: nowrap; }
 .rt-laps { color: var(--grey); font-size: 0.8rem; }
-.pts-leader { font-family: var(--font-display); font-size: 0.68rem; background: var(--class-fill); color: #fff; padding: 0.12rem 0.45rem; border-radius: 0; letter-spacing: 0.1em; }
+.pts-leader { font-family: var(--font-display); font-size: 0.68rem; background: var(--class-fill); color: var(--class-fill-ink); padding: 0.12rem 0.45rem; border-radius: 0; letter-spacing: 0.1em; }
 .pts-gap { color: var(--grey); font-family: var(--font-ui); font-size: 0.82rem; }
 
 @media (max-width: 600px) { .std-hide-mobile { display: none !important; } }
@@ -876,7 +901,7 @@ select:focus { outline: none; border-color: var(--class-on-dark); }
 .cal-card-bg { position: absolute; inset: 0; background-size: cover; background-position: center; opacity: 0.06; }
 .cal-card-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem; position: relative; }
 .cal-round { font-family: var(--font-display); font-size: 0.68rem; letter-spacing: 0.063em; color: var(--grey); }
-.cal-next-badge { font-family: var(--font-display); font-size: 0.58rem; letter-spacing: 0.12em; background: var(--class-fill); color: #fff; padding: 0.08rem 0.4rem; border-radius: 0; }
+.cal-next-badge { font-family: var(--font-display); font-size: 0.58rem; letter-spacing: 0.12em; background: var(--class-fill); color: var(--class-fill-ink); padding: 0.08rem 0.4rem; border-radius: 0; }
 .cal-date { font-size: 0.72rem; color: var(--grey); font-family: var(--font-ui); }
 /* The circuit is the thing you scan the calendar for, so it is set like
    the race title on the home page rather than a line of bold body text. */
@@ -1269,7 +1294,7 @@ select:focus { outline: none; border-color: var(--class-on-dark); }
 .btn { display: inline-flex; align-items: center; justify-content: center; padding: 0.65rem 1.4rem; border-radius: var(--radius); cursor: pointer; font-family: var(--font-display); font-size: 0.82rem; letter-spacing: 0.12em; border: none; text-decoration: none; transition: all 0.2s; }
 /* Primary actions are the class colour, matching the hero and the next
    race card, so there is one kind of button that means "do the thing". */
-.btn-primary { background: var(--class-fill); color: #fff; font-weight: 700; }
+.btn-primary { background: var(--class-fill); color: var(--class-fill-ink); font-weight: 700; }
 .btn-primary:hover { filter: brightness(1.14); }
 .btn-secondary { background: transparent; color: var(--white); border: 1px solid var(--line-strong); margin-top: 1.2rem; }
 .btn-secondary:hover { border-color: var(--white); }
@@ -1293,12 +1318,12 @@ select:focus { outline: none; border-color: var(--class-on-dark); }
     flex-wrap: wrap; gap: 1rem;
 }
 .footer-content p {
-    color: #fff; font-size: 0.74rem; font-family: var(--font-ui);
+    color: var(--class-fill-ink); font-size: 0.74rem; font-family: var(--font-ui);
     letter-spacing: 0.1em; text-transform: uppercase;
 }
 .footer-links { display: flex; gap: 1.4rem; }
 .footer-links a {
-    color: #fff; text-decoration: none; font-size: 0.74rem;
+    color: var(--class-fill-ink); text-decoration: none; font-size: 0.74rem;
     font-family: var(--font-ui); letter-spacing: 0.1em;
     text-transform: uppercase; transition: opacity 0.2s;
 }
@@ -1306,6 +1331,74 @@ select:focus { outline: none; border-color: var(--class-on-dark); }
    3.9:1 on the bar, and a footer link is 12px. The hover state carries
    the affordance instead. */
 .footer-links a:hover, .footer-links a:focus-visible { text-decoration: underline; }
+
+/* Truck's artwork is supplied at 42x18. Showing it at its native size
+   keeps it crisp; the box around it stays the height of the other two so
+   the three buttons line up. */
+.cs-logo-sm { width: 42px; height: 18px; object-fit: contain; align-self: center; }
+
+/* ── TRUCK ────────────────────────────────────────────────
+   The division's own look, taking its cues from the reference: a near-black
+   field, a hard white accent and angled cuts. The angles were already in
+   the design — the hero slab and the section ticks are skewed — so this
+   leans into them rather than inventing a second visual language.
+
+   Everything here is scoped to body.truck-mode. GT3 and GT4 are untouched. */
+
+/* The FGE mark is white artwork, and the bar behind it is painted with the
+   class colour. For red and blue that frames it; for white it swallowed it
+   whole and left a blank rectangle. Truck drops the block and uses a hard
+   rule instead, which is what the reference does anyway. */
+body.truck-mode .nav-logo .logo-img {
+    background: transparent;
+    padding: 0.42rem 0 0.42rem 0.6rem;
+    border-left: 3px solid var(--class-color);
+}
+
+/* The angled strip under the bar: the reference's loudest single move. */
+body.truck-mode .navbar { position: sticky; }
+body.truck-mode .navbar::after {
+    content: ''; position: absolute; left: 0; right: 0; bottom: -1px;
+    height: 3px; background: var(--class-color);
+    clip-path: polygon(0 0, 100% 0, calc(100% - 26px) 100%, 0 100%);
+}
+
+/* A cut corner, the way a racing number panel is cut. 10px is enough to
+   read as deliberate and small enough not to eat the label. */
+body.truck-mode .btn-primary,
+body.truck-mode .tab-btn.active {
+    clip-path: polygon(0 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%);
+}
+
+/* The calendar in the reference is a dense list, not airy cards: tighter
+   rows, a harder rule between them, and the accent edge on every row
+   rather than only the next one. */
+body.truck-mode .cal-grid { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+body.truck-mode .cal-card {
+    padding: 0.8rem 0.9rem;
+    border-left: 2px solid rgba(255,255,255,0.14);
+}
+body.truck-mode .cal-card:hover { border-left-color: var(--class-color); }
+body.truck-mode .cal-card.next { border-left-width: 3px; }
+
+/* White on near-black is a harder edge than red or blue was, so the hero
+   slab is pulled back a little: at full strength it reads as a lamp
+   rather than a graphic. */
+body.truck-mode .hero-slab { opacity: 0.92; }
+
+/* On a phone the slab is 46% of a 390px hero and the copy wraps almost
+   full width, so the two overlap. For red and blue that is survivable —
+   white type on a red field still reads. White on white does not: the
+   last word of the paragraph simply disappeared. So in Truck the copy is
+   held clear of the slab's leading edge rather than the slab being
+   shrunk, which would cost the motif the whole look rests on. */
+@media (max-width: 760px) {
+    body.truck-mode .hero-inner { max-width: 68%; }
+    body.truck-mode .hero-slab { opacity: 0.8; }
+}
+@media (max-width: 520px) {
+    body.truck-mode .hero-inner { max-width: 74%; }
+}
 
 /* ── PAGES ── */
 .page { display: none; padding-top: 1.5rem; }
@@ -1620,7 +1713,7 @@ select:focus { outline: none; border-color: var(--class-on-dark); }
 /* Qualifying — an extra lap-time column before the gap to pole */
 .lv-sess { font-family: var(--font-ui); font-size: 0.6rem; font-weight: 700;
     letter-spacing: 0.16em; padding: 0.2rem 0.5rem; border-radius: 0;
-    background: var(--class-fill); color: #fff; }
+    background: var(--class-fill); color: var(--class-fill-ink); }
 .lv-tower.is-quali .lv-row { grid-template-columns: 54px 5px 48px 1fr 1fr 96px 96px; }
 .lv-lap { font-family: var(--font-ui); font-size: 0.86rem; color: var(--white);
     text-align: right; font-variant-numeric: tabular-nums; }
@@ -1754,7 +1847,7 @@ textarea:focus-visible,
 /* Skip straight to the content rather than tabbing the whole nav. */
 .skip-link {
     position: absolute; left: 50%; transform: translateX(-50%) translateY(-200%);
-    top: 0; z-index: 10000; background: var(--class-fill); color: #fff;
+    top: 0; z-index: 10000; background: var(--class-fill); color: var(--class-fill-ink);
     padding: 0.7rem 1.2rem; border-radius: 0; font-family: var(--font-ui);
     font-size: 0.82rem; letter-spacing: 0.08em; text-decoration: none;
     transition: transform 0.15s;

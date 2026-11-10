@@ -16,6 +16,7 @@
  */
 
 import { listPackTypes, listJobs, listSpares } from './economy.js';
+import { CLASSES, normClass } from './classes.js';
 import { fullSet, RARITY } from './cards.js';
 import { rouletteChoices, betChoices } from './games.js';
 
@@ -121,13 +122,13 @@ async function spareChoices(env, record, userId, q) {
 }
 
 const classOf = (data, trail) => {
-  if (data.name === 'gt3' || data.name === 'gt4') return data.name;
+  if (CLASSES.includes(data.name)) return data.name;
   const flat = (data.options || []).find(o => o.name === 'class');
   const nested = trail.length
     ? (((data.options || [])[0] || {}).options || []).find(o => o.name === 'class')
     : null;
   const v = (flat || nested || {}).value;
-  return String(v || 'gt3').toLowerCase() === 'gt4' ? 'gt4' : 'gt3';
+  return normClass(v);
 };
 
 function driverChoices(record, cls, q) {

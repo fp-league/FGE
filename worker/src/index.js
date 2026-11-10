@@ -15,6 +15,7 @@
  */
 
 import { verifyRequest, handleCommand, buildResults } from './discord.js';
+import { CLASSES, normClass, classLabel, announceChannel } from './classes.js';
 import { openPack, showCollection, showCard, showCollectors, grantPacks, CARD_VIEWS,
          loadRarities, giveCard, grantPackType, fullSet } from './cards.js';
 import { COMMANDS } from './commands.js';
@@ -111,7 +112,7 @@ async function league(env) {
   return leagueCache.data;
 }
 
-const normClass = c => (String(c || '').toLowerCase() === 'gt4' ? 'gt4' : 'gt3');
+
 
 function findRace(data, cls, raceKey) {
   const races = (data && data[cls] && data[cls].races) || [];
@@ -1138,7 +1139,7 @@ async function postAnnounce(request, env) {
   // Results are per class, and most servers keep a channel per class, so a
   // class-specific channel wins over the shared one when it is set.
   // Resolved after cls exists, obviously.
-  const channel = (cls === 'gt4' ? env.ANNOUNCE_CHANNEL_GT4 : env.ANNOUNCE_CHANNEL_GT3)
+  const channel = announceChannel(env, cls)
                   || env.ANNOUNCE_CHANNEL_ID;
 
   // Either route works. The bot token is preferred because the Worker

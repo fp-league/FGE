@@ -9,6 +9,8 @@
  * Commands: /standings /results /calendar /nextrace /lineups /driver
  */
 
+import { CLASSES, normClass, classLabel, classColour } from './classes.js';
+
 const RED  = 0xE10600;   // GT3
 const BLUE = 0x5599FF;   // GT4
 const GREY = 0x888888;
@@ -85,8 +87,6 @@ export function calcStandings(cd) {
 
 /* ── helpers ─────────────────────────────────────────────── */
 
-const classColour = cls => (cls === 'gt4' ? BLUE : RED);
-const classLabel  = cls => (cls === 'gt4' ? 'GT4' : 'GT3');
 
 const hasTime = s => Boolean(s) && !/^\d{4}-\d{2}-\d{2}$/.test(String(s).trim());
 
@@ -361,7 +361,7 @@ function route(interaction) {
   const name = (interaction.data && interaction.data.name) || '';
   const opts = (interaction.data && interaction.data.options) || [];
 
-  if (name === 'gt3' || name === 'gt4') {
+  if (CLASSES.includes(name)) {
     const sub = opts.find(o => o.type === SUBCOMMAND) || opts[0];
     return {
       cls: name,
@@ -372,7 +372,7 @@ function route(interaction) {
 
   const cls = (opts.find(o => o.name === 'class') || {}).value;
   return {
-    cls: String(cls || 'gt3').toLowerCase() === 'gt4' ? 'gt4' : 'gt3',
+    cls: normClass(cls),
     view: name,
     options: opts,
   };

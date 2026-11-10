@@ -75,7 +75,10 @@
        section ticks) where nothing sits on top of it. The other three
        carry text, and were measured against the surfaces they land on:
 
-         --class-fill     white text on it   (buttons, the footer bar)
+         --class-fill     --class-fill-ink text on it (buttons, the footer bar)
+         --class-fill-ink text that sits on --class-fill. White for every
+                          class whose accent is dark enough to carry it;
+                          near-black for Truck, whose fill is white.
          --class-on-dark  it as text on #121214
          --class-on-light it as text on the white panel
 
@@ -84,6 +87,7 @@
        use a brighter and a deeper red respectively. The brand red itself
        is unchanged wherever it is a fill. */
     --class-fill:     var(--gt3);
+    --class-fill-ink: #fff;
     --class-on-dark:  #FF3B30;
     --class-on-light: #C40500;
     /* Aliases for the pre-redesign names still used by app.js inline styles.
@@ -337,6 +341,14 @@ body {
                  srcset="gt4-logo-160.webp 160w, gt4-logo.webp 320w" sizes="65px">
             <span class="cs-sub">Tier 2</span>
         </button>
+        <div class="cs-divider"></div>
+        <!-- The supplied artwork is 42x18, so it is shown at its own size
+             rather than scaled up to match the other two and going soft.
+             When a larger export arrives, widen cs-logo-sm and add a srcset. -->
+        <button class="cs-btn" id="csTRUCK" onclick="switchClass('TRUCK')" aria-label="Show Truck">
+            <img src="truck-logo.webp" alt="" class="cs-logo cs-logo-sm" width="42" height="18" decoding="async">
+            <span class="cs-sub">New</span>
+        </button>
     </div>
 
     <main class="container" id="main">
@@ -480,6 +492,7 @@ body {
                   <select name="class">
                     <option value="gt4">GT4 — Tier 2, where most people start</option>
                     <option value="gt3">GT3 — Tier 1</option>
+                    <option value="truck">Trucks — the new division</option>
                   </select>
                 </label>
                 <label class="su-field">

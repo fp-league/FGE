@@ -13,6 +13,8 @@
  * round for a thing whose whole job is to be the safety net.
  */
 
+import { CLASSES } from './classes.js';
+
 const KEEP = 30;                       // a month of nights
 const PREFIX = 'bk/';
 
@@ -29,7 +31,7 @@ async function fetchLeague(env) {
 
 /** "GT3 34 drivers, 8 races · GT4 22 drivers, 6 races" */
 function summarise(record) {
-  return ['gt3', 'gt4']
+  return CLASSES
     .map(k => {
       const cd = record[k];
       if (!cd) return null;
@@ -48,7 +50,7 @@ function summarise(record) {
  * comes back empty, that is a reason to keep what we already have.
  */
 function looksReal(record) {
-  return ['gt3', 'gt4'].some(k => ((record[k] || {}).drivers || []).length > 0);
+  return CLASSES.some(k => ((record[k] || {}).drivers || []).length > 0);
 }
 
 export async function takeBackup(env, kind) {
