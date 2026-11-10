@@ -910,7 +910,7 @@ textarea { resize:vertical; min-height:80px; }
             </div>
             <div class="form-group">
               <label class="fg-label" id="giveCountLabel">HOW MANY</label>
-              <input id="grantCount" type="number" min="1" max="1000000" value="1">
+              <input id="grantCount" type="number" min="1" max="9007199254740991" value="1">
             </div>
             <div class="form-group" id="giveReasonWrap">
               <label class="fg-label">WHAT FOR</label>
@@ -2824,7 +2824,13 @@ function giveWhatChanged() {
     reason.style.display = what === 'credits' ? '' : 'none';
     label.textContent = what === 'credits' ? 'HOW MUCH'
                       : what === 'pack' ? 'HOW MANY PACKS' : 'HOW MANY COPIES';
-    count.max = what === 'credits' ? 1000000 : what === 'pack' ? 50 : 99;
+    // Credits are a number in a column, so there is no reason to cap them
+    // at anything except the point where JavaScript stops counting
+    // accurately. Packs and cards are clamped lower by the server because
+    // each one is a real row, and the box should say so rather than
+    // accepting 5000 and quietly handing over 50.
+    count.max = what === 'credits' ? Number.MAX_SAFE_INTEGER
+              : what === 'pack' ? 50 : 99;
     if (what === 'credits') return;
 
     const sel = document.getElementById('giveWhich');
@@ -2848,13 +2854,14 @@ async function giveSomething() {
     const userId = document.getElementById('grantMember').value;
     const what   = document.getElementById('giveWhat').value;
     const which  = document.getElementById('giveWhich').value;
-    const amount = parseInt(document.getElementById('grantCount').value, 10) || 1;
+    const amount = Math.min(Number.MAX_SAFE_INTEGER,
+        Math.max(1, Math.round(Number(document.getElementById('grantCount').value) || 1)));
     const st     = document.getElementById('grantStatus');
     if (!userId) { toast('Load members and pick someone first', 'err'); return; }
     if (what !== 'credits' && !which) { toast('Pick what to give', 'err'); return; }
 
     const who = (grantMembers.find(m => m.id === userId) || {}).displayName || 'them';
-    const label = what === 'credits' ? `${amount} credits`
+    const label = what === 'credits' ? `${amount.toLocaleString()} credits`
         : (document.getElementById('giveWhich').selectedOptions[0] || {}).textContent || 'it';
 
     // This hands out real value and there is no undo, so it asks once.
@@ -2865,8 +2872,8 @@ async function giveSomething() {
         const body = await econPost({ action: 'give', userId, what, id: which, amount,
             reason: document.getElementById('giveReason').value });
         if (what === 'credits') {
-            st.textContent = `${who} now has ${body.balance}`;
-            toast(`Gave ${who} ${amount} credits`, 'ok');
+            st.textContent = `${who} now has ${Number(body.balance).toLocaleString()}`;
+            toast(`Gave ${who} ${amount.toLocaleString()} credits`, 'ok');
         } else if (what === 'pack') {
             st.textContent = `${body.waiting} waiting`;
             toast(`Gave ${who} ${body.amount} × ${body.name}`, 'ok');

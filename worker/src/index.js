@@ -799,7 +799,17 @@ async function postEcon(request, env) {
           return bad('a Discord user id is required', request, env, 422);
         }
         const what = String(body.what || '');
-        const count = Math.max(1, Math.round(Number(body.amount) || 1));
+
+        // No ceiling on a gift beyond the point where the number stops
+        // being one. Past 2^53 JavaScript cannot tell 9007199254740993
+        // from ...92, so a balance above it is quietly wrong rather than
+        // large, and Infinity or NaN would go into the column as nonsense.
+        // Packs and cards clamp themselves lower, because each one is a row.
+        const asked = Number(body.amount);
+        if (!Number.isFinite(asked)) {
+          return bad('that amount is not a number', request, env, 422);
+        }
+        const count = Math.max(1, Math.min(Number.MAX_SAFE_INTEGER, Math.round(asked)));
 
         if (what === 'credits') {
           const out = await adjust(env, userId, count,

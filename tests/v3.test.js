@@ -249,6 +249,31 @@ console.log('\nCUSTOM CARDS — clearing a batch of old art');
      /const CHUNK = 25/.test(e));
 }
 
+console.log('\nGIVING CREDITS');
+{
+  const m = read('manage.html'), i = read('worker/src/index.js'), c = read('worker/src/cards.js');
+  ok('the old million cap is gone', !/max="1000000"/.test(m));
+  ok('credits now run to the safe-integer limit',
+     /count\.max = what === 'credits' \? Number\.MAX_SAFE_INTEGER/.test(m));
+  ok('the input agrees', /id="grantCount"[^>]*max="9007199254740991"/.test(m), 
+     (m.match(/id="grantCount"[^>]*>/) || [''])[0]);
+
+  // Packs and cards stay capped, and the box must say the real number
+  // rather than accepting more and quietly handing over fewer.
+  ok('packs are still fifty', /what === 'pack' \? 50 : 99/.test(m));
+  ok('and the server clamps them too', /Math\.min\(50, Number\(count\)/.test(c));
+  ok('as it does cards', /Math\.min\(99, Number\(copies\)/.test(c));
+
+  // The thing a removed cap actually risks.
+  ok('a non-number is refused outright',
+     /if \(!Number\.isFinite\(asked\)\)/.test(i));
+  ok('and anything past 2\u00b2\u2075\u00b3 is pulled back to it',
+     /Math\.min\(Number\.MAX_SAFE_INTEGER, Math\.round\(asked\)\)/.test(i));
+  ok('a gift is still at least one', /Math\.max\(1, Math\.min\(Number\.MAX_SAFE_INTEGER/.test(i));
+
+  ok('big numbers are shown with separators', /amount\.toLocaleString\(\)/.test(m));
+}
+
 console.log('\nWHAT CARDS ARE MISSING');
 {
   const cm = read('worker/src/commands.js'), i = read('worker/src/index.js'),
