@@ -910,7 +910,8 @@ textarea { resize:vertical; min-height:80px; }
             </div>
             <div class="form-group">
               <label class="fg-label" id="giveCountLabel">HOW MANY</label>
-              <input id="grantCount" type="number" min="1" max="9007199254740991" value="1">
+              <input id="grantCount" type="text" inputmode="numeric" autocomplete="off" value="1"
+                     data-max="9007199254740991">
             </div>
             <div class="form-group" id="giveReasonWrap">
               <label class="fg-label">WHAT FOR</label>
@@ -973,7 +974,7 @@ textarea { resize:vertical; min-height:80px; }
             </div>
             <div class="form-group">
               <label class="fg-label">HOW MUCH</label>
-              <input id="ecAmount" type="number" step="50" value="1000">
+              <input id="ecAmount" type="text" inputmode="numeric" autocomplete="off" value="1000">
             </div>
             <div class="form-group">
               <label class="fg-label">BALANCE</label>
@@ -1097,11 +1098,11 @@ textarea { resize:vertical; min-height:80px; }
             </div>
             <div class="form-group">
               <label class="fg-label">PRICE</label>
-              <input id="pkPrice" type="number" min="0" step="50" value="400">
+              <input id="pkPrice" type="text" inputmode="numeric" autocomplete="off" value="400">
             </div>
             <div class="form-group">
               <label class="fg-label">CARDS IN IT</label>
-              <input id="pkSize" type="number" min="1" max="20" value="5">
+              <input id="pkSize" type="text" inputmode="numeric" autocomplete="off" value="5">
             </div>
             <div class="form-group">
               <label class="fg-label">GUARANTEE</label>
@@ -1216,15 +1217,15 @@ textarea { resize:vertical; min-height:80px; }
             </div>
             <div class="form-group">
               <label class="fg-label">PAYS FROM</label>
-              <input id="jbMin" type="number" min="0" value="60">
+              <input id="jbMin" type="text" inputmode="numeric" autocomplete="off" value="60">
             </div>
             <div class="form-group">
               <label class="fg-label">PAYS UP TO</label>
-              <input id="jbMax" type="number" min="0" value="130">
+              <input id="jbMax" type="text" inputmode="numeric" autocomplete="off" value="130">
             </div>
             <div class="form-group">
               <label class="fg-label">COOLDOWN (MINUTES)</label>
-              <input id="jbCooldown" type="number" min="1" value="90">
+              <input id="jbCooldown" type="text" inputmode="numeric" autocomplete="off" value="90">
             </div>
             <div class="form-group">
               <label class="fg-label">BLURB</label>
@@ -2829,8 +2830,8 @@ function giveWhatChanged() {
     // accurately. Packs and cards are clamped lower by the server because
     // each one is a real row, and the box should say so rather than
     // accepting 5000 and quietly handing over 50.
-    count.max = what === 'credits' ? Number.MAX_SAFE_INTEGER
-              : what === 'pack' ? 50 : 99;
+    count.dataset.max = String(what === 'credits' ? Number.MAX_SAFE_INTEGER
+                             : what === 'pack' ? 50 : 99);
     if (what === 'credits') return;
 
     const sel = document.getElementById('giveWhich');
@@ -2854,11 +2855,17 @@ async function giveSomething() {
     const userId = document.getElementById('grantMember').value;
     const what   = document.getElementById('giveWhat').value;
     const which  = document.getElementById('giveWhich').value;
-    const amount = Math.min(Number.MAX_SAFE_INTEGER,
-        Math.max(1, Math.round(Number(document.getElementById('grantCount').value) || 1)));
+    const cap = Number(document.getElementById('grantCount').dataset.max)
+             || Number.MAX_SAFE_INTEGER;
+    const asked = Math.max(1, readAmount('grantCount', 1));
+    const amount = Math.min(cap, asked);
     const st     = document.getElementById('grantStatus');
     if (!userId) { toast('Load members and pick someone first', 'err'); return; }
     if (what !== 'credits' && !which) { toast('Pick what to give', 'err'); return; }
+    // Say so rather than quietly handing over fewer than was asked for.
+    if (asked > cap) {
+        toast(`The most you can give at once is ${cap.toLocaleString()} — giving that`, 'err');
+    }
 
     const who = (grantMembers.find(m => m.id === userId) || {}).displayName || 'them';
     const label = what === 'credits' ? `${amount.toLocaleString()} credits`
@@ -3953,6 +3960,30 @@ async function ecLoadMembers() {
     }
 }
 
+/**
+ * Read a number a person typed, rather than a number a browser approved.
+ *
+ * <input type="number"> looked like the right tool and was not: when the
+ * browser decides the text is not a valid number it reports value as the
+ * empty string, so "1,000,000" and "1 000" and a trailing space all
+ * arrive as nothing. Giving credits then said "Put an amount in" to
+ * somebody who plainly had. parseInt made it worse the other way —
+ * parseInt("1.5e3") is 1, so a mistyped amount became a silent one.
+ *
+ * These boxes are type="text" now, and this is the other half: strip what
+ * people actually type and read the rest as a whole number.
+ */
+function readAmount(id, fallback = 0) {
+    const el = document.getElementById(id);
+    if (!el) return fallback;
+    const raw = String(el.value == null ? '' : el.value).trim();
+    if (!raw) return fallback;
+    const cleaned = raw.replace(/[,\s_]/g, '').replace(/^[\u00a3$\u20ac]/, '');
+    if (!/^-?\d+(\.\d+)?(e[+-]?\d+)?$/i.test(cleaned)) return fallback;
+    const n = Math.round(Number(cleaned));
+    return Number.isFinite(n) ? n : fallback;
+}
+
 function ecShowBalance() {
     const id = document.getElementById('ecMember').value;
     const box = document.getElementById('ecBalance');
@@ -3963,7 +3994,7 @@ function ecShowBalance() {
 
 async function ecCredit(sign) {
     const userId = document.getElementById('ecMember').value;
-    const amount = Math.abs(parseInt(document.getElementById('ecAmount').value, 10) || 0) * sign;
+    const amount = Math.abs(readAmount('ecAmount')) * sign;
     const st = document.getElementById('ecStatus');
     if (!userId) { toast('Load members and pick someone first', 'err'); return; }
     if (!amount) { toast('Put an amount in', 'err'); return; }
@@ -3984,7 +4015,7 @@ async function ecCredit(sign) {
 
 async function ecSetBalance() {
     const userId = document.getElementById('ecMember').value;
-    const amount = Math.max(0, parseInt(document.getElementById('ecAmount').value, 10) || 0);
+    const amount = Math.max(0, readAmount('ecAmount'));
     const st = document.getElementById('ecStatus');
     if (!userId) { toast('Load members and pick someone first', 'err'); return; }
     st.textContent = 'setting…';
@@ -4086,8 +4117,8 @@ async function ecSavePack() {
         name,
         emoji: document.getElementById('pkEmoji').value.trim() || '🃏',
         blurb: document.getElementById('pkBlurb').value.trim(),
-        price: parseInt(document.getElementById('pkPrice').value, 10) || 0,
-        size:  parseInt(document.getElementById('pkSize').value, 10) || 5,
+        price: Math.max(0, readAmount('pkPrice')),
+        size:  Math.min(20, Math.max(1, readAmount('pkSize', 5))),
         guarantee: document.getElementById('pkGuarantee').value || null,
         odds: packOddsFromForm(),
     };
@@ -4535,9 +4566,9 @@ async function ecSaveJob() {
         name,
         emoji: document.getElementById('jbEmoji').value.trim() || '🔧',
         blurb: document.getElementById('jbBlurb').value.trim(),
-        min_pay: parseInt(document.getElementById('jbMin').value, 10) || 0,
-        max_pay: parseInt(document.getElementById('jbMax').value, 10) || 0,
-        cooldown_min: parseInt(document.getElementById('jbCooldown').value, 10) || 60,
+        min_pay: Math.max(0, readAmount('jbMin')),
+        max_pay: Math.max(0, readAmount('jbMax')),
+        cooldown_min: Math.max(1, readAmount('jbCooldown', 60)),
     };
     const wasEditing = editingJob;
     st.textContent = 'saving…';

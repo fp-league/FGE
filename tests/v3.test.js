@@ -249,18 +249,73 @@ console.log('\nCUSTOM CARDS — clearing a batch of old art');
      /const CHUNK = 25/.test(e));
 }
 
+console.log('\nREADING AN AMOUNT SOMEBODY TYPED');
+{
+  // The bug: <input type="number"> reports value as "" when the browser
+  // decides the text is not a valid number, so "1,000,000" arrived as
+  // nothing and giving credits said "Put an amount in" to somebody who
+  // plainly had. parseInt made it worse the other way round.
+  const m = read('manage.html');
+  const src = (m.match(/function readAmount\(id, fallback = 0\) \{[\s\S]*?\n\}/) || [])[0];
+  ok('there is one reader for amounts', !!src);
+
+  const dom = new JSDOM('<input id="a" type="text" value="">');
+  const prevDoc = global.document;
+  global.document = dom.window.document;
+  const readAmount = eval('(' + src.replace('function readAmount', 'function') + ')');
+  const el = dom.window.document.getElementById('a');
+  const reads = (v, f) => { el.value = v; return readAmount('a', f === undefined ? 0 : f); };
+
+  ok('a plain number', reads('1000000') === 1000000);
+  ok('with thousand separators', reads('1,000,000') === 1000000, String(reads('1,000,000')));
+  ok('with spaces in it', reads('1 000') === 1000, String(reads('1 000')));
+  ok('with a trailing space', reads('50000 ') === 50000, String(reads('50000 ')));
+  ok('with a leading one', reads(' 2500') === 2500);
+  ok('with a currency symbol', reads('\u00a3500') === 500, String(reads('\u00a3500')));
+  ok('with underscores', reads('1_000') === 1000);
+  // parseInt("1.5e3") is 1, which gave away one credit instead of 1500.
+  ok('in exponent form', reads('1.5e3') === 1500, String(reads('1.5e3')));
+  ok('a fraction rounds', reads('12.7') === 13, String(reads('12.7')));
+  ok('zero is zero, not the fallback', reads('0', 99) === 0, String(reads('0', 99)));
+  ok('empty falls back', reads('', 7) === 7);
+  ok('and so does nonsense', reads('abc', 7) === 7, String(reads('abc', 7)));
+  ok('the biggest safe number survives',
+     reads('9007199254740991') === 9007199254740991, String(reads('9007199254740991')));
+  ok('a missing box does not throw', readAmount('nope', 4) === 4);
+  global.document = prevDoc;
+
+  // The boxes themselves must not be type=number any more, or the text
+  // never reaches the reader in the first place.
+  const money = ['grantCount', 'ecAmount', 'pkPrice', 'pkSize', 'jbMin', 'jbMax', 'jbCooldown'];
+  money.forEach(id => {
+    const tag = (m.match(new RegExp('<input id="' + id + '"[^>]*>')) || [''])[0];
+    ok(`${id} keeps what was typed`, /type="text"/.test(tag), tag);
+    ok(`  ...and still gets a number keypad`, /inputmode="numeric"/.test(tag), tag);
+  });
+  ok('no money field reads through parseInt any more',
+     !/parseInt\(document\.getElementById\('(ecAmount|pkPrice|pkSize|jbMin|jbMax|jbCooldown)'/.test(m));
+
+  // A text box cannot enforce max, so the give cap moved into script.
+  ok('the give cap is carried on the element', /count\.dataset\.max = String\(/.test(m));
+  ok('and applied when giving', /Math\.min\(cap, asked\)/.test(m));
+  ok('and says so rather than quietly giving fewer',
+     /The most you can give at once is/.test(m));
+}
+
 console.log('\nGIVING CREDITS');
 {
   const m = read('manage.html'), i = read('worker/src/index.js'), c = read('worker/src/cards.js');
   ok('the old million cap is gone', !/max="1000000"/.test(m));
   ok('credits now run to the safe-integer limit',
-     /count\.max = what === 'credits' \? Number\.MAX_SAFE_INTEGER/.test(m));
-  ok('the input agrees', /id="grantCount"[^>]*max="9007199254740991"/.test(m), 
-     (m.match(/id="grantCount"[^>]*>/) || [''])[0]);
+     /dataset\.max = String\(what === 'credits' \? Number\.MAX_SAFE_INTEGER/.test(m));
+  ok('the input carries that cap', /id="grantCount"[\s\S]{0,160}data-max="9007199254740991"/.test(m),
+     (m.match(/id="grantCount"[\s\S]{0,160}?>/) || [''])[0]);
 
   // Packs and cards stay capped, and the box must say the real number
   // rather than accepting more and quietly handing over fewer.
   ok('packs are still fifty', /what === 'pack' \? 50 : 99/.test(m));
+  ok('and the cap is enforced in script, since a text box cannot',
+     /Math\.min\(cap, asked\)/.test(m));
   ok('and the server clamps them too', /Math\.min\(50, Number\(count\)/.test(c));
   ok('as it does cards', /Math\.min\(99, Number\(copies\)/.test(c));
 
