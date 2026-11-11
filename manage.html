@@ -6121,7 +6121,15 @@ async function pushArchive(name) {
             summary,
         }),
     });
-    const body = await res.json();
+    const raw = await res.text();
+    let body = null;
+    try { body = JSON.parse(raw); } catch { /* not JSON, handled below */ }
+    if (!body) {
+        // An auth wall or a proxy error page. Parsing it as JSON threw
+        // "Unexpected token '<'", which told nobody anything.
+        throw new Error(`the archive endpoint replied ${res.status} with ` +
+                        (raw.trim() ? `"${raw.trim().slice(0, 120)}"` : 'an empty body'));
+    }
     if (!res.ok || !body.ok) throw new Error(body.error || `HTTP ${res.status}`);
     return { ...body, summary };
 }
@@ -6155,8 +6163,15 @@ async function endSeason() {
     const name = document.getElementById('arName').value.trim() || (cd.seasonName || 'Season');
     const next = document.getElementById('arNext').value.trim() || nextSeasonName(name);
 
-    if (!(cd.races || []).some(r => (r.results || []).length)) {
-        toast('This season has no results in it — nothing to archive', 'err');
+    const races = cd.races || [];
+    const scored = races.filter(r => (r.results || []).length).length;
+    if (!scored) {
+        // Naming the division and the counts turns "it isn't working" into
+        // something the person can act on, and tells me which of the two
+        // it was when they report it.
+        toast(races.length
+            ? `${adminClass} has ${races.length} race${races.length === 1 ? '' : 's'} but none with results in them — add results before archiving`
+            : `${adminClass} has no races in its calendar to archive`, 'err');
         return;
     }
 
@@ -6199,7 +6214,9 @@ async function endSeason() {
         await loadArchives(true);
         refreshSec();
     } catch (e) {
-        st.textContent = '';
+        if (st) st.textContent = '';
+        // The toast truncates and disappears; the console keeps the stack.
+        console.error('endSeason failed', e);
         toast('Stopped before changing anything: ' + (e.message || 'unknown'), 'err');
     }
 }
