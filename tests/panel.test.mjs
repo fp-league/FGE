@@ -107,6 +107,69 @@ console.log('THE PAGE LOADS AND ITS STATE IS REACHABLE');
   ok('and d() returns that same object', p.win.eval('d() === adminData.gt3') === true);
 }
 
+console.log('\nTHE CONFIRM ON A DESTRUCTIVE BUTTON');
+{
+  // The helper used to overwrite btn.closest('.td-actions'). END SEASON
+  // and the cards' ARCHIVE AND CLEAR sit in .form-actions, so that was
+  // null, assigning to it threw, and both buttons did nothing at all —
+  // no confirm, no toast, nothing to see.
+  const p = await panel(record(SCORED), goodArchive);
+  const win = p.win, doc = win.document;
+
+  const endBtn = [...doc.querySelectorAll('button')]
+    .find(b => (b.getAttribute('onclick') || '').includes('endSeason'));
+  ok('the END SEASON button exists', !!endBtn);
+  ok('and it is NOT inside a table cell', endBtn && !endBtn.closest('.td-actions'),
+     endBtn ? endBtn.parentElement.className : '');
+
+  // The press itself must not throw.
+  let threw = null;
+  try { win.eval('showDelConfirm(' +
+    '[...document.querySelectorAll("button")].find(b => (b.getAttribute("onclick")||"").includes("endSeason")),' +
+    ' "endSeason()")'); } catch (e) { threw = e.message; }
+  ok('pressing it does not throw', threw === null, String(threw));
+
+  const confirm = doc.querySelector('.del-confirm');
+  ok('a confirm appears', !!confirm);
+  ok('it asks', /Sure\?/.test(confirm ? confirm.textContent : ''), confirm && confirm.textContent);
+  ok('with a YES that calls the action',
+     (confirm.querySelector('.btn-confirm').getAttribute('onclick') || '') === 'endSeason()');
+  ok('and a NO', !!confirm.querySelector('[data-cancel]'));
+
+  // The neighbours must survive. Overwriting the container ate them.
+  const stillThere = [...doc.querySelectorAll('button')]
+    .some(b => (b.getAttribute('onclick') || '').includes('archiveOnly'));
+  ok('the buttons beside it are untouched', stillThere);
+
+  // NO puts the original back, with no re-render needed.
+  confirm.querySelector('[data-cancel]').dispatchEvent(new win.Event('click', { bubbles: true }));
+  const back = [...doc.querySelectorAll('button')]
+    .find(b => (b.getAttribute('onclick') || '').includes('endSeason'));
+  ok('saying no restores the button', !!back, 'button did not come back');
+  ok('and the confirm is gone', !doc.querySelector('.del-confirm'));
+
+  // The same helper must still work in the place it always worked.
+  const row = doc.createElement('div');
+  row.innerHTML = '<div class="td-actions"><button id="rowBtn">DEL</button></div>';
+  doc.body.appendChild(row);
+  let rowThrew = null;
+  try { win.eval('showDelConfirm(document.getElementById("rowBtn"), "void 0")'); }
+  catch (e) { rowThrew = e.message; }
+  ok('a table-row button still confirms', rowThrew === null, String(rowThrew));
+  ok('and gets its confirm', !!row.querySelector('.del-confirm'));
+
+  // The cards button had the identical fault.
+  const cardBtn = [...doc.querySelectorAll('button')]
+    .find(b => (b.getAttribute('onclick') || '').includes('endCardSeason(true)'));
+  if (cardBtn) {
+    let cardThrew = null;
+    try { win.eval('showDelConfirm(' +
+      '[...document.querySelectorAll("button")].find(b => (b.getAttribute("onclick")||"").includes("endCardSeason(true)")),' +
+      ' "endCardSeason(true)")'); } catch (e) { cardThrew = e.message; }
+    ok('the cards archive-and-clear button also confirms', cardThrew === null, String(cardThrew));
+  }
+}
+
 console.log('\nENDING A SEASON');
 {
   const p = await panel(record(SCORED), goodArchive);

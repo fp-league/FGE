@@ -1779,11 +1779,30 @@ function actionCell(editFn, deleteFn) {
     </div>`;
 }
 
+/**
+ * Turn a destructive button into Sure? / YES / NO.
+ *
+ * This used to find btn.closest('.td-actions') and overwrite it. That
+ * holds for a table row and for nothing else: END SEASON and the cards'
+ * ARCHIVE AND CLEAR live in a .form-actions block, so closest() returned
+ * null, setting innerHTML on it threw, and the click handler died before
+ * it could do anything. Both buttons simply did nothing when pressed, with
+ * no confirm, no toast and no error anyone would see.
+ *
+ * It swaps out the button itself instead. That works wherever the button
+ * is, keeps its neighbours — a form card has other buttons beside it that
+ * overwriting the container destroyed — and restores the original on NO
+ * without needing refreshSec() to rebuild anything.
+ */
 function showDelConfirm(btn, fn) {
-    const cell = btn.closest('.td-actions');
-    cell.innerHTML = `<span style="font-size:0.75rem;color:var(--grey);font-family:var(--fu);letter-spacing:0.06em">Sure?</span>
+    const holder = document.createElement('span');
+    holder.className = (btn.closest('.td-actions') ? '' : 'td-actions ') + 'del-confirm';
+    holder.innerHTML = `<span style="font-size:0.75rem;color:var(--grey);font-family:var(--fu);letter-spacing:0.06em">Sure?</span>
       <button class="btn btn-confirm btn-sm" onclick="${fn}">YES</button>
-      <button class="btn btn-ghost btn-sm" onclick="refreshSec()">NO</button>`;
+      <button class="btn btn-ghost btn-sm" data-cancel>NO</button>`;
+    btn.replaceWith(holder);
+    holder.querySelector('[data-cancel]')
+          .addEventListener('click', () => holder.replaceWith(btn));
 }
 
 // ── NEWS ──────────────────────────────────────────────────
