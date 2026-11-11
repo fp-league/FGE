@@ -119,8 +119,13 @@ textarea { resize:vertical; min-height:80px; }
 .td-actions { display:flex; gap:0.4rem; align-items:center; }
 
 /* Inline delete confirm */
-.del-confirm { display:none; align-items:center; gap:0.4rem; }
-.del-confirm.show { display:flex; }
+/* The confirm row that replaces a destructive button. It is built at the
+   moment it should be seen, so it is visible by default. The previous
+   .del-confirm pair here defaulted to display:none and waited for a
+   .show class; nothing in the page ever added that class, and reusing
+   the name made the button vanish into an invisible element instead of
+   showing Sure? / YES / NO. */
+.del-ask { display:flex; align-items:center; gap:0.4rem; }
 
 /* ── RESULTS FORM ── */
 .res-row { display:grid; grid-template-columns:46px 1fr 140px 56px; gap:0.5rem; align-items:center; margin-bottom:0.4rem; transition:opacity 0.2s; }
@@ -1796,7 +1801,7 @@ function actionCell(editFn, deleteFn) {
  */
 function showDelConfirm(btn, fn) {
     const holder = document.createElement('span');
-    holder.className = (btn.closest('.td-actions') ? '' : 'td-actions ') + 'del-confirm';
+    holder.className = (btn.closest('.td-actions') ? '' : 'td-actions ') + 'del-ask';
     holder.innerHTML = `<span style="font-size:0.75rem;color:var(--grey);font-family:var(--fu);letter-spacing:0.06em">Sure?</span>
       <button class="btn btn-confirm btn-sm" onclick="${fn}">YES</button>
       <button class="btn btn-ghost btn-sm" data-cancel>NO</button>`;

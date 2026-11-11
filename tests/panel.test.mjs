@@ -129,8 +129,16 @@ console.log('\nTHE CONFIRM ON A DESTRUCTIVE BUTTON');
     ' "endSeason()")'); } catch (e) { threw = e.message; }
   ok('pressing it does not throw', threw === null, String(threw));
 
-  const confirm = doc.querySelector('.del-confirm');
+  const confirm = doc.querySelector('.del-ask');
   ok('a confirm appears', !!confirm);
+  // Existing is not the same as visible. The first version of this fix
+  // reused a class the stylesheet already defined as display:none, so the
+  // button was replaced by something nobody could see and simply vanished.
+  ok('and can actually be seen',
+     confirm && win.getComputedStyle(confirm).display !== 'none',
+     confirm ? win.getComputedStyle(confirm).display : 'no element');
+  ok('as can its YES',
+     confirm && win.getComputedStyle(confirm.querySelector('.btn-confirm')).display !== 'none');
   ok('it asks', /Sure\?/.test(confirm ? confirm.textContent : ''), confirm && confirm.textContent);
   ok('with a YES that calls the action',
      (confirm.querySelector('.btn-confirm').getAttribute('onclick') || '') === 'endSeason()');
@@ -146,7 +154,7 @@ console.log('\nTHE CONFIRM ON A DESTRUCTIVE BUTTON');
   const back = [...doc.querySelectorAll('button')]
     .find(b => (b.getAttribute('onclick') || '').includes('endSeason'));
   ok('saying no restores the button', !!back, 'button did not come back');
-  ok('and the confirm is gone', !doc.querySelector('.del-confirm'));
+  ok('and the confirm is gone', !doc.querySelector('.del-ask'));
 
   // The same helper must still work in the place it always worked.
   const row = doc.createElement('div');
@@ -156,7 +164,10 @@ console.log('\nTHE CONFIRM ON A DESTRUCTIVE BUTTON');
   try { win.eval('showDelConfirm(document.getElementById("rowBtn"), "void 0")'); }
   catch (e) { rowThrew = e.message; }
   ok('a table-row button still confirms', rowThrew === null, String(rowThrew));
-  ok('and gets its confirm', !!row.querySelector('.del-confirm'));
+  ok('and gets its confirm', !!row.querySelector('.del-ask'));
+  ok('which is visible too',
+     win.getComputedStyle(row.querySelector('.del-ask')).display !== 'none',
+     win.getComputedStyle(row.querySelector('.del-ask')).display);
 
   // The cards button had the identical fault.
   const cardBtn = [...doc.querySelectorAll('button')]
