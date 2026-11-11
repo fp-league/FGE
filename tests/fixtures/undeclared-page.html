@@ -1,0 +1,16 @@
+<!doctype html><html><body>
+<script>
+  window.fromWindow = 1;
+  const { alpha, beta } = JSON.parse('{}');
+  function definedBelow() { return alpha + beta + fromWindow; }
+  function go() {
+    try {
+      // The real bug: a name from another page's script.
+      document.title = currentClass.toLowerCase();
+      definedBelow();
+      const obj = { notAVariable: 1 };
+      return obj.notAVariable;
+    } catch (err) { console.error(err); }
+  }
+</script>
+</body></html>

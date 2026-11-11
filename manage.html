@@ -6113,7 +6113,7 @@ async function pushArchive(name) {
         headers: { 'Content-Type': 'application/json',
                    ...(ADMIN_TOKEN ? { 'X-Admin-Token': ADMIN_TOKEN } : {}) },
         body: JSON.stringify({
-            class: currentClass.toLowerCase(),
+            class: adminClass.toLowerCase(),
             name,
             record: { drivers: cd.drivers || [], teams: cd.teams || [],
                       races: cd.races || [], points: cd.points || null,
@@ -6512,7 +6512,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // already cost us one wrong diagnosis. A changed query is a different URL,
   // so a deploy lands the moment the page does. Bump it with every change in
   // ./ocr or ./lib.
-  const BUILD = '2026-10-31b';
+  const BUILD = '2026-11-11a';
   const V = '?v=' + BUILD;
   const [rb, mt, season, watch, pen] = await Promise.all([
     import('./ocr/read-board.js' + V),

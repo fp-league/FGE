@@ -7,6 +7,8 @@
     "boot-css": "node tools/boot-css.mjs"
   },
   "devDependencies": {
+    "acorn": "^8.14.0",
+    "acorn-walk": "^8.3.4",
     "jsdom": "^24.1.3",
     "pngjs": "^7.0.0"
   }

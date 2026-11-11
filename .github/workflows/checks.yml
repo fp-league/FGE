@@ -36,7 +36,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - run: npm ci
       - run: node tools/boot-css.mjs --check
+      - run: node tools/undeclared.mjs
 
   worker:
     # A Worker that does not build cannot deploy, and finding that out at
