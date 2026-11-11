@@ -6207,7 +6207,17 @@ async function endSeason() {
         document.getElementById('seasonName').value = next;
         document.getElementById('arName').value = next;
         document.getElementById('arNext').value = nextSeasonName(next);
-        await saveData(null);
+        // saveData reports failure by returning false, not by throwing, so
+        // ignoring it announced a cleared calendar that was still full.
+        // The archive has already happened by this point and that part is
+        // safe, which is the one thing somebody needs to be told here.
+        const saved = await saveData(null);
+        if (!saved) {
+            st.textContent = `${out.name} archived, but the calendar did not save`;
+            toast(`${out.name} IS archived and safe. Clearing the calendar failed to save — ` +
+                  `see the error above, then press End Season again.`, 'err');
+            return;
+        }
 
         st.textContent = `${out.name} archived · now racing ${next}`;
         toast(`${out.name} is in the archive. ${next} starts with the same grid and an empty calendar.`, 'ok');

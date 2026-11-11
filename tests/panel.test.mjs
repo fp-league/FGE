@@ -46,7 +46,7 @@ const record = races => ({
  *  running and an open jsdom window keeps Node alive for ever. */
 const OPEN = [];
 
-async function panel(rec, archiveReply) {
+async function panel(rec, archiveReply, savePut = () => ({ ok: true, status: 200, text: async () => '{}' })) {
   const calls = [];
   const dom = new JSDOM(html, {
     runScripts: 'dangerously',
@@ -58,6 +58,7 @@ async function panel(rec, archiveReply) {
         calls.push((opt.method || 'GET') + ' ' + u.replace(/^https?:\/\/[^/]+/, ''));
         if (u.includes('/latest')) return { ok: true, json: async () => ({ record: rec }) };
         if (u.includes('/api/archive') && (opt.method === 'POST')) return archiveReply();
+        if (opt.method === 'PUT' && u.includes('/v3/b/')) return savePut();
         return { ok: true, status: 200, text: async () => '{}',
                  json: async () => ({ ok: true, name: 'Season 4' }) };
       };
@@ -164,6 +165,24 @@ console.log('\nWHEN IT CANNOT, IT SAYS WHY AND CHANGES NOTHING');
 }
 
 OPEN.forEach(w => { try { w.close(); } catch { /* already gone */ } });
+
+console.log('\nWHEN THE ARCHIVE WORKS BUT THE SAVE DOES NOT');
+{
+  // saveData reports failure by returning false rather than throwing, so
+  // endSeason used to go on and announce a cleared calendar that was
+  // still full — while the archive had in fact been written.
+  const p = await panel(record(SCORED), goodArchive,
+    () => ({ ok: false, status: 429, text: async () => 'Too Many Requests' }));
+  const out = await p.end();
+  ok('it does not throw', out === 'ok', out);
+  ok('it does not claim the season rolled over',
+     !/starts with the same grid/.test(p.last()), p.last());
+  ok('it says the archive is safe', /IS archived and safe/.test(p.last()), p.last());
+  ok('and that the save is what failed', /Clearing the calendar failed to save/.test(p.last()),
+     p.last());
+  ok('the archive really was written', p.calls.some(c => c.includes('POST /api/archive')));
+  ok('and a save really was attempted', p.calls.some(c => c.startsWith('PUT /v3/b/')));
+}
 
 console.log(`\n${pass}/${pass + fail} passed`);
 // The page's own timers would otherwise hold the process open.
