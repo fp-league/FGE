@@ -54,6 +54,7 @@ body { background:var(--page-bg); color:var(--off); font-family:'Segoe UI',Arial
 .cp-btn { background:transparent; border:1px solid var(--line2); color:var(--grey); padding:0.3rem 0.8rem; border-radius:2px; cursor:pointer; font-family:var(--fd); font-size:0.78rem; letter-spacing:0.1em; transition:all 0.2s; }
 .cp-btn.gt3.active { border-color:var(--gt3); color:var(--gt3); background:rgba(225,6,0,0.08); }
 .cp-btn.gt4.active { border-color:var(--gt4b); color:var(--gt4b); background:rgba(0,51,160,0.1); }
+.cp-btn.truck.active { border-color:#fff; color:#fff; background:rgba(255,255,255,0.10); }
 .adm-back { font-family:var(--fu); font-size:0.72rem; letter-spacing:0.1em; color:var(--grey); text-decoration:none; transition:color 0.2s; }
 .adm-back:hover { color:var(--white); }
 
@@ -405,6 +406,7 @@ textarea { resize:vertical; min-height:80px; }
     <div class="class-pills">
       <button class="cp-btn gt3 active" id="cpGT3" onclick="switchClass('GT3')">GT3</button>
       <button class="cp-btn gt4"        id="cpGT4" onclick="switchClass('GT4')">GT4</button>
+      <button class="cp-btn truck"      id="cpTRUCK" onclick="switchClass('TRUCK')">TRUCK</button>
     </div>
     <div class="adm-status" id="syncStatus"><span class="status-dot" style="background:#FF8000"></span>Loading</div>
     <a href="index.html" class="adm-back">← Site</a>
@@ -934,7 +936,7 @@ textarea { resize:vertical; min-height:80px; }
           <h3>THE SET</h3>
           <p class="bk-note">Rarity comes from the season, so it moves on its own as the
              championship does. Give a driver card art on their driver page. This table shows
-             the class you are currently editing; packs draw from GT3 and GT4 together.</p>
+             the class you are currently editing; packs draw from every division together.</p>
           <div id="cardsSetTable"></div>
         </div>
       </div>
@@ -1015,6 +1017,7 @@ textarea { resize:vertical; min-height:80px; }
               <select id="bkClass" onchange="bkFillRaces();bkLoadRunners()">
                 <option value="gt3">GT3</option>
                 <option value="gt4">GT4</option>
+                <option value="truck">TRUCK</option>
               </select>
             </div>
             <div class="form-group">
@@ -1500,9 +1503,9 @@ textarea { resize:vertical; min-height:80px; }
 
         <div class="form-card" style="max-width:560px">
           <h3>FIRE VS ICE</h3>
-          <p class="bk-note">One battle across both classes — GT3 and GT4 teams on the same
+          <p class="bk-note">One battle across every division — GT3, GT4 and Truck teams on the same
              two sides. Assign each team a side on the Teams tab (remember to do it for
-             both classes), then switch this on when the season starts. While it's off
+             every division), then switch this on when the season starts. While it's off
              the page is hidden from the site's navigation entirely.</p>
           <label class="fvi-switch">
             <input type="checkbox" id="fviEnabled">
@@ -1543,7 +1546,7 @@ textarea { resize:vertical; min-height:80px; }
 
         <div class="form-card" style="max-width:560px">
           <h3>BACKUP</h3>
-          <p class="bk-note">Downloads everything — both GT3 and GT4 — as a single JSON file.
+          <p class="bk-note">Downloads everything — every division — as a single JSON file.
              There is no undo in this panel, so take one before any big edit.</p>
           <div class="form-actions" style="margin-bottom:1.5rem">
             <button class="btn btn-white" onclick="exportBackup()">⬇ EXPORT BACKUP</button>
@@ -1611,6 +1614,23 @@ const ADMIN_PASS = '9689';
 const BIN_URL    = `https://api.jsonbin.io/v3/b/${BIN_ID}`;
 
 let adminData = null;
+// ── DIVISIONS ─────────────────────────────────────────────
+// The same list as CLASSES in app.js and worker/src/classes.js. The panel
+// spelled ['gt3','gt4'] out in eight places, which is how it ended up not
+// knowing Truck existed at all while the site and the bot both did.
+const CLASSES = ['gt3', 'gt4', 'truck'];
+const CLASS_LABEL = { gt3: 'GT3', gt4: 'GT4', truck: 'TRUCK' };
+const CLASS_THEME = {
+    gt3:   { accent:'#E10600', bg:'rgba(225,6,0,0.08)',     line:'rgba(225,6,0,0.35)',
+             page:'#450A07', deep:'#2A0604' },
+    gt4:   { accent:'#5599ff', bg:'rgba(85,153,255,0.08)',  line:'rgba(85,153,255,0.35)',
+             page:'#071C45', deep:'#04102A' },
+    // Truck is white on near-black, like its side of the site.
+    truck: { accent:'#FFFFFF', bg:'rgba(255,255,255,0.10)', line:'rgba(255,255,255,0.35)',
+             page:'#141416', deep:'#0A0A0C' },
+};
+const classKeyOf = c => String(c || '').toLowerCase();
+
 let adminClass = 'GT3';
 let currentSec = 'news';
 let editingIdx = null;
@@ -1636,7 +1656,7 @@ function newId() {
 /** Give any driver without an id one, and stamp existing results with it. */
 function backfillDriverIds() {
     let changed = false;
-    ['gt3','gt4'].forEach(c => {
+    CLASSES.forEach(c => {
         const cd = adminData && adminData[c];
         if (!cd) return;
         (cd.drivers||[]).forEach(dr => {
@@ -1669,9 +1689,10 @@ async function loadData() {
     try {
         const r = await fetch(`${BIN_URL}/latest`, { headers:{'X-Master-Key':MASTER_KEY} });
         const json = await r.json();
-        adminData = json.record || { gt3:emptyClass(), gt4:emptyClass() };
-        if (!adminData.gt3) adminData.gt3 = emptyClass();
-        if (!adminData.gt4) adminData.gt4 = emptyClass();
+        adminData = json.record || {};
+        // A record written before a division existed simply has no key for
+        // it. Filling the gap here is what lets Truck be edited at all.
+        CLASSES.forEach(k => { if (!adminData[k]) adminData[k] = emptyClass(); });
         setStatus('green','Synced');
         // Older records have no driver ids; add them so renames are safe.
         if (backfillDriverIds()) saveData('Driver ids added');
@@ -1725,23 +1746,17 @@ function toast(msg, type) {
 // ── CLASS SWITCH ──────────────────────────────────────────
 function switchClass(cls) {
     adminClass = cls;
-    document.getElementById('cpGT3').className = 'cp-btn gt3' + (cls==='GT3'?' active':'');
-    document.getElementById('cpGT4').className = 'cp-btn gt4' + (cls==='GT4'?' active':'');
-    // Swap accent colour: red for GT3, blue for GT4
+    CLASSES.forEach(k => {
+        const pill = document.getElementById('cp' + CLASS_LABEL[k]);
+        if (pill) pill.className = `cp-btn ${k}` + (classKeyOf(cls) === k ? ' active' : '');
+    });
+    const theme = CLASS_THEME[classKeyOf(cls)] || CLASS_THEME.gt3;
     const root = document.documentElement;
-    if (cls === 'GT3') {
-        root.style.setProperty('--accent',      '#E10600');
-        root.style.setProperty('--accent-bg',   'rgba(225,6,0,0.08)');
-        root.style.setProperty('--accent-line',  'rgba(225,6,0,0.35)');
-        root.style.setProperty('--page-bg',     '#450A07');
-        root.style.setProperty('--page-deep',   '#2A0604');
-    } else {
-        root.style.setProperty('--accent',      '#5599ff');
-        root.style.setProperty('--accent-bg',   'rgba(85,153,255,0.08)');
-        root.style.setProperty('--accent-line',  'rgba(85,153,255,0.35)');
-        root.style.setProperty('--page-bg',     '#071C45');
-        root.style.setProperty('--page-deep',   '#04102A');
-    }
+    root.style.setProperty('--accent',      theme.accent);
+    root.style.setProperty('--accent-bg',   theme.bg);
+    root.style.setProperty('--accent-line', theme.line);
+    root.style.setProperty('--page-bg',     theme.page);
+    root.style.setProperty('--page-deep',   theme.deep);
     // Close any open forms
     ['newsForm','driverForm','teamForm','raceForm'].forEach(id => document.getElementById(id).style.display='none');
     refreshSec();
@@ -2360,8 +2375,8 @@ function saveSeason() {
 
 // ── FIRE VS ICE ───────────────────────────────────────────
 function renderFviPanel() {
-    // Fire and Ice span both classes, so the switch is league-wide.
-    const on = ['gt3','gt4'].some(k =>
+    // Fire and Ice span every division, so the switch is league-wide.
+    const on = CLASSES.some(k =>
         ((adminData && adminData[k] && adminData[k].fireVsIce) || {}).enabled === true);
     const box = document.getElementById('fviEnabled');
     if (box) box.checked = on;
@@ -2369,12 +2384,12 @@ function renderFviPanel() {
     const el = document.getElementById('fviStatus');
     if (!el) return;
 
-    const rows = ['gt3','gt4'].map(k => {
+    const rows = CLASSES.map(k => {
         const teams = ((adminData && adminData[k] && adminData[k].teams) || []);
         const fire = teams.filter(t => t.side === 'fire').length;
         const ice  = teams.filter(t => t.side === 'ice').length;
         const none = teams.length - fire - ice;
-        return { label: k.toUpperCase(), fire, ice, none, total: teams.length };
+        return { label: CLASS_LABEL[k], fire, ice, none, total: teams.length };
     });
     const totFire = rows.reduce((n,r) => n + r.fire, 0);
     const totIce  = rows.reduce((n,r) => n + r.ice,  0);
@@ -2390,8 +2405,8 @@ function renderFviPanel() {
 
 function saveFvi() {
     const on = document.getElementById('fviEnabled').checked;
-    // Written to both classes so the flag survives a per-class restore.
-    ['gt3','gt4'].forEach(k => {
+    // Written to every division so the flag survives a per-class restore.
+    CLASSES.forEach(k => {
         if (!adminData[k]) return;
         adminData[k].fireVsIce = { ...(adminData[k].fireVsIce||{}), enabled: on };
     });
@@ -6394,7 +6409,7 @@ async function restoreBackup(key) {
 
         st.textContent = 'restoring…';
         const record = await fetchBackup(key);
-        if (!record || (!record.gt3 && !record.gt4)) {
+        if (!record || !CLASSES.some(k => record[k])) {
             throw new Error('that backup does not look like a league');
         }
 
@@ -6463,14 +6478,15 @@ function previewRestore(input) {
 
         // Accept either a wrapped backup or a bare { gt3, gt4 } record
         const incoming = parsed && parsed._fge_backup ? parsed.data : parsed;
-        if (!incoming || typeof incoming !== 'object' || (!incoming.gt3 && !incoming.gt4)) {
-            box.innerHTML = `<div class="bk-warn">This doesn't look like an FGE backup — it has no GT3 or GT4 data.</div>`;
+        if (!incoming || typeof incoming !== 'object' || !CLASSES.some(k => incoming[k])) {
+            box.innerHTML = `<div class="bk-warn">This doesn't look like an FGE backup — it has no ${
+                CLASSES.map(k => CLASS_LABEL[k]).join(', ')} data.</div>`;
             return;
         }
 
         const rows = ['drivers','teams','races','news'];
-        const table = ['GT3','GT4'].map(cl => {
-            const key = cl.toLowerCase();
+        const table = CLASSES.map(key => {
+            const cl = CLASS_LABEL[key];
             const now = counts(adminData && adminData[key]);
             const next = counts(incoming[key]);
             return `<tr><td colspan="4" style="padding-top:0.5rem"><strong>${cl}</strong></td></tr>` +
@@ -6483,7 +6499,7 @@ function previewRestore(input) {
               }).join('');
         }).join('');
 
-        const losing = ['gt3','gt4'].some(k => {
+        const losing = CLASSES.some(k => {
             const now = counts(adminData && adminData[k]), next = counts(incoming[k]);
             return rows.some(r => next[r] < now[r]);
         });
@@ -6525,8 +6541,11 @@ async function confirmRestore() {
         setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 0);
     } catch(e) {}
 
-    adminData.gt3 = pendingRestore.gt3 || emptyClass();
-    adminData.gt4 = pendingRestore.gt4 || emptyClass();
+    // A backup taken before a division existed has no key for it; keep
+    // what is already there rather than wiping it to an empty class.
+    CLASSES.forEach(k => {
+        adminData[k] = pendingRestore[k] || adminData[k] || emptyClass();
+    });
     cancelRestore();
     await saveData('Data restored from backup');
     refreshSec();

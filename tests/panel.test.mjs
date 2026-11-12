@@ -81,9 +81,17 @@ async function panel(rec, archiveReply, savePut = () => ({ ok: true, status: 200
     win.document.body.appendChild(el);
     el.remove();
   };
-  run(`adminData = ${JSON.stringify(rec)}; adminClass = 'GT3';
+  // Run the page's own loader against the stubbed record and see what it
+  // makes of it. The panel only loads after a login, so this has to be
+  // called rather than waited for.
+  run('window.__loaded = loadData();');
+  try { await win.__loaded; } catch { /* reported by the assertions */ }
+  const afterLoad = win.eval('adminData ? Object.keys(adminData).sort().join() : "(null)"');
+  run(`adminData = ${JSON.stringify(rec)};
+       CLASSES.forEach(k => { if (!adminData[k]) adminData[k] = emptyClass(); });
+       adminClass = 'GT3';
        toast = (m, k) => window.__toasts.push(String(m));`);
-  return { win, calls, run,
+  return { win, calls, run, afterLoad,
     end: async () => {
       run(`window.__done = (async () => { try { await endSeason(); return 'ok'; }
              catch (e) { return 'UNCAUGHT ' + e.message; } })();`);
@@ -105,6 +113,63 @@ console.log('THE PAGE LOADS AND ITS STATE IS REACHABLE');
   // The check that makes every assertion below meaningful.
   ok('the page sees the record we gave it', p.races() === 2, String(p.races()));
   ok('and d() returns that same object', p.win.eval('d() === adminData.gt3') === true);
+}
+
+console.log('\nTHE PANEL KNOWS EVERY DIVISION');
+{
+  // The site and the bot both learned about Truck; the panel did not, so
+  // there was no way to add a truck driver, race or result, and no way to
+  // end a truck season.
+  const p = await panel(record(SCORED), goodArchive);
+  const win = p.win, doc = win.document;
+
+  ok('it lists three divisions', win.eval('CLASSES.length') === 3, win.eval('CLASSES.join()'));
+  ok('and the same ones the site does',
+     win.eval('CLASSES.join()') === 'gt3,gt4,truck', win.eval('CLASSES.join()'));
+
+  for (const label of ['GT3', 'GT4', 'TRUCK']) {
+    ok(`there is a ${label} pill`, !!doc.getElementById('cp' + label));
+  }
+
+  // Switching must light the right pill and only the right pill.
+  win.eval("switchClass('TRUCK')");
+  ok('switching sets the division', win.eval('adminClass') === 'TRUCK', win.eval('adminClass'));
+  ok('the truck pill is active', /\bactive\b/.test(doc.getElementById('cpTRUCK').className),
+     doc.getElementById('cpTRUCK').className);
+  ok('and the others are not',
+     !/\bactive\b/.test(doc.getElementById('cpGT3').className) &&
+     !/\bactive\b/.test(doc.getElementById('cpGT4').className));
+  ok('the accent follows the division',
+     win.eval("document.documentElement.style.getPropertyValue('--accent').trim()") === '#FFFFFF',
+     win.eval("document.documentElement.style.getPropertyValue('--accent')"));
+
+  win.eval("switchClass('GT3')");
+  ok('switching back restores red',
+     win.eval("document.documentElement.style.getPropertyValue('--accent').trim()") === '#E10600');
+  ok('and the gt3 pill', /\bactive\b/.test(doc.getElementById('cpGT3').className));
+
+  // The record we served has only gt3 and gt4, exactly like the real one
+  // written before Truck existed. Editing Truck at all depends on the
+  // page filling that gap when it loads.
+  ok('loading a record without Truck still creates it',
+     p.afterLoad === 'gt3,gt4,truck', p.afterLoad);
+  ok('and the divisions that were there survive',
+     win.eval('adminData.gt3.races.length') === 2, String(win.eval('adminData.gt3.races.length')));
+
+  // d() has to follow the switch, or every section edits the wrong class.
+  win.eval("switchClass('TRUCK')");
+  ok('the editor follows the switch', win.eval('d() === adminData.truck') === true);
+  ok('and truck starts empty', win.eval('d().races.length') === 0);
+  win.eval("switchClass('GT3')");
+
+  // A backup from before Truck must not wipe it.
+  win.eval(`pendingRestore = { gt3: { drivers:[], teams:[], races:[], news:[] } };
+            adminData.truck = adminData.truck || emptyClass();
+            adminData.truck.drivers = [{ id:'t1', name:'Keeper' }];`);
+  ok('restoring an older backup keeps a division it does not mention',
+     win.eval(`CLASSES.forEach(k => { adminData[k] = pendingRestore[k] || adminData[k] || emptyClass(); });
+               adminData.truck.drivers.length`) === 1,
+     String(win.eval('adminData.truck.drivers.length')));
 }
 
 console.log('\nTHE CONFIRM ON A DESTRUCTIVE BUTTON');
