@@ -26,8 +26,12 @@
   --success: #2e7d32;
   --fd: 'Titillium Web','Segoe UI',Arial,sans-serif;
   --fu: 'Titillium Web','Segoe UI',Arial,sans-serif;
-  /* Active class accent — red for GT3 (default), blue for GT4 */
+  /* Active class accent — red for GT3 (default), blue for GT4,
+     white for Truck. --accent-ink is what sits ON the accent when it is
+     used as a fill: white for a dark accent, near-black for Truck's,
+     whose buttons were otherwise white on white and unreadable. */
   --accent:      #E10600;
+  --accent-ink:  #fff;
   --accent-bg:   rgba(225,6,0,0.08);
   --accent-line: rgba(225,6,0,0.35);
   /* Whole-page background, class coloured */
@@ -87,8 +91,11 @@ body { background:var(--page-bg); color:var(--off); font-family:'Segoe UI',Arial
 
 /* ── BUTTONS ── */
 .btn { display:inline-flex; align-items:center; gap:0.4rem; padding:0.55rem 1.1rem; border-radius:2px; cursor:pointer; font-family:var(--fd); font-size:0.78rem; letter-spacing:0.1em; border:none; transition:all 0.2s; white-space:nowrap; }
-.btn-white   { background:var(--accent); color:var(--white); }
+.btn-white   { background:var(--accent); color:var(--accent-ink); }
+/* brightness() cannot brighten white, so Truck's buttons had no hover at
+   all. Darkening reads the same way round on a light fill. */
 .btn-white:hover { filter:brightness(1.15); }
+body.truck-admin .btn-white:hover { filter:brightness(0.88); }
 .btn-ghost   { background:transparent; color:var(--grey); border:1px solid var(--line2); }
 .btn-ghost:hover { color:var(--white); border-color:var(--white); }
 .btn-danger  { background:rgba(198,40,40,0.15); color:#ef9a9a; border:1px solid rgba(198,40,40,0.3); }
@@ -1621,13 +1628,13 @@ let adminData = null;
 const CLASSES = ['gt3', 'gt4', 'truck'];
 const CLASS_LABEL = { gt3: 'GT3', gt4: 'GT4', truck: 'TRUCK' };
 const CLASS_THEME = {
-    gt3:   { accent:'#E10600', bg:'rgba(225,6,0,0.08)',     line:'rgba(225,6,0,0.35)',
-             page:'#450A07', deep:'#2A0604' },
-    gt4:   { accent:'#5599ff', bg:'rgba(85,153,255,0.08)',  line:'rgba(85,153,255,0.35)',
-             page:'#071C45', deep:'#04102A' },
+    gt3:   { accent:'#E10600', ink:'#fff', bg:'rgba(225,6,0,0.08)',
+             line:'rgba(225,6,0,0.35)', page:'#450A07', deep:'#2A0604' },
+    gt4:   { accent:'#5599ff', ink:'#fff', bg:'rgba(85,153,255,0.08)',
+             line:'rgba(85,153,255,0.35)', page:'#071C45', deep:'#04102A' },
     // Truck is white on near-black, like its side of the site.
-    truck: { accent:'#FFFFFF', bg:'rgba(255,255,255,0.10)', line:'rgba(255,255,255,0.35)',
-             page:'#141416', deep:'#0A0A0C' },
+    truck: { accent:'#FFFFFF', ink:'#0A0A0C', bg:'rgba(255,255,255,0.10)',
+             line:'rgba(255,255,255,0.35)', page:'#141416', deep:'#0A0A0C' },
 };
 const classKeyOf = c => String(c || '').toLowerCase();
 
@@ -1753,7 +1760,11 @@ function switchClass(cls) {
     const theme = CLASS_THEME[classKeyOf(cls)] || CLASS_THEME.gt3;
     const root = document.documentElement;
     root.style.setProperty('--accent',      theme.accent);
+    root.style.setProperty('--accent-ink',  theme.ink);
     root.style.setProperty('--accent-bg',   theme.bg);
+    // Only Truck needs the inverted hover, and a body class is the
+    // cheapest way to say so in CSS.
+    document.body.classList.toggle('truck-admin', classKeyOf(cls) === 'truck');
     root.style.setProperty('--accent-line', theme.line);
     root.style.setProperty('--page-bg',     theme.page);
     root.style.setProperty('--page-deep',   theme.deep);

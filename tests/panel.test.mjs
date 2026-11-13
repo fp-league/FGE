@@ -162,6 +162,26 @@ console.log('\nTHE PANEL KNOWS EVERY DIVISION');
   ok('and truck starts empty', win.eval('d().races.length') === 0);
   win.eval("switchClass('GT3')");
 
+  // A white accent breaks the one thing the other two take for granted:
+  // that white text reads on a button filled with it.
+  ok('there is a token for text on the accent fill',
+     /--accent-ink:\s*#fff/.test(html));
+  ok('and the filled button uses it, not plain white',
+     /\.btn-white\s*\{ background:var\(--accent\); color:var\(--accent-ink\); \}/.test(html));
+  win.eval("switchClass('GT3')");
+  ok('gt3 keeps white text on its red fill',
+     win.eval("document.documentElement.style.getPropertyValue('--accent-ink').trim()") === '#fff');
+  win.eval("switchClass('TRUCK')");
+  ok('truck flips it to near-black',
+     win.eval("document.documentElement.style.getPropertyValue('--accent-ink').trim()") === '#0A0A0C',
+     win.eval("document.documentElement.style.getPropertyValue('--accent-ink')"));
+  ok('and truck gets the inverted hover, since white cannot brighten',
+     win.document.body.classList.contains('truck-admin'));
+  win.eval("switchClass('GT4')");
+  ok('which is dropped again for the others',
+     !win.document.body.classList.contains('truck-admin'));
+  win.eval("switchClass('GT3')");
+
   // A backup from before Truck must not wipe it.
   win.eval(`pendingRestore = { gt3: { drivers:[], teams:[], races:[], news:[] } };
             adminData.truck = adminData.truck || emptyClass();
