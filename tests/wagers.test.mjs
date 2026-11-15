@@ -189,10 +189,12 @@ console.log('\nA DUEL, END TO END');
   const total = bal(e, 'a') + bal(e, 'b');
   ok('it resolves', /takes/.test(txt(played)), txt(played).slice(0, 160));
   ok('exactly the rake leaves the two of them', total === 20000 - 100, String(total));
-  ok('one of them is up 900', bal(e, 'a') === 9900 || bal(e, 'b') === 10900,
-     `${bal(e, 'a')} / ${bal(e, 'b')}`);
-  ok('and the other down 1000', bal(e, 'a') === 9000 || bal(e, 'b') === 9000,
-     `${bal(e, 'a')} / ${bal(e, 'b')}`);
+  // Either side can win, so assert on the pair rather than on a name.
+  // Both staked 1000 up front, so the winner lands on 10900 and the
+  // loser on 9000 whichever way the dice went.
+  const [top, bottom] = [bal(e, 'a'), bal(e, 'b')].sort((x, y) => y - x);
+  ok('the winner ends 900 up', top === 10900, String(top));
+  ok('and the loser 1000 down', bottom === 9000, String(bottom));
   ok('the buttons go', (played.data.components || []).length === 0);
 
   const again = await onDuelButton(e, who('b'), id, 'accept');
