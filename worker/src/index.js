@@ -21,6 +21,8 @@ import { openPack, showCollection, showMissing, showCard, showCollectors, grantP
 import { COMMANDS } from './commands.js';
 import { handleAutocomplete } from './autocomplete.js';
 import { runAgent, defer } from './agent.js';
+import { startDuel, buyTickets, showLottery, sweepDuels, runLotteryDraw }
+  from './wagers.js';
 import { startBlackjack, playRoulette, playSlots, startHiLo, handleComponent, sweepGames,
          showOdds, placeRaceBet, showMyBets } from './games.js';
 import { repriceAll, listBooks, openBook, setBookStatus, settleBook, voidBook, deleteBook }
@@ -31,6 +33,7 @@ import {
   doWork, doDaily, showBalance, showRich, payUser, showShop, buyPack, sellCard,
   robUser, payRace, adminConfig, setSettings, savePack, deletePack, saveCustomCard,
   deleteCustomCard, deleteCustomCards, saveJob, deleteJob, allWallets, adjust, wallet, settings,
+  money,
   ECON_COMMANDS, TRADE_VIEWS, endCardSeason, listCardSeasons,
   offerTrade, listTrades, acceptTrade, closeTrade,
   listRarities, saveRarity, deleteRarity, safeAmount,
@@ -732,6 +735,15 @@ async function handleEconomy(interaction, record, env) {
       case 'roulette':  embed = await playRoulette(env, interaction, pick('on'), pick('bet')); break;
       case 'slots':     embed = await playSlots(env, interaction, pick('bet')); break;
       case 'higherlower': embed = await startHiLo(env, interaction, pick('bet')); break;
+      case 'duel':      embed = await startDuel(env, interaction, pick('who'), pick('bet')); break;
+      case 'lottery': {
+        const what = ((interaction.data.options || [])[0] || {}).name;
+        const opts = ((interaction.data.options || [])[0] || {}).options || [];
+        const howMany = (opts.find(o => o.name === 'tickets') || {}).value;
+        embed = what === 'buy' ? await buyTickets(env, interaction, howMany)
+                               : await showLottery(env, interaction);
+        break;
+      }
       case 'odds':      embed = await showOdds(env, interaction, normClass(pick('class'))); break;
       case 'bet':       embed = await placeRaceBet(env, interaction, normClass(pick('class')),
                                                    pick('driver'), pick('amount')); break;
@@ -1475,6 +1487,42 @@ async function getDiscordMembers(request, env) {
 
 /* ── entry ───────────────────────────────────────────────── */
 
+/**
+ * Say in the channel who won the lottery.
+ *
+ * Best effort: a draw that paid out correctly but could not be announced
+ * is a quiet win, not a lost one, so nothing here is allowed to throw
+ * back into the scheduled handler.
+ */
+async function announceLottery(env, drew) {
+  const channel = env.ANNOUNCE_CHANNEL_ID || env.ANNOUNCE_CHANNEL_GT3
+               || env.ANNOUNCE_CHANNEL_GT4 || env.ANNOUNCE_CHANNEL_TRUCK;
+  if (!channel || !env.DISCORD_TOKEN) return;
+
+  const cfg = await settings(env);
+  const embed = drew.rolled
+    ? { title: '\u{1F39F} Nobody was in',
+        description: `Draw ${drew.n} needed more players, so ${money(drew.pot, cfg)} ` +
+                     `rolls into draw ${drew.into}.`,
+        color: 0x9E9E9E }
+    : { title: '\u{1F39F} Lottery drawn',
+        description: `<@${drew.winner}> wins **${money(drew.pot, cfg)}** on draw ${drew.n}, ` +
+                     `from ${drew.tickets} ticket${drew.tickets === 1 ? '' : 's'} ` +
+                     `across ${drew.players} players.`,
+        color: 0xFFC400 };
+
+  try {
+    await fetch(`https://discord.com/api/v10/channels/${channel}/messages`, {
+      method: 'POST',
+      headers: { Authorization: `Bot ${env.DISCORD_TOKEN}`,
+                 'Content-Type': 'application/json' },
+      body: JSON.stringify({ embeds: [embed], allowed_mentions: { parse: [] } }),
+    });
+  } catch (err) {
+    console.error('could not announce the lottery:', err && err.message || err);
+  }
+}
+
 export default {
   /**
    * The nightly backup. Cloudflare calls this on the cron in wrangler.toml;
@@ -1505,6 +1553,27 @@ export default {
         if (swept) console.log(`swept ${swept} abandoned game(s)`);
       } catch (err) {
         console.error('sweep failed:', err && err.message || err);
+      }
+
+      // Hand back the stake on challenges nobody answered.
+      try {
+        const back = await sweepDuels(env);
+        if (back) console.log(`refunded ${back} unanswered duel(s)`);
+      } catch (err) {
+        console.error('duel sweep failed:', err && err.message || err);
+      }
+
+      // Draw the lottery if it is due. Cheap when it is not.
+      try {
+        const drew = await runLotteryDraw(env);
+        if (drew) {
+          console.log(drew.rolled
+            ? `lottery ${drew.n} rolled into ${drew.into} with ${drew.pot}`
+            : `lottery ${drew.n} won by ${drew.winner} for ${drew.pot}`);
+          await announceLottery(env, drew);
+        }
+      } catch (err) {
+        console.error('lottery draw failed:', err && err.message || err);
       }
 
       // Move the betting prices toward wherever the money went this hour.

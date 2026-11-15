@@ -352,6 +352,39 @@ console.log('\nWHAT CARDS ARE MISSING');
      /catch \{ \/\* the hint is a bonus/.test(cd));
 }
 
+console.log('\nDUELS AND THE LOTTERY');
+{
+  const cm = read('worker/src/commands.js'), i = read('worker/src/index.js'),
+        g = read('worker/src/games.js'), w = read('worker/src/wagers.js'),
+        m = read('worker/migrations/017-duel-lottery.sql');
+
+  ok('duel is registered', /name: 'duel'/.test(cm));
+  ok('and takes a person, not a name', /name: 'who'[\s\S]{0,90}type: 6/.test(cm));
+  ok('lottery is registered', /name: 'lottery'/.test(cm));
+  ok('with pot and buy', /name: 'pot'/.test(cm) && /name: 'buy'/.test(cm));
+  ok('both are routed', /case 'duel':/.test(i) && /case 'lottery':/.test(i));
+  ok('duel buttons are routed', /tag === 'du'/.test(g));
+
+  // Money safety, which is the whole risk in a player-versus-player game.
+  ok('a claim on a duel is guarded on its status',
+     /WHERE id = \? AND status = 'open'/.test(w));
+  ok('so is a refund', /status = 'expired'[\s\S]{0,120}AND status = 'open'/.test(w));
+  ok('and so is the draw', /status = '(drawn|rolled)'[\s\S]{0,120}AND status = 'open'/.test(w));
+  ok('the challenger pays when challenging, not when settling',
+     w.indexOf('takeStake(env, me.id, amount, cfg, \'Duel stake\')') <
+     w.indexOf('INSERT INTO duel'));
+  ok('you cannot duel yourself', /cannot duel yourself/.test(w));
+
+  ok('unanswered duels are swept hourly', /sweepDuels\(env\)/.test(i));
+  ok('and the lottery is drawn there too', /runLotteryDraw\(env\)/.test(i));
+  ok('neither can break the cron', (i.match(/catch \(err\)/g) || []).length >= 4);
+
+  ok('the tables only ever get created, never altered',
+     /CREATE TABLE IF NOT EXISTS/.test(m) && !/ALTER TABLE/.test(m));
+  ok('one row per person per draw, not per ticket',
+     /PRIMARY KEY \(draw, user_id\)/.test(m));
+}
+
 console.log('\nTHE NEW CASINO GAMES');
 {
   const cm = read('worker/src/commands.js'), i = read('worker/src/index.js'),

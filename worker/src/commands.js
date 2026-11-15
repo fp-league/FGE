@@ -167,6 +167,24 @@ commands.push(
     description: 'Call the next card higher or lower, and take it whenever you like',
     options: [{ name: 'bet', description: 'How much to stake', type: 4, required: true }],
   },
+  {
+    name: 'duel',
+    description: 'Challenge somebody to dice for it \u2014 highest total takes the pot',
+    options: [
+      { name: 'who', description: 'Who you are calling out', type: 6, required: true },
+      { name: 'bet', description: 'What each of you puts in', type: 4, required: true },
+    ],
+  },
+  {
+    name: 'lottery',
+    description: 'The league draw \u2014 everybody into one pot',
+    options: [
+      { name: 'pot', description: 'What is in the pot and when it is drawn', type: 1, options: [] },
+      { name: 'buy', description: 'Buy tickets for the next draw', type: 1, options: [
+        { name: 'tickets', description: 'How many (1\u2013100)', type: 4, required: false },
+      ] },
+    ],
+  },
   { name: 'odds', description: 'The book on the next race', options: [CLASS_OPTION] },
   {
     name: 'bet',

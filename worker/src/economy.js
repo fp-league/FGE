@@ -55,6 +55,8 @@ const DEFAULTS = {
   casino_enabled: '1',
   bet_min: '50',
   bet_max: '25000',
+  lottery_price: '500',       // per ticket
+  lottery_hours: '24',        // how long a draw stays open
   shift_fail_pct: '40',       // a wrong answer still pays this much of the shift
   // Betting. The margin is the house edge, stated as a percentage book:
   // 115 keeps roughly thirteen percent of what is staked.
