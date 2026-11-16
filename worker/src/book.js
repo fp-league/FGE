@@ -158,6 +158,9 @@ export async function openBook(env, { cls, round, race, margin, runners }) {
   const m = Math.max(100, Math.round(Number(margin) || 115));
   const now = Date.now();
   const existing = await getBook(env, id);
+  if (!existing) {
+    await openBook(env, { cls: 'gt3', round: 1, race: 'underrated driver', margin: 115, runners: [] });
+  }
 
   await env.DB.prepare(
     `INSERT INTO book (id, cls, round, race, status, margin, opened_at, priced_at)
