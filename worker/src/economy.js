@@ -104,8 +104,24 @@ export function money(n, cfg) {
  * worse: SQLite has no way to store either as an INTEGER, so they go in
  * as something else and every read afterwards comes back a shape the code
  * does not expect.
+ *
+ * This used to sit exactly ON 2^53-1, which turned out to be the bug
+ * rather than the guard. The ceiling was only ever applied to amounts
+ * arriving from outside; the add itself happens in SQL, so a wallet
+ * already at the ceiling walked straight past it on the next `/work`.
+ * SQLite stored the bigger integer happily — and then the driver threw
+ * `RangeError: Value is too large to be represented as a JavaScript
+ * number` on the way back out. Not on the write. On every READ of that
+ * row afterwards, which is why one player's balance took the whole bot
+ * down with it: `/rich` selects the top ten by balance, so his row was
+ * in everybody's query.
+ *
+ * So the ceiling moved down to a quadrillion, nine times below the point
+ * where reads start failing, and it is now applied in the SQL as well as
+ * at the door. A quadrillion credits is past any purpose a league has for
+ * the number while still being a number the language can hold.
  */
-export const MAX_BALANCE = Number.MAX_SAFE_INTEGER;
+export const MAX_BALANCE = 1e15;
 
 /**
  * Force anything into a storable whole number.
@@ -192,9 +208,14 @@ export async function adjust(env, userId, delta, reason, cfg) {
     const changed = (res.meta && (res.meta.changes ?? res.meta.rows_written)) ?? 1;
     if (!changed) return null;
   } else {
+    // The clamp lives in the SQL, not just in safeAmount above. Checking
+    // the amount at the door does nothing about the sum: the add happens
+    // in the database, so the only place that can hold the ceiling is the
+    // database. MIN() is SQLite's two-argument scalar, not the aggregate.
     await env.DB.prepare(
-      `UPDATE wallet SET balance = balance + ?, lifetime = lifetime + ?, updated_at = ?
-        WHERE user_id = ?`).bind(d, d, now, id).run();
+      `UPDATE wallet SET balance  = MIN(balance + ?, ?),
+                         lifetime = MIN(lifetime + ?, ?), updated_at = ?
+        WHERE user_id = ?`).bind(d, MAX_BALANCE, d, MAX_BALANCE, now, id).run();
   }
 
   await env.DB.prepare(
@@ -203,7 +224,10 @@ export async function adjust(env, userId, delta, reason, cfg) {
 
   const row = await env.DB.prepare(
     `SELECT balance, lifetime FROM wallet WHERE user_id = ?`).bind(id).first();
-  return { balance: row ? row.balance : 0, lifetime: row ? row.lifetime : 0 };
+  // Through the same guard as wallet(). This returned the raw row, which
+  // meant every caller of adjust() got whatever was in the column.
+  return { balance: safeBalance(row && row.balance),
+           lifetime: safeBalance(row && row.lifetime) };
 }
 
 /* ── Time ──────────────────────────────────────────────── */
@@ -368,8 +392,12 @@ export async function showBalance(env, interaction, targetId) {
     fields.push({ name: 'Unique', value: String((held && held.held) || 0), inline: true });
   }
 
-  const log = (recent.results || []).map(r =>
-    `${r.delta >= 0 ? '＋' : '−'}${Math.abs(r.delta).toLocaleString('en-GB')} · ${r.reason}`);
+  const log = (recent.results || []).map(r => {
+    // The ledger has the same ceiling problem as the wallet: a delta
+    // written before the clamp existed can be any size at all.
+    const d = safeAmount(r.delta);
+    return `${d >= 0 ? '＋' : '−'}${Math.abs(d).toLocaleString('en-GB')} · ${r.reason}`;
+  });
 
   return {
     title: targetId ? 'Wallet' : `${nameOf(user)}'s wallet`,
@@ -387,7 +415,7 @@ export async function showRich(env) {
   const rows = await env.DB.prepare(
     `SELECT user_id, balance, lifetime FROM wallet
       ORDER BY balance DESC, lifetime DESC LIMIT 10`).all();
-  const list = rows.results || [];
+  const list = (rows.results || []).map(r => ({ ...r, balance: safeBalance(r.balance) }));
   if (!list.length) return simple('Nobody has anything yet', 'Start earning with `/work`.');
 
   const medal = i => ['🥇', '🥈', '🥉'][i] || `\`${String(i + 1).padStart(2)}\``;
@@ -1104,7 +1132,9 @@ export async function allWallets(env) {
   try {
     const rows = await env.DB.prepare(
       `SELECT user_id, balance, lifetime, updated_at FROM wallet ORDER BY balance DESC`).all();
-    return rows.results || [];
+    return (rows.results || []).map(r => ({
+      ...r, balance: safeBalance(r.balance), lifetime: safeBalance(r.lifetime),
+    }));
   } catch { return []; }
 }
 

@@ -44,9 +44,14 @@ function makeDB() {
       w.balance += a[0];
       return { meta: { changes: 1 } };
     }
-    if (/UPDATE wallet SET balance = balance \+ \?, lifetime = lifetime \+ \?/.test(q)) {
-      const w = t.wallet.get(a[3]);
-      if (w) { w.balance += a[0]; w.lifetime += a[1]; }
+    if (/UPDATE wallet SET balance = MIN\(balance \+ \?, \?\), lifetime = MIN\(lifetime \+ \?, \?\)/.test(q)) {
+      // Same clamp the real SQL applies, so the fake cannot pass a test
+      // the database would fail. a = [delta, ceiling, delta, ceiling, now, id].
+      const w = t.wallet.get(a[5]);
+      if (w) {
+        w.balance  = Math.min(w.balance  + a[0], a[1]);
+        w.lifetime = Math.min(w.lifetime + a[2], a[3]);
+      }
       return { meta: { changes: 1 } };
     }
     if (/INSERT INTO ledger/.test(q)) {
@@ -914,6 +919,100 @@ console.log('\nA WALLET CANNOT HOLD A NON-NUMBER');
   ok('a stored negative infinity does not become a debt',
      econ.safeBalance(-Infinity) === 0);
   ok('an ordinary stored balance is untouched', econ.safeBalance(1234) === 1234);
+
+  // ── The one that took the bot down ──────────────────────
+  //
+  // The guard above only ever ran on amounts arriving from outside. The
+  // add happens in SQL, so a wallet sitting ON the ceiling went over it
+  // the next time anyone paid in, and the driver then threw on every READ
+  // of that row — /rich selects the top ten by balance, so one player's
+  // wallet handed the error to the whole league.
+  //
+  // Two things have to hold. The ceiling must leave room above it for the
+  // language to still hold the number, and the add must be clamped in the
+  // database rather than only at the door.
+  ok('the ceiling leaves headroom below the point reads start failing',
+     econ.MAX_BALANCE < Number.MAX_SAFE_INTEGER / 8,
+     `${econ.MAX_BALANCE} vs ${Number.MAX_SAFE_INTEGER}`);
+
+  const maxed = env();
+  maxed._t.wallet.set('whale', { balance: econ.MAX_BALANCE, lifetime: econ.MAX_BALANCE });
+  for (let i = 0; i < 25; i++) await econ.adjust(maxed, 'whale', 1e12, 'Payout');
+  const whale = maxed._t.wallet.get('whale');
+  ok('paying into a maxed wallet cannot push it past the ceiling',
+     whale.balance === econ.MAX_BALANCE, String(whale.balance));
+  ok('nor its lifetime', whale.lifetime === econ.MAX_BALANCE, String(whale.lifetime));
+  ok('and the balance stays a number the language can represent',
+     Number.isSafeInteger(whale.balance), String(whale.balance));
+
+  // /rich is the one that spread it, so it gets its own check.
+  const rich = env();
+  rich._t.wallet.set('whale', { balance: econ.MAX_BALANCE, lifetime: econ.MAX_BALANCE });
+  rich._t.wallet.set('normal', { balance: 900, lifetime: 900 });
+  const board = await econ.showRich(rich);
+  ok('the leaderboard still renders with a maxed wallet on it',
+     /whale/.test(board.description) && /normal/.test(board.description),
+     JSON.stringify(board.description));
+
+  // A spend out of a maxed wallet still has to work.
+  const spent = await econ.adjust(maxed, 'whale', -500, 'Pack');
+  ok('and it can still be spent from', spent && spent.balance === econ.MAX_BALANCE - 500,
+     JSON.stringify(spent));
+}
+
+/* ── The repair, against real SQLite ───────────────────── */
+//
+// The fake above cannot show the actual failure, because a Map will hold
+// any number you give it. The driver is what throws, so this runs the
+// migration against the real thing.
+{
+  const { DatabaseSync } = await import('node:sqlite');
+  const fs = await import('node:fs');
+  const db = new DatabaseSync(':memory:');
+  db.exec(`CREATE TABLE wallet (user_id TEXT PRIMARY KEY, balance INTEGER, lifetime INTEGER);
+           CREATE TABLE ledger (user_id TEXT, delta INTEGER, reason TEXT, at INTEGER);`);
+  db.exec(`INSERT INTO wallet VALUES ('over', 9007199254741292, 9007199254741292);
+           INSERT INTO wallet VALUES ('float', 9.9e30, 9.9e30);
+           INSERT INTO wallet VALUES ('null', NULL, NULL);
+           INSERT INTO wallet VALUES ('fine', 5000, 5000);
+           INSERT INTO ledger VALUES ('over', 9007199254741292, 'Admin gift', 1);`);
+
+  let threw = '';
+  try { db.prepare("SELECT balance FROM wallet WHERE user_id = 'over'").get(); }
+  catch (e) { threw = e.message; }
+  ok('a balance past 2^53 does throw on read, which is the bug',
+     /too large/i.test(threw), threw || 'it did not throw');
+
+  const sql = fs.readFileSync(
+    new URL('../worker/migrations/018-balance-ceiling.sql', import.meta.url), 'utf8');
+  db.exec(sql);
+
+  let rows = null, err = '';
+  try { rows = db.prepare('SELECT * FROM wallet ORDER BY user_id').all(); }
+  catch (e) { err = e.message; }
+  ok('after the migration the table reads without throwing', !!rows, err);
+  if (rows) {
+    const by = Object.fromEntries(rows.map(r => [r.user_id, r]));
+    ok('the oversized wallet comes down to the ceiling', by.over.balance === 1e15,
+       String(by.over.balance));
+    ok('a float that got in is caught too', by.float.balance === 1e15,
+       String(by.float.balance));
+    ok('a null becomes nothing rather than staying null', by.null.balance === 0,
+       String(by.null.balance));
+    ok('and an ordinary wallet is left alone', by.fine.balance === 5000,
+       String(by.fine.balance));
+    ok('every repaired balance is representable',
+       rows.every(r => Number.isSafeInteger(r.balance)));
+  }
+  let led = null;
+  try { led = db.prepare('SELECT delta FROM ledger').all(); } catch { /* stays null */ }
+  ok('the ledger is repaired as well, or /balance throws for that player',
+     led && led[0].delta === 1e15, JSON.stringify(led));
+
+  // Replaying a migration is normal here, so it has to be safe to run twice.
+  db.exec(sql);
+  ok('and running it again changes nothing',
+     db.prepare("SELECT balance FROM wallet WHERE user_id='fine'").get().balance === 5000);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

@@ -39,9 +39,14 @@ function makeDB(settings = {}) {
           w.balance += a[0];
           return { meta: { changes: 1 } };
         }
-        if (/UPDATE wallet SET balance = balance \+ \?, lifetime = lifetime \+ \?/.test(q)) {
-          const w = wallets.get(a[3]);
-          if (w) { w.balance += a[0]; w.lifetime += a[1]; }
+        if (/UPDATE wallet SET balance = MIN\(balance \+ \?, \?\), lifetime = MIN\(lifetime \+ \?, \?\)/.test(q)) {
+          // Same clamp the real SQL applies, so the fake cannot pass a test
+          // the database would fail. a = [delta, ceiling, delta, ceiling, now, id].
+          const w = wallets.get(a[5]);
+          if (w) {
+            w.balance  = Math.min(w.balance  + a[0], a[1]);
+            w.lifetime = Math.min(w.lifetime + a[2], a[3]);
+          }
           return { meta: { changes: 1 } };
         }
         if (/INSERT INTO ledger/.test(q)) {
