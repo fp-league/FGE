@@ -466,14 +466,15 @@ console.log('\nTHREE DIVISIONS, NOT TWO');
   ok('the body gets one mode class per division',
      /`\$\{k\}-mode`, classKey\(cls\) === k/.test(a));
 
-  // Every accent is neon now, so every fill is light and the ink on it is
-  // dark for all three. Pinning the hex would just re-break on the next
-  // repaint, so this measures the thing that actually matters.
+  // One accent cannot carry white text and the others cannot carry black,
+  // so the ink is per-division and no single hex is the right answer. What
+  // has to hold is that each division's ink reads on its OWN fill. Read
+  // out of the stylesheet and measured, so a repaint cannot quietly drop a
+  // division below the line — the previous version of this test pinned the
+  // hexes and had to be rewritten on the first repaint instead of catching
+  // anything.
   ok('there is a token for text on the fill', /--class-fill-ink:/.test(c));
   {
-    const ink  = /--class-fill-ink:\s*(#[0-9a-f]{6})/i.exec(c)[1];
-    const fills = [/--gt3:\s*(#[0-9a-f]{6})/i, /--gt4:\s*(#[0-9a-f]{6})/i,
-                   /--neon-yellow:\s*(#[0-9a-f]{6})/i].map(r => r.exec(c)[1]);
     const lum = h => {
       const v = [1,3,5].map(i => {
         const x = parseInt(h.substr(i,2),16)/255;
@@ -483,8 +484,26 @@ console.log('\nTHREE DIVISIONS, NOT TWO');
     };
     const ratio = (a,b) => { const [x,y] = [lum(a),lum(b)].sort((m,n)=>n-m);
                              return (x+0.05)/(y+0.05); };
-    const worst = Math.min(...fills.map(f => ratio(ink, f)));
-    ok('and it clears AA on all three fills', worst >= 4.5, worst.toFixed(2));
+    // --class-fill is declared as var(--something), so resolve one hop.
+    const hex = tok => {
+      const m = new RegExp(`--${tok}:\\s*(#[0-9a-f]{3,8})`, 'i').exec(c);
+      return m && m[1];
+    };
+    const resolve = decl => /^#/.test(decl) ? decl
+      : hex(/var\(--([\w-]+)\)/.exec(decl)[1]);
+    // The :root block, then each mode block, each with its own pair.
+    const blocks = {
+      gt3:   /:root \{([\s\S]*?)\n\}/.exec(c)[1],
+      gt4:   /body\.gt4-mode \{([\s\S]*?)\n\}/.exec(c)[1],
+      truck: /body\.truck-mode \{([\s\S]*?)\n\}/.exec(c)[1],
+    };
+    for (const [name, block] of Object.entries(blocks)) {
+      const fill = resolve(/--class-fill:\s*([^;]+);/.exec(block)[1].trim());
+      const ink  = resolve(/--class-fill-ink:\s*([^;]+);/.exec(block)[1].trim());
+      const r = ratio(ink, fill);
+      ok(`${name}'s button label reads on its own fill`, r >= 4.5,
+         `${ink} on ${fill} = ${r.toFixed(2)}:1`);
+    }
   }
   ok('and no rule still hardcodes white on the fill',
      !/background: var\(--class-fill\); color: #fff/.test(c));

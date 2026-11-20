@@ -1,34 +1,32 @@
 /* ===== FGE — FORTNITE GLOBAL ENDURANCE — REDESIGN ===== */
 
 :root {
-    /* ── VICE CITY ────────────────────────────────────────
-       Miami after dark: indigo night, neon sign colours, sunset on the
-       horizon. Every value below was measured against the surface it
-       lands on rather than picked because it looked right in isolation,
-       which is where a neon palette normally falls apart — the colours
-       that glow hardest on black are the ones that vanish on white.
-       The numbers are in the comments beside each role. */
-    --gt3: #FF2D95;            /* hot pink */
-    --gt4: #00E5FF;            /* electric cyan */
-    --neon-yellow: #FFD426;
-    --neon-purple: #B14BFF;
-    --sunset-1: #FF2D95;
-    --sunset-2: #FF7A3D;
-    --sunset-3: #7B2FF7;
+    /* ── PALETTE ──────────────────────────────────────────
+       Racing colours on a neutral night: red for GT3, navy for GT4,
+       white for Truck. Every value below was measured against the
+       surface it lands on rather than picked because it looked right in
+       isolation. The numbers are in the comments beside each role.
+
+       The neon version is in the history if it is ever wanted back: the
+       lit edges, the glow and the chrome headline all stayed, only the
+       hues came home. */
+    --gt3: #E8192C;            /* race red — a fill, not a text colour */
+    --gt4: #1540C4;            /* navy */
+    --truck-white: #FFFFFF;
     --black: #000000;
     --white: #FFFFFF;
-    --off-white: #F4ECFF;      /* 16.1:1 on the night background */
-    --grey: #B9A6D6;           /* 8.4:1 — a violet-leaning grey, still well clear */
-    --grey-light: #D9CCEE;
-    --grey-dark: #1C0E33;
-    --grey-mid: #2E1A4D;
-    --line: rgba(255,120,220,0.18);
-    --line-strong: rgba(255,120,220,0.38);
+    --off-white: #F2F2F5;      /* 17.0:1 on the night background */
+    --grey: #B4B4BE;           /* 9.2:1 */
+    --grey-light: #D6D6DC;
+    --grey-dark: #17171B;
+    --grey-mid: #26262C;
+    --line: rgba(255,255,255,0.12);
+    --line-strong: rgba(255,255,255,0.26);
     /* Surfaces are translucent white so they tint themselves against
        whichever class background is active — no per-class values needed. */
-    --surface: rgba(177,75,255,0.07);
-    --surface2: rgba(177,75,255,0.13);
-    --input-bg: rgba(10,4,24,0.5);
+    --surface: rgba(255,255,255,0.05);
+    --surface2: rgba(255,255,255,0.10);
+    --input-bg: rgba(0,0,0,0.42);
     /* Titillium Web: the motorsport standard, and far more legible than the
        old Porsche faces, which were so wide they kept overflowing phones. */
     --font-display: 'Titillium Web', 'Segoe UI', Arial, sans-serif;
@@ -39,7 +37,9 @@
        rather than a race team's site. */
     --radius: 0px;
     --nav-h: 64px;
-    --gt4-bright: #00E5FF;
+    /* Navy is 2.3:1 on the night ground, so anywhere it has to be SEEN
+       rather than filled it uses the light blue instead. */
+    --gt4-bright: #7FB2FF;     /* 8.8:1 on the night background */
     --class-color: var(--gt3);
     /* One accent, three jobs, because one hex cannot do all three legibly.
        --class-color fills and decorates (the slab, the logo block, the
@@ -47,24 +47,17 @@
        carry text, and were measured against the surfaces they land on:
 
          --class-fill     --class-fill-ink text on it (buttons, the footer bar)
-         --class-fill-ink text that sits on --class-fill. All three accents
-                          are neon and therefore light, so this is the same
-                          near-black for every class — 5.6:1 at worst, on
-                          the pink.
-         --class-on-dark  it as text on the night background
-
-       There was a fourth, --class-on-light, for the one white panel on the
-       page. That panel is a dark neon one now, so the token went with it.
-
-       FGE red as text on charcoal is 3.8:1 and as text on the white panel
-       4.4:1 — both under the 4.5 a 12px label needs — so those two roles
-       use a brighter and a deeper red respectively. The brand red itself
-       is unchanged wherever it is a fill. */
+         --class-fill-ink text that sits on --class-fill. White on the red
+                          and the navy; near-black on Truck's white, which
+                          would otherwise be white on white.
+         --class-on-dark  it as text on the night background. For red and
+                          navy this is never the same hex as the fill: the
+                          red is 4.2:1 on the night ground and the navy
+                          only 2.3:1, both under the 4.5 a small label
+                          needs, so each has a lighter sibling for text. */
     --class-fill:     var(--gt3);
-    /* Every neon here is bright, so the label on a filled button is dark
-       for all three classes now rather than only for one. */
-    --class-fill-ink: #14061F;   /* 5.6:1 on hot pink */
-    --class-on-dark:  #FF2D95;   /* 5.3:1 on the night background */
+    --class-fill-ink: #FFFFFF;   /* 4.6:1 on the red */
+    --class-on-dark:  #FF2240;   /* 5.0:1 on the night background */
     /* Aliases for the pre-redesign names still used by app.js inline styles.
        Without these the colour is invalid and silently inherits. */
     --muted: var(--grey);
@@ -78,38 +71,36 @@
        base is now neutral and the class colour is spent only where it
        should carry meaning: the logo mark, the eyebrow, buttons, the
        diagonal and the footer. */
-    --page-bg: #190B33;        /* indigo night */
-    --page-deep: #0E0620;
+    --page-bg: #101014;        /* neutral night */
+    --page-deep: #09090B;
     /* The next-race card used to be the one light surface on the page, a
        deliberate bit of contrast. Against neon it read as a hole cut in
        the sign, so it is now a dark panel with a lit edge. The tokens
        keep their names because a dozen rules reference them. */
-    --paper: #1B0D36;          /* 14.3:1 under --ink below */
-    --ink: #F4ECFF;
+    --paper: #15151A;          /* 14.6:1 under --ink below */
+    --ink: #F2F2F5;
 }
 
 /* GT4 takes the cyan sign. Cyan is superb on the night field and almost
    invisible on the light panel, so only the on-light role moves. */
 body.gt4-mode {
-    --class-color: var(--gt4);
+    --class-color:    var(--gt4);
     --class-fill:     var(--gt4);
-    --class-fill-ink: #14061F;   /* 12.7:1 on cyan */
-    --class-on-dark:  #00E5FF;   /* 12.0:1 on the night background */
+    --class-fill-ink: #FFFFFF;            /* 8.2:1 on the navy */
+    --class-on-dark:  var(--gt4-bright);  /* 8.8:1; the navy itself is 2.3 */
 }
 
-/* Truck takes the third sign colour. Yellow is the brightest of the
-   three on a dark field and the weakest on a light one, so its
-   on-light role drops a long way — 12.9:1 against the night, 5.7:1
-   against the panel, and the panel value is nothing like the hue you
-   see glowing in the hero. */
+/* Truck is the one class whose accent carries no colour at all, which
+   breaks the thing the other two take for granted: that white text reads
+   on a button filled with the accent. Here the fill IS white. */
 body.truck-mode {
-    --class-color:    var(--neon-yellow);
-    --class-fill:     var(--neon-yellow);
-    --class-fill-ink: #14061F;   /* 13.7:1 on yellow */
-    --class-on-dark:  #FFD426;   /* 12.9:1 on the night background */
+    --class-color:    var(--truck-white);
+    --class-fill:     var(--truck-white);
+    --class-fill-ink: #121214;   /* 18.7:1 on white */
+    --class-on-dark:  #FFFFFF;   /* 19.0:1 on the night background */
 }
-/* Truck's yellow is already near the top of the channel, so brightening it
-   barely moves. It darkens on hover instead, like it did when it was white. */
+/* brightness() cannot brighten white, so Truck's primary button would have
+   had no hover at all. It darkens instead. */
 body.truck-mode .btn-primary:hover { filter: brightness(0.88); }
 
 
@@ -125,24 +116,17 @@ h1, h2, h3, h4,
     font-weight: 700;
 }
 
-/* ── VICE CITY: the sky and the horizon ──────────────────
-   The sunset goes on <html> rather than on <body>, because --page-bg is
-   also a solid panel fill in a dozen places and turning it into a
-   gradient would have painted a sunset inside every card.
+/* ── The horizon grid ─────────────────────────────────────
+   A sunset used to sit on <html> here, a magenta-to-violet wash rising
+   off the bottom of every page. It only held together while the accents
+   were neon, so it is gone and the ground is flat.
 
-   Both layers are pseudo-free except the grid, which has to be its own
-   box so it can be rotated into perspective. It is fixed, so it is not a
-   flex item of body and cannot disturb the column layout. */
+   The grid stays. It has to be its own box so it can be rotated into
+   perspective, and it is fixed, so it is not a flex item of body and
+   cannot disturb the column layout. */
 html {
     min-height: 100%;
-    background:
-        radial-gradient(125% 62% at 50% 100%,
-            rgba(255, 45,149,0.34) 0%,
-            rgba(255,122, 61,0.17) 26%,
-            rgba(123, 47,247,0.12) 47%,
-            transparent 70%),
-        linear-gradient(180deg, #0B0418 0%, #150927 38%, #1E0D3C 100%);
-    background-attachment: fixed;
+    background: #0B0B0E;
 }
 
 body::after {
@@ -150,9 +134,10 @@ body::after {
     left: -50%; width: 200%; bottom: 0; height: 46vh;
     transform: perspective(260px) rotateX(64deg);
     transform-origin: 50% 100%;
+    /* Neutral and faint: a surveyed grid rather than a neon one. */
     background-image:
-        repeating-linear-gradient(to right,  rgba(0,229,255,0.30) 0 1px, transparent 1px 70px),
-        repeating-linear-gradient(to bottom, rgba(0,229,255,0.30) 0 1px, transparent 1px 70px);
+        repeating-linear-gradient(to right,  rgba(255,255,255,0.13) 0 1px, transparent 1px 70px),
+        repeating-linear-gradient(to bottom, rgba(255,255,255,0.13) 0 1px, transparent 1px 70px);
     -webkit-mask-image: linear-gradient(to top, #000 2%, transparent 76%);
             mask-image: linear-gradient(to top, #000 2%, transparent 76%);
 }
@@ -387,10 +372,10 @@ body > .footer { flex-shrink: 0; width: 100%; }
 .cs-logo {
     height: 24px; width: auto; display: block;
     opacity: 0.3; filter: grayscale(1) brightness(1.6);
-    /* The three source images are still in the old red/blue/white. Rather
-       than re-export them, each is rotated onto its neon hue here and the
-       glow is folded into the same filter — a second `filter` would
-       replace this one, not add to it. */
+    /* The source art is already red, blue and white, so there is no hue to
+       rotate any more — each active state just adds its own glow. One
+       filter per state, because a second `filter` declaration replaces the
+       first rather than adding to it. */
     transition: opacity 0.35s ease, filter 0.35s ease, transform 0.35s ease;
 }
 .cs-btn:hover .cs-logo { opacity: 0.6; }
@@ -401,18 +386,10 @@ body > .footer { flex-shrink: 0; width: 100%; }
 #csGT4  .cs-logo { filter: grayscale(1) brightness(1.6); }
 #csTRUCK .cs-logo { filter: grayscale(1) brightness(1.6); }
 
-#csGT3.active  .cs-logo {
-    filter: hue-rotate(-28deg) saturate(2.2) brightness(1.1)
-            drop-shadow(0 0 13px rgba(255, 45, 149, 0.85));
-}
-#csGT4.active  .cs-logo {
-    filter: hue-rotate(-32deg) saturate(2.4) brightness(1.35)
-            drop-shadow(0 0 13px rgba(0, 229, 255, 0.85));
-}
-#csTRUCK.active .cs-logo {
-    filter: sepia(1) saturate(6) hue-rotate(-14deg) brightness(1.08)
-            drop-shadow(0 0 13px rgba(255, 212, 38, 0.85));
-}
+#csGT3.active  .cs-logo { filter: drop-shadow(0 0 13px rgba(232, 25, 44, 0.85)); }
+#csGT4.active  .cs-logo { filter: brightness(1.25)
+                                  drop-shadow(0 0 13px rgba(127, 178, 255, 0.85)); }
+#csTRUCK.active .cs-logo { filter: drop-shadow(0 0 13px rgba(255, 255, 255, 0.8)); }
 
 .cs-sub {
     font-family: var(--font-ui); font-size: 0.58rem;
@@ -770,7 +747,7 @@ body > .footer { flex-shrink: 0; width: 100%; }
 @media (max-width: 820px) { .nextband { grid-template-columns: 1fr; } }
 
 .nb-card {
-    background: linear-gradient(145deg, #1F1040 0%, #150929 100%);
+    background: linear-gradient(145deg, #1B1B21 0%, #121216 100%);
     color: var(--ink);
     border: 1px solid var(--class-color);
     box-shadow: inset 0 0 40px -22px var(--class-color),
@@ -782,8 +759,8 @@ body > .footer { flex-shrink: 0; width: 100%; }
 .nb-label {
     font-family: var(--font-ui); font-weight: 600;
     font-size: 0.64rem; letter-spacing: 0.24em; text-transform: uppercase;
-    /* 6.1:1 on the panel the card now is. */
-    color: #A694C6;
+    /* 6.0:1 on the panel the card now is. */
+    color: #9A9AA6;
 }
 .nb-date {
     font-family: var(--font-ui); font-weight: 700;
@@ -797,7 +774,7 @@ body > .footer { flex-shrink: 0; width: 100%; }
     line-height: 0.96; letter-spacing: -0.015em; text-transform: uppercase;
     color: var(--ink); margin: 0.15rem 0 0.1rem;
 }
-.nb-where { font-family: var(--font-ui); font-size: 0.86rem; color: #B9A6D6; }
+.nb-where { font-family: var(--font-ui); font-size: 0.86rem; color: #B4B4BE; }
 .nb-btn {
     margin-top: 1.1rem;
     background: var(--class-fill); color: var(--class-fill-ink);
@@ -856,8 +833,8 @@ select:focus { outline: none; border-color: var(--class-on-dark); }
     padding: 0.12rem 0.45rem; border-radius: 0;
     font-weight: bold; vertical-align: middle; margin-left: 0.3rem;
 }
-.badge-gt3 { background: rgba(255,45,149,0.14); color: var(--gt3); border: 1px solid var(--gt3); }
-.badge-gt4 { background: rgba(0,229,255,0.12); color: #00E5FF; border: 1px solid #00E5FF; }
+.badge-gt3 { background: rgba(232,25,44,0.16); color: var(--gt3); border: 1px solid var(--gt3); }
+.badge-gt4 { background: rgba(127,178,255,0.14); color: #7FB2FF; border: 1px solid #7FB2FF; }
 
 /* ── PODIUM ── */
 .podium { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; margin-bottom: 1.5rem; }
@@ -1572,50 +1549,6 @@ body.truck-mode .hero-car {
     .fin-stage { opacity: 1; transform: none; transition: none; }
 }
 
-/* ── VICE CITY: the sun ───────────────────────────────────
-   The slitted disc is the one image the whole look turns on. It is a
-   radial gradient for the sphere and a repeating gradient for the bands,
-   with the bands widening toward the bottom so the lowest ones read as
-   further away. No image, so it costs nothing to load and scales to any
-   screen. It sits behind the car and in front of the hero's own
-   background, hence the z-index. */
-.hero::before {
-    content: ''; position: absolute; z-index: -2; pointer-events: none;
-    /* Off-centre, behind the car rather than behind the headline: a disc
-       under the type turns 72px letters into mush whatever the opacity. */
-    left: 61%; bottom: -16%;
-    width: min(500px, 46vw); aspect-ratio: 1;
-    transform: translateX(-50%);
-    border-radius: 50%;
-    background:
-        linear-gradient(180deg,
-            #FFE86B 0%, #FFC13D 22%, #FF6FAE 58%, #FF2D95 78%, #B14BFF 100%);
-    -webkit-mask-image:
-        linear-gradient(180deg, #000 0 52%, transparent 52% 100%),
-        repeating-linear-gradient(180deg,
-            #000 0 10px, transparent 10px 14px,
-            #000 14px 23px, transparent 23px 30px,
-            #000 30px 40px, transparent 40px 52px);
-    mask-image:
-        linear-gradient(180deg, #000 0 52%, transparent 52% 100%),
-        repeating-linear-gradient(180deg,
-            #000 0 8px, transparent 8px 11px,
-            #000 11px 18px, transparent 18px 24px,
-            #000 24px 31px, transparent 31px 41px);
-    -webkit-mask-composite: source-over;
-            mask-composite: add;
-    opacity: 0.62;
-    filter: blur(0.2px) drop-shadow(0 0 70px rgba(255, 45, 149, 0.45));
-}
-/* On a phone the car and the copy already fill the hero; a sun behind
-   both turns it to soup. */
-@media (max-width: 760px) {
-    /* The copy stacks full-width on a phone, so a centred disc sits right
-       under the paragraph. Pushed off the right edge instead, where only
-       the car overlaps it. */
-    .hero::before { left: 78%; width: 60vw; bottom: -14%; opacity: 0.38; }
-}
-
 /* ── VICE CITY: neon ──────────────────────────────────────
    A sign glows because the tube spills light onto what is behind it, so
    every glow here is the class colour at low alpha spreading outward,
@@ -1634,8 +1567,8 @@ body.truck-mode .hero-car {
    drop-shadow filter on the element instead. */
 .hero-title {
     background: linear-gradient(180deg,
-        #FFFFFF 0%, #FFFFFF 38%, #9FD6FF 52%, #5E8DD8 62%,
-        #FFFFFF 74%, #FFD9F0 100%);
+        #FFFFFF 0%, #FFFFFF 38%, #C8D6E8 52%, #7D8CA3 62%,
+        #FFFFFF 74%, #EDF1F6 100%);
     -webkit-background-clip: text;
             background-clip: text;
     color: transparent;
@@ -2259,7 +2192,7 @@ textarea:focus-visible,
    reads as "being worked on" rather than "broken". */
 .maint-flag { display: flex; gap: 0.5rem; justify-content: center; margin-bottom: 1.6rem; }
 .maint-flag i {
-    width: 26px; height: 7px; border-radius: 0; background: var(--gt3, #FF2D95);
+    width: 26px; height: 7px; border-radius: 0; background: var(--gt3, #E8192C);
     animation: maint-wave 1.4s ease-in-out infinite;
 }
 .maint-flag i:nth-child(2) { animation-delay: 0.18s; opacity: 0.75; }
@@ -2287,7 +2220,7 @@ textarea:focus-visible,
     font-size: 0.78rem;
     letter-spacing: 0.14em;
     color: #fff;
-    background: var(--gt3, #FF2D95);
+    background: var(--gt3, #E8192C);
     border: 0;
     border-radius: 0;
     cursor: pointer;
@@ -2467,7 +2400,7 @@ textarea:focus-visible,
 }
 .su-field textarea { resize: vertical; min-height: 4.5rem; }
 .su-field input:focus, .su-field select:focus, .su-field textarea:focus {
-    outline: 2px solid var(--accent, #FF2D95);
+    outline: 2px solid var(--accent, #E8192C);
     outline-offset: 1px;
     border-color: transparent;
 }

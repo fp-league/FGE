@@ -9,46 +9,39 @@
 <link href="https://fonts.googleapis.com/css2?family=Titillium+Web:wght@400;600;700&display=swap" rel="stylesheet">
 <style>
 :root {
-  --bg:      #0B0418;
-  /* Translucent so panels tint against whichever class background is active.
-     Violet rather than white, so a stacked panel warms toward the neon
-     instead of greying out. */
-  --surface: rgba(177,75,255,0.09);
-  --surface2:rgba(177,75,255,0.16);
-  --line:    rgba(255,120,220,0.18);
-  --line2:   rgba(255,120,220,0.34);
+  --bg:      #0B0B0E;
+  /* Translucent so panels tint against whichever class background is active. */
+  --surface: rgba(255,255,255,0.055);
+  --surface2:rgba(255,255,255,0.10);
+  --line:    rgba(255,255,255,0.12);
+  --line2:   rgba(255,255,255,0.22);
   --white:   #fff;
-  --off:     #F0ECF8;
-  /* 7.4:1 and 5.3:1 at worst across the three class backgrounds. The old
-     #888 / #555 pair measured 3.1 and 1.4 against these lighter grounds. */
-  --grey:    #B9A6D6;
-  --grey2:   #A595C4;
-  --gt3:     #FF2D95;
-  --gt4:     #00E5FF;
-  --gt4b:    #00E5FF;
-  --danger:  #FF4D6D;
-  --success: #2BE8A5;
+  --off:     #F0F0F2;
+  /* 8.9:1 and 6.5:1 at worst across the three class backgrounds. The
+     original #888 / #555 pair measured 3.1 and 1.4 against these. */
+  --grey:    #B4B4BE;
+  --grey2:   #96969F;
+  --gt3:     #E8192C;
+  --gt4:     #1540C4;
+  --gt4b:    #7FB2FF;
+  --danger:  #E53935;
+  --success: #2e9e5b;
   --fd: 'Titillium Web','Segoe UI',Arial,sans-serif;
   --fu: 'Titillium Web','Segoe UI',Arial,sans-serif;
-  /* Active class accent — hot pink for GT3 (default), cyan for GT4,
-     yellow for Truck, matching the site. All three are light colours now,
-     so --accent-ink is the near-black for every one of them: 5.6:1 on the
-     pink and better on the other two. */
-  --accent:      #FF2D95;
-  --accent-ink:  #14061F;
-  --accent-bg:   rgba(255,45,149,0.10);
-  --accent-line: rgba(255,45,149,0.42);
+  /* Active class accent — red for GT3 (default), navy for GT4, white for
+     Truck, matching the site. --accent-ink is what sits ON the accent when
+     it is used as a fill: white for the two dark accents, near-black for
+     Truck's, whose buttons would otherwise be white on white. */
+  --accent:      #E8192C;
+  --accent-ink:  #fff;
+  --accent-bg:   rgba(232,25,44,0.10);
+  --accent-line: rgba(232,25,44,0.38);
   /* Whole-page background, class coloured */
-  --page-bg:   #2A0A25;
-  --page-deep: #180516;
+  --page-bg:   #2A0709;
+  --page-deep: #1A0406;
 }
 *, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
-/* The sunset sits on html so it survives the class background swap on
-   body, which is an opaque colour. */
-html { min-height:100%; background:
-    radial-gradient(120% 55% at 50% 100%, rgba(255,45,149,0.22) 0%,
-        rgba(123,47,247,0.12) 42%, transparent 72%),
-    linear-gradient(180deg,#0B0418 0%,#150927 100%); }
+html { min-height:100%; background:#0B0B0E; }
 h2, h3, h4 { font-weight:700; }
 body { background:var(--page-bg); color:var(--off); font-family:'Segoe UI',Arial,sans-serif; min-height:100vh; font-size:0.9rem; transition:background-color 0.45s ease; }
 .sec-head h2 { text-shadow:0 0 22px var(--accent); }
@@ -1642,14 +1635,16 @@ let adminData = null;
 const CLASSES = ['gt3', 'gt4', 'truck'];
 const CLASS_LABEL = { gt3: 'GT3', gt4: 'GT4', truck: 'TRUCK' };
 const CLASS_THEME = {
-    gt3:   { accent:'#FF2D95', ink:'#14061F', bg:'rgba(255,45,149,0.10)',
-             line:'rgba(255,45,149,0.42)', page:'#2A0A25', deep:'#180516' },
-    gt4:   { accent:'#00E5FF', ink:'#14061F', bg:'rgba(0,229,255,0.10)',
-             line:'rgba(0,229,255,0.42)', page:'#07202E', deep:'#04131C' },
-    // Truck is neon yellow now, not white; the ink stays the same near-black
-    // because all three accents are light.
-    truck: { accent:'#FFD426', ink:'#14061F', bg:'rgba(255,212,38,0.10)',
-             line:'rgba(255,212,38,0.42)', page:'#2A1D06', deep:'#171003' },
+    gt3:   { accent:'#E8192C', ink:'#fff', bg:'rgba(232,25,44,0.10)',
+             line:'rgba(232,25,44,0.38)', page:'#2A0709', deep:'#1A0406' },
+    // The navy is too dark to read as a label on the panel ground, so the
+    // accent here is its lighter sibling — the same one the site uses for
+    // GT4 text — while the fill stays navy.
+    gt4:   { accent:'#7FB2FF', ink:'#0A1020', bg:'rgba(127,178,255,0.10)',
+             line:'rgba(127,178,255,0.38)', page:'#0A1733', deep:'#060E20' },
+    // Truck is white, which is the one accent that cannot carry white text.
+    truck: { accent:'#FFFFFF', ink:'#121214', bg:'rgba(255,255,255,0.10)',
+             line:'rgba(255,255,255,0.35)', page:'#141416', deep:'#0A0A0C' },
 };
 const classKeyOf = c => String(c || '').toLowerCase();
 
@@ -6608,7 +6603,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // already cost us one wrong diagnosis. A changed query is a different URL,
   // so a deploy lands the moment the page does. Bump it with every change in
   // ./ocr or ./lib.
-  const BUILD = '2026-11-11a';
+  const BUILD = '2026-11-20a';
   const V = '?v=' + BUILD;
   const [rb, mt, season, watch, pen] = await Promise.all([
     import('./ocr/read-board.js' + V),

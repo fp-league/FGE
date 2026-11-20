@@ -139,13 +139,17 @@ console.log('\nTHE PANEL KNOWS EVERY DIVISION');
   ok('and the others are not',
      !/\bactive\b/.test(doc.getElementById('cpGT3').className) &&
      !/\bactive\b/.test(doc.getElementById('cpGT4').className));
+  // Compared against the page's own theme table rather than a hex copied
+  // into the test, which only ever pins the palette of the day.
   ok('the accent follows the division',
-     win.eval("document.documentElement.style.getPropertyValue('--accent').trim()") === '#FFD426',
+     win.eval("document.documentElement.style.getPropertyValue('--accent').trim()")
+       === win.eval("CLASS_THEME.truck.accent"),
      win.eval("document.documentElement.style.getPropertyValue('--accent')"));
 
   win.eval("switchClass('GT3')");
   ok('switching back restores the gt3 accent',
-     win.eval("document.documentElement.style.getPropertyValue('--accent').trim()") === '#FF2D95');
+     win.eval("document.documentElement.style.getPropertyValue('--accent').trim()")
+       === win.eval("CLASS_THEME.gt3.accent"));
   ok('and the gt3 pill', /\bactive\b/.test(doc.getElementById('cpGT3').className));
 
   // The record we served has only gt3 and gt4, exactly like the real one
@@ -162,18 +166,36 @@ console.log('\nTHE PANEL KNOWS EVERY DIVISION');
   ok('and truck starts empty', win.eval('d().races.length') === 0);
   win.eval("switchClass('GT3')");
 
-  // All three accents are neon, so all three are light, so the ink on a
-  // filled button is dark for every one of them. The pinned hex is the
-  // token's declared default; the per-class values are checked below.
-  ok('there is a token for text on the accent fill',
-     /--accent-ink:\s*#14061F/i.test(html));
+  ok('there is a token for text on the accent fill', /--accent-ink:/.test(html));
   ok('and the filled button uses it, not plain white',
      /\.btn-white\s*\{ background:var\(--accent\); color:var\(--accent-ink\); \}/.test(html));
-  for (const cls of ['GT3', 'GT4', 'TRUCK']) {
-    win.eval(`switchClass('${cls}')`);
-    const ink = win.eval(
-      "document.documentElement.style.getPropertyValue('--accent-ink').trim()");
-    ok(`${cls} puts dark ink on its light fill`, ink === '#14061F', ink);
+
+  // What matters is not which hex the ink is — Truck's accent is white and
+  // the other two are not, so it cannot be one hex — but that the label on
+  // a filled button reads against the fill underneath it. Measured, so the
+  // next repaint cannot quietly drop below the line.
+  {
+    const lum = h => {
+      const c = h.replace('#', '');
+      const f = c.length === 3 ? c.replace(/./g, d => d + d) : c;
+      const v = [0, 2, 4].map(i => {
+        const x = parseInt(f.substr(i, 2), 16) / 255;
+        return x <= 0.04045 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4);
+      });
+      return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2];
+    };
+    const ratio = (a, b) => {
+      const [hi, lo] = [lum(a), lum(b)].sort((m, n) => n - m);
+      return (hi + 0.05) / (lo + 0.05);
+    };
+    for (const cls of ['GT3', 'GT4', 'TRUCK']) {
+      win.eval(`switchClass('${cls}')`);
+      const get = t => win.eval(
+        `document.documentElement.style.getPropertyValue('--${t}').trim()`);
+      const r = ratio(get('accent-ink'), get('accent'));
+      ok(`${cls}'s button label reads on its own fill`, r >= 4.5,
+         `${get('accent-ink')} on ${get('accent')} = ${r.toFixed(2)}:1`);
+    }
   }
   win.eval("switchClass('TRUCK')");
   ok('and truck gets the inverted hover, since white cannot brighten',
