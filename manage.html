@@ -9,38 +9,52 @@
 <link href="https://fonts.googleapis.com/css2?family=Titillium+Web:wght@400;600;700&display=swap" rel="stylesheet">
 <style>
 :root {
-  --bg:      #000;
-  /* Translucent so panels tint against whichever class background is active */
-  --surface: rgba(255,255,255,0.055);
-  --surface2:rgba(255,255,255,0.10);
-  --line:    rgba(255,255,255,0.12);
-  --line2:   rgba(255,255,255,0.22);
+  --bg:      #0B0418;
+  /* Translucent so panels tint against whichever class background is active.
+     Violet rather than white, so a stacked panel warms toward the neon
+     instead of greying out. */
+  --surface: rgba(177,75,255,0.09);
+  --surface2:rgba(177,75,255,0.16);
+  --line:    rgba(255,120,220,0.18);
+  --line2:   rgba(255,120,220,0.34);
   --white:   #fff;
-  --off:     #f0f0f0;
-  --grey:    #888;
-  --grey2:   #555;
-  --gt3:     #E10600;
-  --gt4:     #0033A0;
-  --gt4b:    #5599ff;
-  --danger:  #c62828;
-  --success: #2e7d32;
+  --off:     #F0ECF8;
+  /* 7.4:1 and 5.3:1 at worst across the three class backgrounds. The old
+     #888 / #555 pair measured 3.1 and 1.4 against these lighter grounds. */
+  --grey:    #B9A6D6;
+  --grey2:   #A595C4;
+  --gt3:     #FF2D95;
+  --gt4:     #00E5FF;
+  --gt4b:    #00E5FF;
+  --danger:  #FF4D6D;
+  --success: #2BE8A5;
   --fd: 'Titillium Web','Segoe UI',Arial,sans-serif;
   --fu: 'Titillium Web','Segoe UI',Arial,sans-serif;
-  /* Active class accent — red for GT3 (default), blue for GT4,
-     white for Truck. --accent-ink is what sits ON the accent when it is
-     used as a fill: white for a dark accent, near-black for Truck's,
-     whose buttons were otherwise white on white and unreadable. */
-  --accent:      #E10600;
-  --accent-ink:  #fff;
-  --accent-bg:   rgba(225,6,0,0.08);
-  --accent-line: rgba(225,6,0,0.35);
+  /* Active class accent — hot pink for GT3 (default), cyan for GT4,
+     yellow for Truck, matching the site. All three are light colours now,
+     so --accent-ink is the near-black for every one of them: 5.6:1 on the
+     pink and better on the other two. */
+  --accent:      #FF2D95;
+  --accent-ink:  #14061F;
+  --accent-bg:   rgba(255,45,149,0.10);
+  --accent-line: rgba(255,45,149,0.42);
   /* Whole-page background, class coloured */
-  --page-bg:   #450A07;
-  --page-deep: #2A0604;
+  --page-bg:   #2A0A25;
+  --page-deep: #180516;
 }
 *, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
+/* The sunset sits on html so it survives the class background swap on
+   body, which is an opaque colour. */
+html { min-height:100%; background:
+    radial-gradient(120% 55% at 50% 100%, rgba(255,45,149,0.22) 0%,
+        rgba(123,47,247,0.12) 42%, transparent 72%),
+    linear-gradient(180deg,#0B0418 0%,#150927 100%); }
 h2, h3, h4 { font-weight:700; }
 body { background:var(--page-bg); color:var(--off); font-family:'Segoe UI',Arial,sans-serif; min-height:100vh; font-size:0.9rem; transition:background-color 0.45s ease; }
+.sec-head h2 { text-shadow:0 0 22px var(--accent); }
+.btn-white { box-shadow:0 0 22px -8px var(--accent); }
+.snav-item.active { box-shadow:inset 0 0 26px -14px var(--accent); }
+.form-card, .tbl-wrap, .login-card { box-shadow:0 0 30px -22px var(--accent); }
 
 /* ── LOGIN ── */
 .login-wrap { display:flex; align-items:center; justify-content:center; min-height:100vh; padding:1rem; }
@@ -1628,13 +1642,14 @@ let adminData = null;
 const CLASSES = ['gt3', 'gt4', 'truck'];
 const CLASS_LABEL = { gt3: 'GT3', gt4: 'GT4', truck: 'TRUCK' };
 const CLASS_THEME = {
-    gt3:   { accent:'#E10600', ink:'#fff', bg:'rgba(225,6,0,0.08)',
-             line:'rgba(225,6,0,0.35)', page:'#450A07', deep:'#2A0604' },
-    gt4:   { accent:'#5599ff', ink:'#fff', bg:'rgba(85,153,255,0.08)',
-             line:'rgba(85,153,255,0.35)', page:'#071C45', deep:'#04102A' },
-    // Truck is white on near-black, like its side of the site.
-    truck: { accent:'#FFFFFF', ink:'#0A0A0C', bg:'rgba(255,255,255,0.10)',
-             line:'rgba(255,255,255,0.35)', page:'#141416', deep:'#0A0A0C' },
+    gt3:   { accent:'#FF2D95', ink:'#14061F', bg:'rgba(255,45,149,0.10)',
+             line:'rgba(255,45,149,0.42)', page:'#2A0A25', deep:'#180516' },
+    gt4:   { accent:'#00E5FF', ink:'#14061F', bg:'rgba(0,229,255,0.10)',
+             line:'rgba(0,229,255,0.42)', page:'#07202E', deep:'#04131C' },
+    // Truck is neon yellow now, not white; the ink stays the same near-black
+    // because all three accents are light.
+    truck: { accent:'#FFD426', ink:'#14061F', bg:'rgba(255,212,38,0.10)',
+             line:'rgba(255,212,38,0.42)', page:'#2A1D06', deep:'#171003' },
 };
 const classKeyOf = c => String(c || '').toLowerCase();
 

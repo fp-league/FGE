@@ -466,10 +466,26 @@ console.log('\nTHREE DIVISIONS, NOT TWO');
   ok('the body gets one mode class per division',
      /`\$\{k\}-mode`, classKey\(cls\) === k/.test(a));
 
-  // White accent: the thing every other class could take for granted is
-  // that white text reads on the fill. Here the fill IS white.
-  ok('there is a token for text on the fill', /--class-fill-ink: #fff;/.test(c));
-  ok('truck flips it to near-black', /body\.truck-mode[\s\S]{0,400}--class-fill-ink: #121214/.test(c));
+  // Every accent is neon now, so every fill is light and the ink on it is
+  // dark for all three. Pinning the hex would just re-break on the next
+  // repaint, so this measures the thing that actually matters.
+  ok('there is a token for text on the fill', /--class-fill-ink:/.test(c));
+  {
+    const ink  = /--class-fill-ink:\s*(#[0-9a-f]{6})/i.exec(c)[1];
+    const fills = [/--gt3:\s*(#[0-9a-f]{6})/i, /--gt4:\s*(#[0-9a-f]{6})/i,
+                   /--neon-yellow:\s*(#[0-9a-f]{6})/i].map(r => r.exec(c)[1]);
+    const lum = h => {
+      const v = [1,3,5].map(i => {
+        const x = parseInt(h.substr(i,2),16)/255;
+        return x <= 0.04045 ? x/12.92 : Math.pow((x+0.055)/1.055, 2.4);
+      });
+      return 0.2126*v[0] + 0.7152*v[1] + 0.0722*v[2];
+    };
+    const ratio = (a,b) => { const [x,y] = [lum(a),lum(b)].sort((m,n)=>n-m);
+                             return (x+0.05)/(y+0.05); };
+    const worst = Math.min(...fills.map(f => ratio(ink, f)));
+    ok('and it clears AA on all three fills', worst >= 4.5, worst.toFixed(2));
+  }
   ok('and no rule still hardcodes white on the fill',
      !/background: var\(--class-fill\); color: #fff/.test(c));
   ok('the footer text follows the token too',

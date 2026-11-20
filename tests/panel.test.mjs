@@ -140,12 +140,12 @@ console.log('\nTHE PANEL KNOWS EVERY DIVISION');
      !/\bactive\b/.test(doc.getElementById('cpGT3').className) &&
      !/\bactive\b/.test(doc.getElementById('cpGT4').className));
   ok('the accent follows the division',
-     win.eval("document.documentElement.style.getPropertyValue('--accent').trim()") === '#FFFFFF',
+     win.eval("document.documentElement.style.getPropertyValue('--accent').trim()") === '#FFD426',
      win.eval("document.documentElement.style.getPropertyValue('--accent')"));
 
   win.eval("switchClass('GT3')");
-  ok('switching back restores red',
-     win.eval("document.documentElement.style.getPropertyValue('--accent').trim()") === '#E10600');
+  ok('switching back restores the gt3 accent',
+     win.eval("document.documentElement.style.getPropertyValue('--accent').trim()") === '#FF2D95');
   ok('and the gt3 pill', /\bactive\b/.test(doc.getElementById('cpGT3').className));
 
   // The record we served has only gt3 and gt4, exactly like the real one
@@ -162,19 +162,20 @@ console.log('\nTHE PANEL KNOWS EVERY DIVISION');
   ok('and truck starts empty', win.eval('d().races.length') === 0);
   win.eval("switchClass('GT3')");
 
-  // A white accent breaks the one thing the other two take for granted:
-  // that white text reads on a button filled with it.
+  // All three accents are neon, so all three are light, so the ink on a
+  // filled button is dark for every one of them. The pinned hex is the
+  // token's declared default; the per-class values are checked below.
   ok('there is a token for text on the accent fill',
-     /--accent-ink:\s*#fff/.test(html));
+     /--accent-ink:\s*#14061F/i.test(html));
   ok('and the filled button uses it, not plain white',
      /\.btn-white\s*\{ background:var\(--accent\); color:var\(--accent-ink\); \}/.test(html));
-  win.eval("switchClass('GT3')");
-  ok('gt3 keeps white text on its red fill',
-     win.eval("document.documentElement.style.getPropertyValue('--accent-ink').trim()") === '#fff');
+  for (const cls of ['GT3', 'GT4', 'TRUCK']) {
+    win.eval(`switchClass('${cls}')`);
+    const ink = win.eval(
+      "document.documentElement.style.getPropertyValue('--accent-ink').trim()");
+    ok(`${cls} puts dark ink on its light fill`, ink === '#14061F', ink);
+  }
   win.eval("switchClass('TRUCK')");
-  ok('truck flips it to near-black',
-     win.eval("document.documentElement.style.getPropertyValue('--accent-ink').trim()") === '#0A0A0C',
-     win.eval("document.documentElement.style.getPropertyValue('--accent-ink')"));
   ok('and truck gets the inverted hover, since white cannot brighten',
      win.document.body.classList.contains('truck-admin'));
   win.eval("switchClass('GT4')");
