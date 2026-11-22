@@ -185,6 +185,19 @@ commands.push(
       ] },
     ],
   },
+  {
+    name: 'ranked',
+    description: 'Ranked 1v1 \u2014 twelve laps, wheel to wheel, one ladder',
+    options: [
+      { name: 'challenge', description: 'Call somebody out', type: 1, options: [
+        { name: 'who', description: 'Who you are racing', type: 6, required: true },
+      ] },
+      { name: 'ladder', description: 'The top of the table', type: 1, options: [] },
+      { name: 'stats', description: 'A driver\u2019s ranked record', type: 1, options: [
+        { name: 'who', description: 'Whose record (yours if left out)', type: 6, required: false },
+      ] },
+    ],
+  },
   { name: 'odds', description: 'The book on the next race', options: [CLASS_OPTION] },
   {
     name: 'bet',

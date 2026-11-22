@@ -446,6 +446,7 @@ export async function handleComponent(interaction, env) {
   if (tag === 'wk') return onShiftButton(env, interaction, gameId, action);
   if (tag === 'hl') return onHiLoButton(env, interaction, gameId, action);
   if (tag === 'du') return onDuelButton(env, interaction, gameId, action);
+  if (tag === 'rk') return onRankedButton(env, interaction, gameId, action);
   if (tag === 'ag') return onAgentButton(env, interaction, gameId, action);
   return null;
 }
@@ -455,6 +456,7 @@ export async function handleComponent(interaction, env) {
 import { shiftQuestion, SHIFT_FALLBACK } from './shift.js';
 import { onAgentButton } from './agent.js';
 import { onDuelButton } from './wagers.js';
+import { onRankedButton } from './battle.js';
 
 /**
  * Clocking on now asks something before it pays.

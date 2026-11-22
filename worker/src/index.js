@@ -21,6 +21,7 @@ import { openPack, showCollection, showMissing, showCard, showCollectors, grantP
 import { COMMANDS } from './commands.js';
 import { handleAutocomplete } from './autocomplete.js';
 import { runAgent, defer } from './agent.js';
+import { startRanked, showLadder, showRankedStats, sweepRanked } from './battle.js';
 import { startDuel, buyTickets, showLottery, sweepDuels, runLotteryDraw }
   from './wagers.js';
 import { startBlackjack, playRoulette, playSlots, startHiLo, handleComponent, sweepGames,
@@ -736,6 +737,16 @@ async function handleEconomy(interaction, record, env) {
       case 'slots':     embed = await playSlots(env, interaction, pick('bet')); break;
       case 'higherlower': embed = await startHiLo(env, interaction, pick('bet')); break;
       case 'duel':      embed = await startDuel(env, interaction, pick('who'), pick('bet')); break;
+      case 'ranked': {
+        // Subcommands arrive as a nested option, so the arguments of the
+        // one that was used live a level down from the usual place.
+        const sub = ((interaction.data.options || [])[0] || {});
+        const subOpt = n => ((sub.options || []).find(o => o.name === n) || {}).value;
+        if (sub.name === 'ladder')      embed = await showLadder(env);
+        else if (sub.name === 'stats')  embed = await showRankedStats(env, interaction, subOpt('who'));
+        else                            embed = await startRanked(env, interaction, subOpt('who'));
+        break;
+      }
       case 'lottery': {
         const what = ((interaction.data.options || [])[0] || {}).name;
         const opts = ((interaction.data.options || [])[0] || {}).options || [];
@@ -1561,6 +1572,15 @@ export default {
         if (back) console.log(`refunded ${back} unanswered duel(s)`);
       } catch (err) {
         console.error('duel sweep failed:', err && err.message || err);
+      }
+
+      // Let go of ranked races nobody came back to, so neither driver's
+      // one-at-a-time slot is held by a match that ended in a closed tab.
+      try {
+        const gone = await sweepRanked(env);
+        if (gone) console.log(`abandoned ${gone} ranked match(es)`);
+      } catch (err) {
+        console.error('ranked sweep failed:', err && err.message || err);
       }
 
       // Draw the lottery if it is due. Cheap when it is not.
