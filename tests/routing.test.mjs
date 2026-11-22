@@ -23,6 +23,10 @@ import { ECON_COMMANDS } from '../worker/src/economy.js';
 import { DATA_VIEWS } from '../worker/src/discord.js';
 import { OWN_BRANCH_COMMANDS } from '../worker/src/index.js';
 import { CLASSES } from '../worker/src/classes.js';
+import { __embedReply } from '../worker/src/index.js';
+import { startRanked } from '../worker/src/battle.js';
+import { startDuel } from '../worker/src/wagers.js';
+import { makeEnv } from './d1-sqlite.mjs';
 
 let pass = 0, fail = 0;
 const ok = (n, c, x) => { if (c) pass++; else { fail++; console.log('  FAIL  ' + n + (x ? '  →  ' + x : '')); } };
@@ -76,6 +80,60 @@ ok('the commands with subcommands are the ones expected',
                                           ECON_COMMANDS.includes(c.name) ||
                                           CLASSES.includes(c.name)),
    nested.map(c => c.name).join(', '));
+
+/* ── what Discord actually receives ────────────────────── */
+//
+// The second half of the same join. A handler can be routed correctly
+// and still produce a message Discord cannot use, because its return
+// value is reshaped on the way out. embedReply used to copy only the
+// embeds across, so a challenge arrived with no buttons on it and no way
+// to accept — /ranked shipped like that, and /duel would have done the
+// same the first time anybody ran it.
+console.log('\nTHE RESPONSE DISCORD RECEIVES');
+{
+  const bare = __embedReply({ title: 'Hi', description: 'there' });
+  ok('a plain embed is wrapped into a response', bare.type === 4 && !!bare.data.embeds);
+  ok('and gets the league footer', /fp-league/.test(bare.data.embeds[0].footer.text));
+
+  const already = __embedReply({ type: 7, data: { embeds: [], components: [] } });
+  ok('a full response is left alone', already.type === 7);
+
+  const withButtons = __embedReply({
+    content: '<@1>',
+    allowed_mentions: { users: ['1'] },
+    embeds: [{ title: 'Challenge' }],
+    components: [{ type: 1, components: [{ type: 2, style: 3, label: 'Accept', custom_id: 'x' }] }],
+  });
+  ok('buttons survive the wrapping', !!withButtons.data.components,
+     JSON.stringify(withButtons.data).slice(0, 120));
+  ok('so does the line that pings the opponent', withButtons.data.content === '<@1>');
+  ok('and a deliberate ping is not overridden into silence',
+     JSON.stringify(withButtons.data.allowed_mentions) === '{"users":["1"]}',
+     JSON.stringify(withButtons.data.allowed_mentions));
+
+  const quiet = __embedReply({ embeds: [{ title: 'Standings' }] });
+  ok('while anything that does not ask to ping still cannot',
+     JSON.stringify(quiet.data.allowed_mentions) === '{"parse":[]}');
+}
+
+// The handlers that open a challenge are the ones this bites, so they are
+// checked through the real wrapper rather than in the shape they return.
+{
+  const env = makeEnv();
+  const me = id => ({ member: { user: { id, username: id } } });
+  for (const [label, out] of [
+    ['/ranked challenge', await startRanked(env, me('r1'), 'r2')],
+    ['/duel',             await startDuel(env, me('d1'), 'd2', 100)],
+  ]) {
+    const sent = __embedReply(out);
+    const buttons = ((sent.data.components || [])[0] || {}).components || [];
+    ok(`${label} reaches Discord with its buttons attached`, buttons.length >= 2,
+       JSON.stringify(sent.data).slice(0, 160));
+    ok(`${label}'s buttons carry a custom_id the router can read`,
+       buttons.every(b => /^[a-z]+:[^:]+:[a-z]+$/.test(b.custom_id || '')),
+       buttons.map(b => b.custom_id).join(' '));
+  }
+}
 
 console.log(`\n${pass}/${pass + fail} passed`);
 if (fail) process.exit(1);

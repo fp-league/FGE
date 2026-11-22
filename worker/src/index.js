@@ -641,18 +641,40 @@ async function maintenanceReply(env) {
  * gets its own embed and is actually visible; the footer belongs on the
  * summary, which is the first of them.
  */
+/**
+ * Turn whatever a handler returned into an interaction response.
+ *
+ * Three shapes arrive here. A bare embed, which is the common case and
+ * gets wrapped. A full { type, data } response, from handlers that
+ * replace the message a button was on — those go through untouched. And
+ * an object carrying embeds alongside buttons, a ping or a flag.
+ *
+ * That third shape used to lose everything except the embeds, because
+ * this only ever copied `embeds` across. The result was a challenge
+ * posted with no buttons on it and no way to accept — which is what
+ * happened to /ranked, and would have happened to /duel the moment
+ * anybody used it. Each key is now carried over if the handler set one.
+ */
 function embedReply(out) {
-  // Some handlers build the whole response themselves, because they carry
-  // buttons or replace the message a button was on. Anything already
-  // shaped like an interaction response goes through untouched.
   if (out && typeof out.type === 'number' && out.data) return out;
   const embeds = Array.isArray(out.embeds) ? out.embeds.slice(0, 10) : [out];
   const head = embeds[0];
   head.footer = head.footer || { text: 'FGE' };
   head.footer.text += ' · fp-league.github.io/FGE';
-  // Mentioning a collector should not ping them.
-  return { type: 4, data: { embeds, allowed_mentions: { parse: [] } } };
+  const data = {
+    embeds,
+    // Mentioning a collector should not ping them, unless the handler
+    // deliberately wants to — a challenge nobody is told about is no
+    // challenge.
+    allowed_mentions: out.allowed_mentions || { parse: [] },
+  };
+  if (out.content) data.content = out.content;
+  if (out.components) data.components = out.components;
+  if (out.flags) data.flags = out.flags;
+  return { type: 4, data };
 }
+
+export { embedReply as __embedReply };
 
 /**
  * Commands that have a branch of their own, ahead of the economy gate.
