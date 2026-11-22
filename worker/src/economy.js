@@ -1138,8 +1138,24 @@ export async function allWallets(env) {
   } catch { return []; }
 }
 
+/**
+ * Every command this handler answers.
+ *
+ * This is a gate, not a hint: index.js returns null for anything not on
+ * the list, and the interaction then falls through to the league-data
+ * handler, which does not know the name either and replies "unknown
+ * command". So a command can be defined, registered with Discord, appear
+ * in the picker, and still be dead — which is exactly what happened to
+ * slots, higherlower, duel, lottery and ranked, each of which was written
+ * and shipped without being added here.
+ *
+ * tests/routing.test.mjs now compares this against the registered command
+ * list in both directions, so forgetting it again fails CI rather than
+ * failing in the server.
+ */
 export const ECON_COMMANDS = ['work', 'daily', 'balance', 'pay', 'rich', 'shop', 'buy', 'sell',
-                              'rob', 'blackjack', 'roulette', 'odds', 'bet', 'mybets'];
+                              'rob', 'blackjack', 'roulette', 'slots', 'higherlower',
+                              'duel', 'lottery', 'ranked', 'odds', 'bet', 'mybets'];
 
 /* ── Trading ───────────────────────────────────────────── */
 

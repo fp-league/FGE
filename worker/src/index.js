@@ -655,6 +655,14 @@ function embedReply(out) {
 }
 
 /**
+ * Commands that have a branch of their own, ahead of the economy gate.
+ * Exported purely so the routing test can account for every registered
+ * command: between this, ECON_COMMANDS and DATA_VIEWS, every name in
+ * COMMANDS must be claimed by exactly one handler.
+ */
+export const OWN_BRANCH_COMMANDS = ['cards', 'trade', 'agent'];
+
+/**
  * Trading cards. Returns null when the interaction is not a card command, so
  * the caller falls through to the ordinary synchronous commands.
  */

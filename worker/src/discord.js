@@ -357,6 +357,13 @@ const SUBCOMMAND = 1;   // Discord option type for a subcommand
  *   /standings type:teams class:GT4      — flat, GT3 unless class is given
  *   /gt4 standings type:teams            — class baked into the command
  */
+/**
+  * The league-data commands, which read the published record and nothing
+  * else. Exported so the routing test can see them: every registered
+  * command has to be claimed by exactly one handler.
+  */
+export const DATA_VIEWS = ['standings', 'results', 'calendar', 'nextrace', 'lineups', 'driver'];
+
 function route(interaction) {
   const name = (interaction.data && interaction.data.name) || '';
   const opts = (interaction.data && interaction.data.options) || [];
